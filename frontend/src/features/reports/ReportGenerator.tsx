@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Download, Eye, Printer } from 'lucide-react';
+import { FileText, Download, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ReportGeneratorProps {

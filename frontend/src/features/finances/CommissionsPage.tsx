@@ -4,7 +4,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Download, DollarSign, TrendingUp, AlertCircle } from 'lucide-react';
 import { financesApi } from '@/api/finances.api';
 import { Commission, CommissionStatus, CommissionType } from '@/types/finance.types';
@@ -13,7 +12,6 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 
 export default function CommissionsPage() {
   const [commissions, setCommissions] = useState<Commission[]>([]);
-  const [loading, setLoading] = useState(false);
   const [filters, setFilters] = useState<{
     type: string;
     statut: string;
@@ -36,7 +34,6 @@ export default function CommissionsPage() {
   }, [filters]);
 
   const loadCommissions = async () => {
-    setLoading(true);
     try {
       const response = await financesApi.getCommissions({
         ...filters,
@@ -48,8 +45,6 @@ export default function CommissionsPage() {
       calculateStats(response.data);
     } catch (error) {
       toast.error('Erreur lors du chargement');
-    } finally {
-      setLoading(false);
     }
   };
 

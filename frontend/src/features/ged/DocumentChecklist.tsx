@@ -22,7 +22,6 @@ interface DocumentItem {
 export default function DocumentChecklist({
   affaireId,
   affaireNumero,
-  category,
   reassureurs = [],
 }: DocumentChecklistProps) {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);

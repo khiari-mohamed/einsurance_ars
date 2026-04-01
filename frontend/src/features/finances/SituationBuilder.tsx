@@ -105,7 +105,7 @@ export default function SituationBuilder() {
       });
 
       if (res.ok) {
-        const data = await res.json();
+        await res.json();
         toast.success('Situation créée avec succès');
         // Reset
         setSelectedDeals([]);

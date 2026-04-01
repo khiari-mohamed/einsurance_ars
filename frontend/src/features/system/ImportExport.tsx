@@ -11,9 +11,10 @@ export default function ImportExport() {
 
   const importMutation = useMutation({
     mutationFn: (file: File) => importExportApi.importAffaires(file),
-    onSuccess: (data) => {
+    onSuccess: (response) => {
+      const data = (response as any).data;
       toast.success(`${data.success} affaires importées`);
-      if (data.errors.length > 0) {
+      if (data.errors && data.errors.length > 0) {
         toast.warning(`${data.errors.length} erreurs détectées`);
       }
       setSelectedFile(null);
@@ -22,17 +23,20 @@ export default function ImportExport() {
 
   const handleExport = async (type: string) => {
     try {
-      let blob;
-      if (type === 'affaires') blob = await importExportApi.exportAffaires();
-      else if (type === 'sinistres') blob = await importExportApi.exportSinistres();
-      else if (type === 'finances') blob = await importExportApi.exportFinances('2024-01-01', '2024-12-31');
+      let response;
+      if (type === 'affaires') response = await importExportApi.exportAffaires();
+      else if (type === 'sinistres') response = await importExportApi.exportSinistres();
+      else if (type === 'finances') response = await importExportApi.exportFinances('2024-01-01', '2024-12-31');
 
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `export_${type}_${Date.now()}.xlsx`;
-      a.click();
-      toast.success('Export réussi');
+      if (response) {
+        const blob = (response as any).data;
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `export_${type}_${Date.now()}.xlsx`;
+        a.click();
+        toast.success('Export réussi');
+      }
     } catch (error) {
       toast.error('Erreur lors de l\'export');
     }
@@ -40,7 +44,8 @@ export default function ImportExport() {
 
   const handleDownloadTemplate = async (type: string) => {
     try {
-      const blob = await importExportApi.downloadTemplate(type);
+      const response = await importExportApi.downloadTemplate(type);
+      const blob = (response as any).data;
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

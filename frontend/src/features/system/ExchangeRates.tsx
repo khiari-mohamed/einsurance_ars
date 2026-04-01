@@ -101,9 +101,9 @@ export default function ExchangeRates() {
           {conversion && (
             <div className="mt-4 p-4 bg-blue-50 rounded">
               <p className="text-lg font-semibold">
-                {convertData.montant} {convertData.from} = {conversion.montantConverti} {convertData.to}
+                {convertData.montant} {convertData.from} = {(conversion as any).data?.montantConverti} {convertData.to}
               </p>
-              <p className="text-sm text-gray-600">Taux: {conversion.tauxUtilise}</p>
+              <p className="text-sm text-gray-600">Taux: {(conversion as any).data?.tauxUtilise}</p>
             </div>
           )}
         </CardContent>

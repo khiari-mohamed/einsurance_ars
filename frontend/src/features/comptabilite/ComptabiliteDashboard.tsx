@@ -2,7 +2,6 @@ import { BookOpen, FileText, TrendingUp, Lock, Unlock, AlertCircle } from 'lucid
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { comptabiliteApi } from '../../api/comptabilite.api';
 import { toast } from 'sonner';
-import { useState } from 'react';
 
 export default function ComptabiliteDashboard() {
   const currentYear = new Date().getFullYear();

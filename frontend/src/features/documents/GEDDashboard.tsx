@@ -84,16 +84,7 @@ export default function GEDDashboard() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) return;
-    try {
-      await gedApi.deleteDocument(id);
-      loadData();
-    } catch (error) {
-      console.error('Delete failed:', error);
-      alert('Échec de la suppression');
-    }
-  };
+  // Removed unused handleDelete function - delete functionality is not exposed in UI
 
   const toggleSelectDoc = (id: string) => {
     setSelectedDocs(prev => 
