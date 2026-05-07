@@ -1,0 +1,1492 @@
+// ============================================================
+// ARS RÉASSURANCE ERP — Complete Prisma Schema
+// PostgreSQL + NestJS
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  DIRECTION_COMMERCIALE       // Prospection, deal creation, En cotation only
+  DIRECTION_REASSURANCE       // Full technical access, validation, sinistres, placement
+  DIRECTION_GENERALE          // Read-only all modules + KPI reports
+  DAF                         // Direction Administrative & Financière — Finances + Compta
+  SERVICE_IRDS                // Sinistres module only — claim tracking
+  SUPER_ADMIN
+}
+
+enum AffaireStatut {
+  EN_COTATION
+  PREVISION
+  PLACEMENT_REALISE
+}
+
+enum AffaireType {
+  FACULTATIVE
+  TRAITE
+}
+
+enum ModePaiement {
+  PAR_AFFAIRE       // Paiement à part hors situation
+  PAR_SITUATION     // Paiement inclus dans la situation — batched netting
+}
+
+enum ReassuranceType {
+  PROPORTIONNEL
+  NON_PROPORTIONNEL
+}
+
+enum FormeCouverture {
+  QUOTA_PART
+  EXCES_DE_PLEIN
+  EXCES_DE_SINISTRES    // XOL
+  STOP_LOSS
+}
+
+enum Periodicite {
+  TRIMESTRIELLE
+  SEMESTRIELLE
+  ANNUELLE
+}
+
+enum ModeRenouvellement {
+  TACITE
+  RESILIATION
+  NEGOCIATION
+}
+
+enum SinistreStatut {
+  DECLARE
+  EN_COURS_VALIDATION
+  VALIDE
+  REJETE
+  DECLARE_REASSUREURS
+  EN_RECUPERATION
+  RECUPERE
+  CLOS
+}
+
+enum CashCallStatut {
+  DECLENCHE
+  REINSUREUR_CONTACTE
+  EN_ATTENTE_PAIEMENT
+  PAIEMENT_RECU
+  LETTRE
+}
+
+enum RecoveryMethod {
+  ENCAISSEMENT_DIRECT
+  COMPENSATION       // netted from next premium
+}
+
+enum FinancialPartyType {
+  ASSURE
+  CEDANTE
+  REASSUREUR
+  CO_COURTIER
+  BANQUE_ARS
+}
+
+enum FinancialMovementType {
+  ENCAISSEMENT
+  DECAISSEMENT
+}
+
+enum SettlementMode {
+  PAR_AFFAIRE
+  PAR_SITUATION
+}
+
+enum SituationSoldeDirection {
+  CEDANTE_DOIT      // DEBIT > CREDIT — cedant pays ARS
+  ARS_DOIT          // CREDIT > DEBIT — ARS pays via reinsurers
+  EQUILIBRE
+}
+
+enum OrdreVirementStatut {
+  BROUILLON
+  VALIDE
+  EXECUTE
+  SWIFT_RECU
+}
+
+enum JournalEntryStatut {
+  BROUILLON
+  VALIDE
+}
+
+enum JournalEntryType {
+  PASSATION_CA_FACULTATIVE      // bordereau de cession — fac
+  PASSATION_CA_TRAITE           // bordereau de cession — treaty (quarterly/annual)
+  ENCAISSEMENT_PRIME_CEDEE      // bank debit, cedante credit
+  REGLEMENT_REASSUREUR          // reassureur debit, bank credit
+  GAIN_DE_CHANGE                // FX difference — positive
+  PERTE_DE_CHANGE               // FX difference — negative
+  SAP_RECONSTITUTION
+  LIQUIDATION_TRAITE
+}
+
+enum BordereauType {
+  CESSION_CEDANTE               // Note de Débit / Bordereau cession — for cedant
+  CESSION_REASSUREUR            // Bordereau cession — for reinsurer
+  SINISTRE_FACULTATIVE          // Claim bordereau
+  SITUATION_TRAITE              // Treaty statement of accounts
+  FACTURE_DEPOT_PRIME           // Reinsurance premium invoice (XOL deposit)
+}
+
+enum BordereauStatut {
+  BROUILLON
+  EMIS
+  ACQUITTE
+}
+
+enum DocumentStatut {
+  MANQUANT
+  EN_ATTENTE
+  RECU
+  REJETE
+}
+
+enum DocumentEntityType {
+  ASSURE
+  CEDANTE
+  REASSUREUR
+  CO_COURTIER
+  AFFAIRE
+  SINISTRE
+  ENCAISSEMENT
+  DECAISSEMENT
+  ORDRE_PAIEMENT
+  BORDEREAU
+}
+
+enum CommissionMode {
+  CALCULABLE    // Taux ARS × prime cédée par réassureur
+  FORFAITAIRE   // flat fee — manually entered
+}
+
+enum FxGainLossType {
+  GAIN
+  PERTE
+}
+
+enum WorkflowTaskType {
+  VALIDATION_SINISTRE              // director must approve claim
+  CASH_CALL_FOLLOW_UP              // IRDS follows up reinsurer payment
+  RENOUVELLEMENT_TRAITE            // Jan 1st renewal reminder (threshold re-param)
+  SAP_ANNUEL_31_DEC                // non-prop treaty SAP statement at year-end
+  AVIS_SINISTRE_REASSUREUR         // proportional treaty — notify reinsurers above threshold
+  SITUATION_A_COMPILER             // periodic situation due
+  INTER_DEPARTEMENT_HANDOFF        // chargé de dossier → DAF handoff for treaty settlement
+}
+
+enum WorkflowTaskStatut {
+  EN_ATTENTE
+  EN_COURS
+  COMPLETE
+  ANNULE
+}
+
+enum IntegrationExportFormat {
+  TXT
+  EXCEL
+}
+
+// ============================================================
+// MODULE 1 — SYSTEM / FICHIER
+// ============================================================
+
+model CompanyProfile {
+  id                   String               @id @default(uuid())
+
+  // Tab 1 — Informations Générales
+  raisonSociale        String
+  adresse              String?
+  ville                String?
+  codePostal           String?
+  pays                 String?              @default("Tunisie")
+
+  // Tab 2 — Juridiques
+  formeJuridique       String?
+  capitalSocial        Decimal?             @db.Decimal(20, 3)
+  rne                  String?              @unique
+  objetSocial          String?
+  representantsLegaux  String[]
+
+  // Tab 3 — Fiscales
+  matriculeFiscal      String?
+  regimeFiscal         String?
+  assujettieATVA       Boolean              @default(false)
+  tauxTVA              Decimal?             @db.Decimal(5, 2)
+  autresTaxes          String?
+
+  // Tab 4 — Contacts
+  contacts             CompanyContact[]
+
+  // Tab 5 — Coordonnées bancaires (ARS's own accounts)
+  bankAccounts         CompanyBankAccount[]
+
+  // Tab 6 — Zones libres
+  freeFields           CompanyFreeField[]
+
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+}
+
+model CompanyBankAccount {
+  id          String         @id @default(uuid())
+  companyId   String
+  company     CompanyProfile @relation(fields: [companyId], references: [id])
+  banque      String
+  agence      String?
+  rib         String
+  swift       String?
+  currency    String         // TND, USD, EUR...
+  isDefault   Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+}
+
+model CompanyContact {
+  id          String         @id @default(uuid())
+  companyId   String
+  company     CompanyProfile @relation(fields: [companyId], references: [id])
+  nom         String
+  poste       String?
+  telephone   String?
+  email       String?
+  createdAt   DateTime       @default(now())
+}
+
+model CompanyFreeField {
+  id          String         @id @default(uuid())
+  companyId   String
+  company     CompanyProfile @relation(fields: [companyId], references: [id])
+  label       String
+  valeur      String?
+  ordre       Int            @default(0)
+}
+
+// Password policy — system-wide, not per user
+model PasswordPolicy {
+  id                   String   @id @default(uuid())
+  longueurMin          Int      @default(8)
+  requireUppercase     Boolean  @default(true)
+  requireNumber        Boolean  @default(true)
+  requireSymbol        Boolean  @default(true)
+  expirationJours      Int      @default(90)
+  maxTentatives        Int      @default(5)    // before lockout
+  dureeLockoutMinutes  Int      @default(30)
+  updatedAt            DateTime @updatedAt
+}
+
+// Printer config per report type (Utilitaires tab)
+model PrinterConfig {
+  id           String   @id @default(uuid())
+  reportType   String   // 'BORDEREAU_CEDANTE', 'ORDRE_VIREMENT', etc.
+  printerName  String?
+  paperFormat  String?  @default("A4")
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+// ============================================================
+// EXCHANGE RATES — Cours de change (BCT)
+// Two rates per transaction: taux réalisation (booking) + taux règlement (settlement)
+// ============================================================
+
+model Currency {
+  id            String         @id @default(uuid())
+  code          String         @unique   // TND, USD, EUR, GBP, JPY...
+  label         String
+  isActive      Boolean        @default(true)
+  exchangeRates ExchangeRate[]
+  createdAt     DateTime       @default(now())
+}
+
+model ExchangeRate {
+  id               String       @id @default(uuid())
+  currencyId       String
+  currency         Currency     @relation(fields: [currencyId], references: [id])
+  currencyCode     String       // denormalized for fast lookup
+  // Two mandatory rates as per CDC
+  tauxRealisation  Decimal      @db.Decimal(15, 6)  // rate at deal booking date
+  tauxReglement    Decimal?     @db.Decimal(15, 6)  // rate at payment date (filled when settlement recorded)
+  dateEffet        DateTime     // validity date — daily or monthly
+  source           String       @default("BCT")
+  isMonthly        Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  fxGainLossItems  FxGainLoss[]
+
+  @@unique([currencyCode, dateEffet])
+  @@index([currencyCode, dateEffet])
+}
+
+// ============================================================
+// AUTH / USERS
+// ============================================================
+
+model User {
+  id                 String         @id @default(uuid())
+  email              String         @unique
+  passwordHash       String
+  nom                String
+  prenom             String
+  role               UserRole
+  isActive           Boolean        @default(true)
+  isLocked           Boolean        @default(false)
+  failedAttempts     Int            @default(0)
+  lockedUntil        DateTime?
+  passwordExpiresAt  DateTime?
+  lastLoginAt        DateTime?
+  // JSON map of module-level permission overrides: { "FINANCES": "READ_ONLY", ... }
+  modulePermissions  Json?
+
+  refreshTokens      RefreshToken[]
+  auditLogs          AuditLog[]
+  assignedTasks      WorkflowTask[] @relation("assignedTasks")
+  createdTasks       WorkflowTask[] @relation("createdTasks")
+  sinistreEvents     SinistreEvent[]
+
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  token      String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+}
+
+// ============================================================
+// MODULE 2 — DONNÉES (Master Data)
+// ============================================================
+
+// Auto-incrementing code sequence per entity type
+model Sequence {
+  id         String   @id @default(uuid())
+  entityType String   @unique   // 'ASSURE', 'CEDANTE', 'REASSUREUR', 'COCOURTIER', 'AFFAIRE', 'SINISTRE', 'BORDEREAU', 'ORDRE_PAIEMENT'
+  lastValue  Int      @default(0)
+  prefix     String?
+  updatedAt  DateTime @updatedAt
+}
+
+// Shared contact — polymorphic (one FK set, rest null)
+model Contact {
+  id           String      @id @default(uuid())
+  nom          String
+  prenom       String?
+  poste        String?
+  telephone    String?
+  email        String?
+
+  assureId     String?
+  assure       Assure?     @relation(fields: [assureId], references: [id])
+  cedanteId    String?
+  cedante      Cedante?    @relation(fields: [cedanteId], references: [id])
+  reassureurId String?
+  reassureur   Reassureur? @relation(fields: [reassureurId], references: [id])
+  coCourtId    String?
+  coCourtier   CoCourtier? @relation(fields: [coCourtId], references: [id])
+
+  createdAt    DateTime    @default(now())
+}
+
+// Bank account — shared across Cedante / Reassureur / CoCourtier
+model BankAccount {
+  id            String      @id @default(uuid())
+  banque        String
+  agence        String?
+  rib           String
+  swift         String?     // mandatory for Reassureur (needed for wire transfers)
+  currency      String
+  isDefault     Boolean     @default(false)
+
+  cedanteId     String?
+  cedante       Cedante?    @relation(fields: [cedanteId], references: [id])
+  reassureurId  String?
+  reassureur    Reassureur? @relation(fields: [reassureurId], references: [id])
+  coCourtId     String?
+  coCourtier    CoCourtier? @relation(fields: [coCourtId], references: [id])
+
+  // Used as beneficiary bank in wire orders
+  ordresPaiement OrdrePaiement[]
+
+  createdAt     DateTime    @default(now())
+}
+
+// Fiche Assuré
+model Assure {
+  id             String               @id @default(uuid())
+  code           String               @unique    // auto-generated at validation
+  raisonSociale  String
+  rne            String?              @unique
+  formeJuridique String?
+  adresse        String?
+  pays           String?
+  capital        Decimal?             @db.Decimal(20, 3)
+  freeFields     Json?
+
+  contacts       Contact[]
+  facultatives   FacultativeAffaire[]
+  documents      DocumentLink[]       @relation("assureDocuments")
+
+  isActive       Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+}
+
+// Fiche Cédante — compte 411xxxxx, locked after first save
+model Cedante {
+  id               String             @id @default(uuid())
+  code             String             @unique
+  compteComptable  String             @unique    // 411xxxxx — mandatory, locked
+  isAccountLocked  Boolean            @default(false)
+  raisonSociale    String
+  rne              String?            @unique
+  formeJuridique   String?
+  adresse          String?
+  pays             String?
+  capital          Decimal?           @db.Decimal(20, 3)
+  freeFields       Json?
+
+  contacts         Contact[]
+  bankAccounts     BankAccount[]
+  affaires         Affaire[]
+  situations       Situation[]
+  encaissements    Encaissement[]
+  auxiliaryAccounts AuxiliaryAccount[]
+  journalLines     JournalLine[]
+  documents        DocumentLink[]     @relation("cedanteDocuments")
+
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+// Fiche Réassureur — compte 401xxxxx, locked after first save
+model Reassureur {
+  id               String              @id @default(uuid())
+  code             String              @unique
+  compteComptable  String              @unique    // 401xxxxx — mandatory, locked
+  isAccountLocked  Boolean             @default(false)
+  raisonSociale    String
+  rne              String?
+  formeJuridique   String?
+  adresse          String?
+  pays             String?
+  capital          Decimal?            @db.Decimal(20, 3)
+  freeFields       Json?
+
+  contacts         Contact[]
+  bankAccounts     BankAccount[]
+  participations   AffaireReassureur[]
+  auxiliaryAccounts AuxiliaryAccount[]
+  journalLines     JournalLine[]
+  documents        DocumentLink[]      @relation("reassureurDocuments")
+
+  isActive         Boolean             @default(true)
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+}
+
+// Fiche Co-courtier
+model CoCourtier {
+  id               String         @id @default(uuid())
+  code             String         @unique
+  compteComptable  String         @unique
+  isAccountLocked  Boolean        @default(false)
+  raisonSociale    String
+  rne              String?
+  formeJuridique   String?
+  adresse          String?
+  pays             String?
+  capital          Decimal?       @db.Decimal(20, 3)
+  freeFields       Json?
+
+  contacts         Contact[]
+  bankAccounts     BankAccount[]
+  documents        DocumentLink[] @relation("coCourtierDocuments")
+
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+// ============================================================
+// MODULE 3 — AFFAIRES
+// ============================================================
+
+// Affaire header — shared by Facultative and Traité
+model Affaire {
+  id             String              @id @default(uuid())
+  numero         String              @unique    // auto-incremented, never editable
+  statut         AffaireStatut       @default(EN_COTATION)
+  type           AffaireType
+  modePaiement   ModePaiement        @default(PAR_AFFAIRE)
+  currency       String              @default("TND")
+
+  cedanteId      String
+  cedante        Cedante             @relation(fields: [cedanteId], references: [id])
+
+  // Reinsurer participation table (total parts must equal 100%)
+  reassureurs    AffaireReassureur[]
+
+  // Type-specific data (exactly one of these will be set)
+  facultativeData FacultativeAffaire?
+  traiteData      TraiteAffaire?
+
+  sinistres       Sinistre[]
+  bordereaux      Bordereau[]
+  encaissements   Encaissement[]
+  decaissements   Decaissement[]
+  settlements     Settlement[]
+  situationLines  SituationLine[]
+  journalEntries  JournalEntry[]
+  workflowTasks   WorkflowTask[]
+  documents       DocumentLink[]     @relation("affaireDocuments")
+
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([cedanteId, statut])
+  @@index([type, statut])
+}
+
+// Reinsurer participation on a deal — the 100% share table
+model AffaireReassureur {
+  id                    String         @id @default(uuid())
+  affaireId             String
+  affaire               Affaire        @relation(fields: [affaireId], references: [id])
+  reassureurId          String
+  reassureur            Reassureur     @relation(fields: [reassureurId], references: [id])
+
+  partPct               Decimal        @db.Decimal(7, 4)    // participation %
+  isLeader              Boolean        @default(false)
+
+  // ARS commission per reinsurer (toggle: CALCULABLE or FORFAITAIRE)
+  commissionMode        CommissionMode @default(CALCULABLE)
+  tauxCommissionArs     Decimal?       @db.Decimal(7, 4)    // used when CALCULABLE
+  commissionForfait     Decimal?       @db.Decimal(20, 3)   // used when FORFAITAIRE
+
+  // Calculated — stored for reports and accounting
+  primeBrute            Decimal?       @db.Decimal(20, 3)
+  commissionArs         Decimal?       @db.Decimal(20, 3)
+  commissionCedante     Decimal?       @db.Decimal(20, 3)
+  primeNetteCedante     Decimal?       @db.Decimal(20, 3)
+  primeNetteReassureur  Decimal?       @db.Decimal(20, 3)
+
+  @@unique([affaireId, reassureurId])
+  @@index([affaireId])
+}
+
+// ---- FACULTATIVE ----
+
+model FacultativeAffaire {
+  id                     String             @id @default(uuid())
+  affaireId              String             @unique
+  affaire                Affaire            @relation(fields: [affaireId], references: [id])
+
+  // Tab A — Données Contractuelles
+  reassuranceType        ReassuranceType
+  assureId               String
+  assure                 Assure             @relation(fields: [assureId], references: [id])
+  numeroPoliceCedante    String?            // cedant's policy number
+  dateEffet              DateTime
+  dateEcheance           DateTime
+  modeRenouvellement     ModeRenouvellement?
+  paysAssure             String?
+  branche                String?
+  produit                String?
+  garantie               String?
+
+  // Tab B — Données Financières
+  prime100Pct            Decimal            @db.Decimal(20, 3)   // 100% premium
+  tauxPrime              Decimal?           @db.Decimal(7, 4)
+  tauxCession            Decimal            @db.Decimal(7, 4)
+  primeCedee             Decimal?           @db.Decimal(20, 3)   // prime100 × tauxCession
+  tauxCommissionCedante  Decimal?           @db.Decimal(7, 4)
+  commissionCedante      Decimal?           @db.Decimal(20, 3)   // primeCedee × tauxCommCedante
+
+  // Tab B sub-table: one line per guarantee → capital 100%
+  guaranteeLines         GuaranteeLine[]
+}
+
+// Sub-table: capitaux assurés 100% per guarantee line
+model GuaranteeLine {
+  id                  String             @id @default(uuid())
+  facultativeId       String
+  facultative         FacultativeAffaire @relation(fields: [facultativeId], references: [id])
+  garantie            String
+  capitauxAssures100  Decimal            @db.Decimal(20, 3)
+  ordre               Int                @default(0)
+}
+
+// ---- TRAITÉ ----
+
+model TraiteAffaire {
+  id                       String                  @id @default(uuid())
+  affaireId                String                  @unique
+  affaire                  Affaire                 @relation(fields: [affaireId], references: [id])
+
+  // Tab A — Données Contractuelles
+  referenceTraite          String?
+  reassuranceType          ReassuranceType
+  formeCouverture          FormeCouverture?
+  dateEffet                DateTime
+  dateEcheance             DateTime
+  modeRenouvellement       ModeRenouvellement?
+  dateAvisResiliation      DateTime?               // termination notice date — separate from expiry
+  zoneGeographique         String?
+  branche                  String?
+  produit                  String?
+  garantie                 String?
+  periodicite              Periodicite             @default(TRIMESTRIELLE)
+
+  // Account rubriques — each branch/product maps to an account code (for quarterly statements)
+  accountRubriques         TreatyAccountRubrique[]
+
+  // Tab B — Données Financières
+  primePrevisionnelle      Decimal?                @db.Decimal(20, 3)
+  pmd                      Decimal?                @db.Decimal(20, 3)  // Prime Minimum et Dépôt
+  tauxCommissionCedante    Decimal?                @db.Decimal(7, 4)
+  commissionLiquidationArs Decimal?                @db.Decimal(20, 3)  // Commission à la liquidation — separate from brokerage
+
+  // PMD instalment schedule
+  pmdInstalments           PmdInstalment[]
+
+  // Tab C — Sinistres config
+  seuilNotification        Decimal?                @db.Decimal(20, 3)  // threshold for mandatory avis
+  renewalReminderSent      Boolean                 @default(false)     // re-param reminder at Jan 1
+
+  situations               Situation[]
+}
+
+// Each treaty line (Incendie, Vol, Transport…) maps to an account rubrique
+model TreatyAccountRubrique {
+  id               String        @id @default(uuid())
+  traiteId         String
+  traite           TraiteAffaire @relation(fields: [traiteId], references: [id])
+  rubrique         String        // "Incendie", "Vol", "Transport"...
+  compteReference  String        // account code mapped to this rubrique
+  ordre            Int           @default(0)
+}
+
+// PMD instalment schedule
+model PmdInstalment {
+  id            String        @id @default(uuid())
+  traiteId      String
+  traite        TraiteAffaire @relation(fields: [traiteId], references: [id])
+  numeroTranche Int
+  dateEcheance  DateTime
+  montant       Decimal       @db.Decimal(20, 3)
+  tauxDeduction Decimal?      @db.Decimal(7, 4)
+  isPaid        Boolean       @default(false)
+  paidAt        DateTime?
+}
+
+// ============================================================
+// MODULE 4 — SINISTRES (Claims)
+// ============================================================
+
+model Sinistre {
+  id                        String                 @id @default(uuid())
+  numero                    String                 @unique
+  affaireId                 String
+  affaire                   Affaire                @relation(fields: [affaireId], references: [id])
+  statut                    SinistreStatut         @default(DECLARE)
+
+  // Identification
+  numerPolice               String?
+  periodeCouverture         String?
+  dateDeclaration           DateTime               @default(now())
+  dateSurvenance            DateTime
+
+  // Financial amounts
+  reglementExerciceN        Decimal?               @db.Decimal(20, 3)  // settled by cedante current year
+  cumulReglementAnterieurs  Decimal?               @db.Decimal(20, 3)  // prior years cumulative
+  reserves                  Decimal?               @db.Decimal(20, 3)
+  partReassureurs           Decimal?               @db.Decimal(20, 3)
+  sap                       Decimal?               @db.Decimal(20, 3)  // SAP au 31-12
+
+  // Cash call flag — activates cash call workflow
+  appelAuComptant           Boolean                @default(false)
+  cashCall                  CashCall?
+
+  // Recovery
+  recoveryMethod            RecoveryMethod?
+  recoveredAt               DateTime?
+
+  // Chronological event timeline — the core audit trail (not a status field)
+  events                    SinistreEvent[]
+
+  // Per-reinsurer share tracking
+  participations            SinistreParticipation[]
+
+  journalEntries            JournalEntry[]
+  auditRecords              SinistreAudit[]
+  documents                 DocumentLink[]         @relation("sinistreDocuments")
+
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+
+  @@index([affaireId, statut])
+}
+
+// Event timeline — Date | Actor | Action | Note
+// This is how sinistres are tracked, not a single status field
+model SinistreEvent {
+  id          String    @id @default(uuid())
+  sinistreId  String
+  sinistre    Sinistre  @relation(fields: [sinistreId], references: [id])
+
+  date        DateTime  @default(now())
+  actorId     String?
+  actor       User?     @relation(fields: [actorId], references: [id])
+  actorLabel  String    // stored display name in case user is deleted
+  action      String    // "Déclaration reçue cédante" | "Validé" | "Déclaré aux réassureurs" | "Récupération encaissée" | "Clos"...
+  note        String?
+
+  createdAt   DateTime  @default(now())
+
+  @@index([sinistreId, date])
+}
+
+// Per-reinsurer share of a claim (based on their AffaireReassureur.partPct)
+model SinistreParticipation {
+  id              String   @id @default(uuid())
+  sinistreId      String
+  sinistre        Sinistre @relation(fields: [sinistreId], references: [id])
+  reassureurCode  String   // denormalized from Reassureur
+  partPct         Decimal  @db.Decimal(7, 4)
+  montantPart     Decimal? @db.Decimal(20, 3)
+  isNotified      Boolean  @default(false)   // declared to this reinsurer
+  notifiedAt      DateTime?
+}
+
+// Cash call workflow — triggered when appelAuComptant = true
+model CashCall {
+  id              String         @id @default(uuid())
+  sinistreId      String         @unique
+  sinistre        Sinistre       @relation(fields: [sinistreId], references: [id])
+  statut          CashCallStatut @default(DECLENCHE)
+
+  montantDemande  Decimal        @db.Decimal(20, 3)
+  montantRecu     Decimal?       @db.Decimal(20, 3)
+  dateDeclenche   DateTime       @default(now())
+  datePaiement    DateTime?
+
+  notes           String?
+
+  // Linked to encaissement once payment received
+  encaissementId  String?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model SinistreAudit {
+  id         String   @id @default(uuid())
+  sinistreId String
+  sinistre   Sinistre @relation(fields: [sinistreId], references: [id])
+  action     String
+  before     Json?
+  after      Json?
+  userId     String?
+  createdAt  DateTime @default(now())
+}
+
+// ============================================================
+// MODULE 5 — FINANCES
+// ============================================================
+
+// Cash-in — from Assure or Cedante
+model Encaissement {
+  id                String             @id @default(uuid())
+  reference         String             @unique
+  affaireId         String?
+  affaire           Affaire?           @relation(fields: [affaireId], references: [id])
+
+  // Who paid
+  partyType         FinancialPartyType
+  cedanteId         String?
+  cedante           Cedante?           @relation(fields: [cedanteId], references: [id])
+  assureLabel       String?            // if from assure directly
+
+  montant           Decimal            @db.Decimal(20, 3)
+  currency          String             @default("TND")
+
+  // FX — booking rate stored at time of recording
+  tauxRealisation   Decimal?           @db.Decimal(15, 6)
+  montantTnd        Decimal?           @db.Decimal(20, 3)  // TND equivalent
+
+  // 4-step flow tracking (steps 1 and 3 for client ARS flow)
+  stepNumber        Int?
+
+  dateEncaissement  DateTime           @default(now())
+  description       String?
+
+  settlementId      String?
+  settlement        Settlement?        @relation(fields: [settlementId], references: [id])
+
+  bankMovementId    String?
+  bankMovement      BankMovement?      @relation(fields: [bankMovementId], references: [id])
+
+  lettrageItems     LettrageItem[]     @relation("encaissementLettrage")
+  fxGainLoss        FxGainLoss?
+  documents         DocumentLink[]     @relation("encaissementDocuments")
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+// Cash-out — to Reassureur or Co-courtier
+model Decaissement {
+  id                String             @id @default(uuid())
+  reference         String             @unique
+  affaireId         String?
+  affaire           Affaire?           @relation(fields: [affaireId], references: [id])
+
+  // Beneficiary
+  partyType         FinancialPartyType
+  reassureurCode    String?            // denormalized
+  coCourtId         String?
+
+  montant           Decimal            @db.Decimal(20, 3)
+  currency          String             @default("TND")
+
+  // FX — settlement rate filled when payment is executed
+  tauxReglement     Decimal?           @db.Decimal(15, 6)
+  montantTnd        Decimal?           @db.Decimal(20, 3)
+
+  // 4-step flow (steps 2 and 4)
+  stepNumber        Int?
+
+  dateDecaissement  DateTime           @default(now())
+  description       String?
+
+  ordrePaiementId   String?
+  ordrePaiement     OrdrePaiement?     @relation(fields: [ordrePaiementId], references: [id])
+
+  settlementId      String?
+  settlement        Settlement?        @relation(fields: [settlementId], references: [id])
+
+  bankMovementId    String?
+  bankMovement      BankMovement?      @relation(fields: [bankMovementId], references: [id])
+
+  fxGainLoss        FxGainLoss?
+  documents         DocumentLink[]     @relation("decaissementDocuments")
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+}
+
+// Settlement record — per deal or per situation
+model Settlement {
+  id              String         @id @default(uuid())
+  reference       String         @unique
+  mode            SettlementMode
+
+  affaireId       String?
+  affaire         Affaire?       @relation(fields: [affaireId], references: [id])
+  situationId     String?
+  situation       Situation?     @relation(fields: [situationId], references: [id])
+
+  montant         Decimal        @db.Decimal(20, 3)
+  currency        String         @default("TND")
+  tauxRealisation Decimal?       @db.Decimal(15, 6)
+  tauxReglement   Decimal?       @db.Decimal(15, 6)
+  montantTnd      Decimal?       @db.Decimal(20, 3)
+
+  dateSettlement  DateTime       @default(now())
+
+  encaissements   Encaissement[]
+  decaissements   Decaissement[]
+  fxGainLoss      FxGainLoss?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+// Situation — periodic batch netting statement (cedante + multiple deals OR a treaty)
+// DEBIT = primes encaissées | CREDIT = sinistres payés | SOLDE = who owes whom
+model Situation {
+  id               String                   @id @default(uuid())
+  reference        String                   @unique
+
+  cedanteId        String
+  cedante          Cedante                  @relation(fields: [cedanteId], references: [id])
+
+  traiteId         String?
+  traite           TraiteAffaire?           @relation(fields: [traiteId], references: [id])
+
+  dateDebut        DateTime
+  dateFin          DateTime
+  periodicite      Periodicite?
+
+  // Computed netting
+  totalDebit       Decimal?                 @db.Decimal(20, 3)  // Σ primes encaissées
+  totalCredit      Decimal?                 @db.Decimal(20, 3)  // Σ sinistres payés
+  soldeNet         Decimal?                 @db.Decimal(20, 3)  // DEBIT − CREDIT
+  soldeDirection   SituationSoldeDirection?
+
+  currency         String                   @default("TND")
+
+  lines            SituationLine[]
+  settlements      Settlement[]
+  bordereaux       Bordereau[]
+
+  // Inter-department handoff workflow task (chargé de dossier → DAF)
+  workflowTasks    WorkflowTask[]
+
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+}
+
+model SituationLine {
+  id           String    @id @default(uuid())
+  situationId  String
+  situation    Situation @relation(fields: [situationId], references: [id])
+  affaireId    String
+  affaire      Affaire   @relation(fields: [affaireId], references: [id])
+  debit        Decimal?  @db.Decimal(20, 3)
+  credit       Decimal?  @db.Decimal(20, 3)
+  solde        Decimal?  @db.Decimal(20, 3)
+  description  String?
+}
+
+// Wire transfer order — legal document, exported as PDF
+model OrdrePaiement {
+  id                  String              @id @default(uuid())
+  reference           String              @unique
+  statut              OrdreVirementStatut @default(BROUILLON)
+
+  beneficiaire        String
+  bankAccountId       String?
+  bankAccount         BankAccount?        @relation(fields: [bankAccountId], references: [id])
+
+  montant             Decimal             @db.Decimal(20, 3)
+  currency            String              @default("TND")
+  referenceAffaire    String?
+  referenceBordereau  String?
+  dateExecution       DateTime?
+  signataires         String[]
+
+  // SWIFT confirmation slot — payment stays flagged until SWIFT attached
+  swiftReceived       Boolean             @default(false)
+  swiftDocumentId     String?
+
+  decaissements       Decaissement[]
+  documents           DocumentLink[]      @relation("ordrePaiementDocuments")
+
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+}
+
+// Lettrage — full AR matching workflow (not just a tag)
+// When recording an encaissement: show open items, match them, compute residual
+model Lettrage {
+  id               String         @id @default(uuid())
+  reference        String         @unique
+
+  // Third party being reconciled
+  cedanteId        String?
+  reassureurCode   String?
+
+  montantEncaisse  Decimal        @db.Decimal(20, 3)
+  montantLettre    Decimal?       @db.Decimal(20, 3)  // total matched
+  residuel         Decimal?       @db.Decimal(20, 3)  // over/under
+
+  dateLettre       DateTime       @default(now())
+  isComplete       Boolean        @default(false)
+
+  items            LettrageItem[]
+
+  createdAt        DateTime       @default(now())
+}
+
+model LettrageItem {
+  id              String        @id @default(uuid())
+  lettrageId      String
+  lettrage        Lettrage      @relation(fields: [lettrageId], references: [id])
+
+  // Open item being matched (a bordereau = unpaid invoice)
+  bordereauId     String?
+  bordereau       Bordereau?    @relation(fields: [bordereauId], references: [id])
+
+  // The encaissement matched against it
+  encaissementId  String?
+  encaissement    Encaissement? @relation("encaissementLettrage", fields: [encaissementId], references: [id])
+
+  montant         Decimal       @db.Decimal(20, 3)
+  isLettre        Boolean       @default(false)
+  lettreAt        DateTime?
+}
+
+model BankMovement {
+  id            String                @id @default(uuid())
+  type          FinancialMovementType @map("movement_type")
+  montant       Decimal               @db.Decimal(20, 3)
+  currency      String                @default("TND")
+  dateValeur    DateTime
+  reference     String?
+  description   String?
+  isReconciled  Boolean               @default(false)
+  reconciledAt  DateTime?
+
+  encaissements Encaissement[]
+  decaissements Decaissement[]
+
+  createdAt     DateTime              @default(now())
+}
+
+// FX gain/loss — auto-generated when settlement rate ≠ booking rate
+// Positive diff → gain de change → credit 77xxxxx | Negative → perte de change → debit 67xxxxx
+model FxGainLoss {
+  id               String        @id @default(uuid())
+  type             FxGainLossType
+
+  // Source — exactly one of these is set
+  encaissementId   String?       @unique
+  encaissement     Encaissement? @relation(fields: [encaissementId], references: [id])
+  decaissementId   String?       @unique
+  decaissement     Decaissement? @relation(fields: [decaissementId], references: [id])
+  settlementId     String?       @unique
+  settlement       Settlement?   @relation(fields: [settlementId], references: [id])
+
+  tauxRealisation  Decimal       @db.Decimal(15, 6)
+  tauxReglement    Decimal       @db.Decimal(15, 6)
+  montantDevise    Decimal       @db.Decimal(20, 3)
+  differenceRate   Decimal       @db.Decimal(15, 6)  // tauxReglement − tauxRealisation
+  montantDiff      Decimal       @db.Decimal(20, 3)  // the TND amount of the difference
+
+  exchangeRateId   String?
+  exchangeRate     ExchangeRate? @relation(fields: [exchangeRateId], references: [id])
+
+  // Auto-generates a journal entry
+  journalEntryId   String?
+  journalEntry     JournalEntry? @relation(fields: [journalEntryId], references: [id])
+
+  createdAt        DateTime      @default(now())
+}
+
+// ============================================================
+// MODULE 6 — COMPTABILITÉ
+// ============================================================
+
+// Plan comptable — chart of accounts
+// Key ARS accounts: 41130000 (cedantes), 40130000 (reassureurs), 70510000 (ARS commission), 532xxxxx (bank)
+model PlanComptable {
+  id           String             @id @default(uuid())
+  compte       String             @unique   // e.g. "41130000", "70510000", "53200000"
+  libelle      String
+  type         String             // 'DEBIT_NORMAL' | 'CREDIT_NORMAL'
+  classe       String             // "4", "5", "6", "7"...
+  isAuxiliary  Boolean            @default(false)
+  isActive     Boolean            @default(true)
+
+  auxiliaries  AuxiliaryAccount[]
+  journalLines JournalLine[]
+
+  createdAt    DateTime           @default(now())
+}
+
+// Auxiliary accounts — sub-accounts per cedante/reassureur under a general account
+model AuxiliaryAccount {
+  id              String         @id @default(uuid())
+  planComptableId String
+  planComptable   PlanComptable  @relation(fields: [planComptableId], references: [id])
+
+  code            String         // e.g. "41130001"
+  libelle         String         // e.g. "STAR Assurances"
+
+  cedanteId       String?
+  cedante         Cedante?       @relation(fields: [cedanteId], references: [id])
+  reassureurId    String?
+  reassureur      Reassureur?    @relation(fields: [reassureurId], references: [id])
+
+  journalLines    JournalLine[]
+
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+
+  @@unique([planComptableId, code])
+}
+
+model FiscalPeriod {
+  id             String         @id @default(uuid())
+  annee          Int
+  mois           Int?           // null = full-year period
+  dateDebut      DateTime
+  dateFin        DateTime
+  isClosed       Boolean        @default(false)
+  closedAt       DateTime?
+  closedByUserId String?
+
+  journalEntries JournalEntry[]
+
+  createdAt      DateTime       @default(now())
+
+  @@unique([annee, mois])
+}
+
+// Journal entry — generated as BROUILLON, validated by accountant before export
+model JournalEntry {
+  id                  String             @id @default(uuid())
+  numero              String             @unique
+  statut              JournalEntryStatut @default(BROUILLON)
+  type                JournalEntryType
+
+  // Source triggers
+  affaireId           String?
+  affaire             Affaire?           @relation(fields: [affaireId], references: [id])
+  sinistreId          String?
+  sinistre            Sinistre?          @relation(fields: [sinistreId], references: [id])
+  bordereauId         String?
+  bordereau           Bordereau?         @relation(fields: [bordereauId], references: [id])
+
+  fiscalPeriodId      String?
+  fiscalPeriod        FiscalPeriod?      @relation(fields: [fiscalPeriodId], references: [id])
+
+  // Validation
+  validatedAt         DateTime?
+  validatedBy         String?
+
+  description         String?
+  currency            String             @default("TND")
+
+  lines               JournalLine[]
+  fxGainLossItems     FxGainLoss[]
+
+  // Export tracking — which integration file this entry was included in
+  integrationExportId String?
+  integrationExport   IntegrationExport? @relation(fields: [integrationExportId], references: [id])
+
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([statut, type])
+  @@index([affaireId])
+  @@index([fiscalPeriodId])
+}
+
+// Journal lines — debit/credit rows per entry
+model JournalLine {
+  id              String            @id @default(uuid())
+  journalEntryId  String
+  journalEntry    JournalEntry      @relation(fields: [journalEntryId], references: [id])
+
+  planComptableId String
+  planComptable   PlanComptable     @relation(fields: [planComptableId], references: [id])
+
+  auxiliaryId     String?
+  auxiliary       AuxiliaryAccount? @relation(fields: [auxiliaryId], references: [id])
+
+  // Explicit FKs for easy reporting joins
+  cedanteId       String?
+  cedante         Cedante?          @relation(fields: [cedanteId], references: [id])
+  reassureurId    String?
+  reassureur      Reassureur?       @relation(fields: [reassureurId], references: [id])
+
+  debit           Decimal?          @db.Decimal(20, 3)
+  credit          Decimal?          @db.Decimal(20, 3)
+
+  currency        String            @default("TND")
+  montantDevise   Decimal?          @db.Decimal(20, 3)
+  tauxChange      Decimal?          @db.Decimal(15, 6)
+
+  libelle         String?
+  ordre           Int               @default(0)
+}
+
+// Export record — validated entries exported to TXT or Excel for external accounting
+model IntegrationExport {
+  id               String                  @id @default(uuid())
+  format           IntegrationExportFormat
+  fileName         String?
+  filePath         String?
+  dateExport       DateTime                @default(now())
+  nombreEntrees    Int                     @default(0)
+  exportedByUserId String?
+
+  journalEntries   JournalEntry[]
+
+  createdAt        DateTime                @default(now())
+}
+
+// ============================================================
+// BORDEREAUX — 5 types
+// ============================================================
+
+model Bordereau {
+  id               String          @id @default(uuid())
+  numero           String          @unique
+  type             BordereauType
+  statut           BordereauStatut @default(BROUILLON)
+
+  affaireId        String?
+  affaire          Affaire?        @relation(fields: [affaireId], references: [id])
+  situationId      String?
+  situation        Situation?      @relation(fields: [situationId], references: [id])
+
+  // Party-specific
+  cedanteId        String?
+  reassureurCode   String?         // for CESSION_REASSUREUR — one bordereau per reinsurer
+
+  dateEmission     DateTime        @default(now())
+  datePeriodeDebut DateTime?
+  datePeriodeFin   DateTime?
+
+  currency         String          @default("TND")
+  montantTotal     Decimal?        @db.Decimal(20, 3)
+  montantEnLettres String?         // legal requirement — "CENT QUARANTE HUIT DINARS, 994 MILLIMES"
+
+  lines            BordereauLine[]
+  journalEntries   JournalEntry[]
+  lettrageItems    LettrageItem[]
+  documents        DocumentLink[]  @relation("bordereauDocuments")
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([affaireId, type])
+}
+
+model BordereauLine {
+  id                 String    @id @default(uuid())
+  bordereauId        String
+  bordereau          Bordereau @relation(fields: [bordereauId], references: [id])
+
+  libelle            String
+  couverture         String?
+  periodeDebut       DateTime?
+  periodeFin         DateTime?
+
+  // Financial columns (as per the CDC reference table)
+  capitaux100        Decimal?  @db.Decimal(20, 3)
+  prime100           Decimal?  @db.Decimal(20, 3)
+  tauxCession        Decimal?  @db.Decimal(7, 4)
+  primeBrute         Decimal?  @db.Decimal(20, 3)
+  commissionCedante  Decimal?  @db.Decimal(20, 3)
+  commissionCourtage Decimal?  @db.Decimal(20, 3)
+  primeNette         Decimal?  @db.Decimal(20, 3)
+
+  // Treaty-specific columns (DEBIT side)
+  sinistresPayes     Decimal?  @db.Decimal(20, 3)
+  recConstitues      Decimal?  @db.Decimal(20, 3)
+  sapConstitues      Decimal?  @db.Decimal(20, 3)
+  participationsBenef Decimal? @db.Decimal(20, 3)
+  taxes              Decimal?  @db.Decimal(20, 3)
+  brokerage          Decimal?  @db.Decimal(20, 3)
+
+  // Treaty-specific columns (CREDIT side)
+  primesCedees       Decimal?  @db.Decimal(20, 3)
+  recLiberes         Decimal?  @db.Decimal(20, 3)
+  sapLiberes         Decimal?  @db.Decimal(20, 3)
+  interets           Decimal?  @db.Decimal(20, 3)
+
+  currency           String    @default("TND")
+  ordre              Int       @default(0)
+}
+
+// ============================================================
+// MODULE GED (Document Management)
+// ============================================================
+
+model Document {
+  id              String              @id @default(uuid())
+  nom             String
+  originalName    String?
+  mimeType        String?
+  sizeBytes       Int?
+  filePath        String              // local path or S3 key
+
+  documentType    String?             // 'SLIP_COTATION' | 'CONVENTION' | 'SWIFT' | 'CONTRAT' | 'NOTE_SYNTHESE'...
+  statut          DocumentStatut      @default(EN_ATTENTE)
+
+  isLatestVersion Boolean             @default(true)
+  versionNumber   Int                 @default(1)
+
+  versions        DocumentVersion[]
+  links           DocumentLink[]
+  shares          DocumentShare[]
+  accessLogs      DocumentAccessLog[]
+
+  uploadedById    String?
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+}
+
+model DocumentVersion {
+  id            String   @id @default(uuid())
+  documentId    String
+  document      Document @relation(fields: [documentId], references: [id])
+  versionNumber Int
+  filePath      String
+  uploadedById  String?
+  comment       String?
+  createdAt     DateTime @default(now())
+}
+
+// Polymorphic attachment — every entity in every module can have documents
+model DocumentLink {
+  id              String             @id @default(uuid())
+  documentId      String
+  document        Document           @relation(fields: [documentId], references: [id])
+  entityType      DocumentEntityType
+
+  // Exactly one of these FKs will be set
+  assureId        String?
+  assure          Assure?            @relation("assureDocuments", fields: [assureId], references: [id])
+  cedanteId       String?
+  cedante         Cedante?           @relation("cedanteDocuments", fields: [cedanteId], references: [id])
+  reassureurId    String?
+  reassureur      Reassureur?        @relation("reassureurDocuments", fields: [reassureurId], references: [id])
+  coCourtId       String?
+  coCourtier      CoCourtier?        @relation("coCourtierDocuments", fields: [coCourtId], references: [id])
+  affaireId       String?
+  affaire         Affaire?           @relation("affaireDocuments", fields: [affaireId], references: [id])
+  sinistreId      String?
+  sinistre        Sinistre?          @relation("sinistreDocuments", fields: [sinistreId], references: [id])
+  encaissementId  String?
+  encaissement    Encaissement?      @relation("encaissementDocuments", fields: [encaissementId], references: [id])
+  decaissementId  String?
+  decaissement    Decaissement?      @relation("decaissementDocuments", fields: [decaissementId], references: [id])
+  ordrePaiementId String?
+  ordrePaiement   OrdrePaiement?     @relation("ordrePaiementDocuments", fields: [ordrePaiementId], references: [id])
+  bordereauId     String?
+  bordereau       Bordereau?         @relation("bordereauDocuments", fields: [bordereauId], references: [id])
+
+  createdAt       DateTime           @default(now())
+}
+
+// Per-affaire document checklist — visual completeness indicator
+// Items: MANQUANT → EN_ATTENTE → RECU
+model DocumentChecklist {
+  id            String                  @id @default(uuid())
+  affaireId     String                  @unique
+  items         DocumentChecklistItem[]
+  completionPct Float                   @default(0.0)  // 0–100
+  updatedAt     DateTime                @updatedAt
+  createdAt     DateTime                @default(now())
+}
+
+model DocumentChecklistItem {
+  id           String            @id @default(uuid())
+  checklistId  String
+  checklist    DocumentChecklist @relation(fields: [checklistId], references: [id])
+  documentType String            // 'NOTE_DE_SYNTHESE' | 'SLIP_COTATION' | 'CONVENTION' | 'POLICE' | 'SWIFT'...
+  libelle      String
+  isMandatory  Boolean           @default(true)
+  statut       DocumentStatut    @default(MANQUANT)
+  documentId   String?           // linked once received
+  receivedAt   DateTime?
+  ordre        Int               @default(0)
+}
+
+model DocumentShare {
+  id                String   @id @default(uuid())
+  documentId        String
+  document          Document @relation(fields: [documentId], references: [id])
+  sharedWithUserId  String?
+  sharedWithEmail   String?
+  expiresAt         DateTime?
+  createdAt         DateTime @default(now())
+}
+
+model DocumentAccessLog {
+  id         String   @id @default(uuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id])
+  userId     String?
+  action     String   // 'VIEW' | 'DOWNLOAD' | 'UPLOAD' | 'DELETE'
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+}
+
+// ============================================================
+// WORKFLOW ENGINE
+// ============================================================
+
+model WorkflowTask {
+  id           String             @id @default(uuid())
+  type         WorkflowTaskType
+  statut       WorkflowTaskStatut @default(EN_ATTENTE)
+
+  // Context — which record triggered this task
+  affaireId    String?
+  affaire      Affaire?           @relation(fields: [affaireId], references: [id])
+  situationId  String?
+  situation    Situation?         @relation(fields: [situationId], references: [id])
+
+  // Assignment
+  assignedToId String?
+  assignedTo   User?              @relation("assignedTasks", fields: [assignedToId], references: [id])
+  createdById  String?
+  createdBy    User?              @relation("createdTasks", fields: [createdById], references: [id])
+
+  description  String?
+  dueDate      DateTime?
+  completedAt  DateTime?
+
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([assignedToId, statut])
+}
+
+// ============================================================
+// REPORTING — Budget targets for dashboard panel 3
+// ============================================================
+
+model BudgetTarget {
+  id          String   @id @default(uuid())
+  annee       Int
+  mois        Int?     // null = annual target
+  cedanteId   String?
+  reassureurCode String?
+  targetCA    Decimal  @db.Decimal(20, 3)  // chiffre d'affaires cible
+  actualCA    Decimal? @db.Decimal(20, 3)  // filled by reporting service
+  variancePct Decimal? @db.Decimal(7, 4)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([annee, mois, cedanteId, reassureurCode])
+}
+
+// ============================================================
+// GLOBAL AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String
+  entityType String
+  entityId   String?
+  before     Json?
+  after      Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+}
