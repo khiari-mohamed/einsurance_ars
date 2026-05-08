@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<title>Bordereau Sinistre — {{sinistre.numero}}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{--red:#d52b36;--dark:#1a1a2e;--light:#f8f9fa;--border:#dee2e6;--muted:#6c757d;--green:#2d6a4f;--orange:#d68910}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#212529;background:#fff;line-height:1.4}
+  .page-header{background:var(--red);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #a51e28}
+  .logo-text{font-size:20px;font-weight:700;letter-spacing:1px}
+  .logo-sub{font-size:9px;opacity:.85}
+  .doc-title{font-size:13px;font-weight:700;letter-spacing:.5px;text-align:center}
+  .doc-ref{font-size:9px;opacity:.85;margin-top:3px;text-align:center}
+  .parties{display:flex;border-bottom:1px solid var(--border)}
+  .party-box{flex:1;padding:12px 16px;border-right:1px solid var(--border)}
+  .party-box:last-child{border-right:none}
+  .party-label{font-size:8px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+  .party-name{font-size:12px;font-weight:700}
+  .party-detail{font-size:9px;color:var(--muted);margin-top:2px}
+  .section-header{background:var(--light);border-left:4px solid var(--red);padding:6px 12px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark);margin:0}
+  .info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border-bottom:1px solid var(--border)}
+  .info-cell{padding:8px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .info-cell:nth-child(3n){border-right:none}
+  .info-cell .label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .info-cell .value{font-weight:600;font-size:10.5px}
+  table{width:100%;border-collapse:collapse;font-size:9.5px}
+  thead tr{background:var(--red);color:#fff}
+  thead th{padding:7px 8px;text-align:right;font-weight:600;font-size:8.5px;text-transform:uppercase;letter-spacing:.3px;border-right:1px solid rgba(255,255,255,.2)}
+  thead th:first-child{text-align:left;border-left:none}
+  tbody tr:nth-child(even){background:#fafafa}
+  tbody td{padding:6px 8px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:right}
+  tbody td:first-child{text-align:left;font-weight:500}
+  tfoot tr{background:var(--dark);color:#fff}
+  tfoot td{padding:8px;font-weight:700;text-align:right;font-size:10px;border-right:1px solid rgba(255,255,255,.15)}
+  tfoot td:first-child{text-align:left}
+  .status-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:8px;font-weight:700;text-transform:uppercase}
+  .s-declare{background:#cce5ff;color:#004085}
+  .s-valide{background:#d4edda;color:#155724}
+  .s-rejete{background:#f8d7da;color:#721c24}
+  .s-clos{background:#e2e3e5;color:#383d41}
+  .s-reass{background:#fff3cd;color:#856404}
+  .timeline{padding:12px 16px}
+  .timeline-title{font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .timeline-item{display:flex;gap:12px;margin-bottom:8px;position:relative}
+  .timeline-item::before{content:'';position:absolute;left:11px;top:20px;bottom:-8px;width:1px;background:var(--border)}
+  .timeline-item:last-child::before{display:none}
+  .timeline-dot{width:24px;height:24px;border-radius:50%;background:var(--red);color:#fff;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;z-index:1}
+  .timeline-content{flex:1;background:var(--light);border-radius:4px;padding:6px 10px;border-left:3px solid var(--red)}
+  .timeline-action{font-weight:600;font-size:10px}
+  .timeline-meta{font-size:8.5px;color:var(--muted);margin-top:2px}
+  .timeline-note{font-size:9px;color:var(--dark);margin-top:3px;font-style:italic}
+  .chart-section{padding:12px 16px;border-top:1px solid var(--border)}
+  .chart-title{font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .amounts-summary{display:flex;gap:0;border:1px solid var(--border);border-radius:4px;overflow:hidden;margin:10px 0}
+  .amount-box{flex:1;padding:10px 14px;text-align:center;border-right:1px solid var(--border)}
+  .amount-box:last-child{border-right:none}
+  .ab-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .ab-value{font-size:13px;font-weight:700;margin-top:3px}
+  .ab-currency{font-size:8px;color:var(--muted)}
+  .doc-footer{background:var(--dark);color:rgba(255,255,255,.7);text-align:center;font-size:8px;padding:8px;margin-top:10px}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <div class="logo-text">ARS</div>
+    <div class="logo-sub">Réassurance Tunisie</div>
+  </div>
+  <div>
+    <div class="doc-title">AVIS DE SINISTRE</div>
+    <div class="doc-ref">N° {{sinistre.numero}} — Émis le {{generatedAt}}</div>
+  </div>
+  <div style="text-align:right;font-size:9px">
+    <div style="opacity:.9">{{company.raisonSociale}}</div>
+    <div style="opacity:.7">MF: {{company.matriculeFiscal}}</div>
+  </div>
+</div>
+
+<div class="parties">
+  <div class="party-box">
+    <div class="party-label">Courtier</div>
+    <div class="party-name">{{company.raisonSociale}}</div>
+    <div class="party-detail">{{company.adresse}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Cédante</div>
+    <div class="party-name">{{affaire.cedante.raisonSociale}}</div>
+    <div class="party-detail">Code: {{affaire.cedante.code}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Affaire concernée</div>
+    <div class="party-name">{{affaire.numero}}</div>
+    <div class="party-detail">Type: {{affaire.type}}</div>
+  </div>
+</div>
+
+<div class="section-header">Identification du Sinistre</div>
+<div class="info-grid">
+  <div class="info-cell">
+    <div class="label">N° Sinistre ARS</div>
+    <div class="value">{{sinistre.numero}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Date de Survenance</div>
+    <div class="value">{{formatDate sinistre.dateSurvenance}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Date de Déclaration</div>
+    <div class="value">{{formatDate sinistre.dateDeclaration}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">N° Police Cédante</div>
+    <div class="value">{{default sinistre.numerPolice '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Période de Couverture</div>
+    <div class="value">{{default sinistre.periodeCouverture '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Statut</div>
+    <div class="value">
+      {{#ifCond sinistre.statut '===' 'VALIDE'}}<span class="status-badge s-valide">Validé</span>
+      {{else}}{{#ifCond sinistre.statut '===' 'REJETE'}}<span class="status-badge s-rejete">Rejeté</span>
+      {{else}}{{#ifCond sinistre.statut '===' 'CLOS'}}<span class="status-badge s-clos">Clos</span>
+      {{else}}{{#ifCond sinistre.statut '===' 'DECLARE_REASSUREURS'}}<span class="status-badge s-reass">Déclaré Réass.</span>
+      {{else}}<span class="status-badge s-declare">{{sinistre.statut}}</span>
+      {{/ifCond}}{{/ifCond}}{{/ifCond}}{{/ifCond}}
+    </div>
+  </div>
+</div>
+
+<div class="amounts-summary">
+  <div class="amount-box">
+    <div class="ab-label">Règlement Exercice N</div>
+    <div class="ab-value" style="color:var(--red)">{{formatNumber (default sinistre.reglementExerciceN 0)}}</div>
+    <div class="ab-currency">TND</div>
+  </div>
+  <div class="amount-box">
+    <div class="ab-label">Cumul Antérieurs</div>
+    <div class="ab-value">{{formatNumber (default sinistre.cumulReglementAnterieurs 0)}}</div>
+    <div class="ab-currency">TND</div>
+  </div>
+  <div class="amount-box">
+    <div class="ab-label">Réserves Constituées</div>
+    <div class="ab-value" style="color:var(--orange)">{{formatNumber (default sinistre.reserves 0)}}</div>
+    <div class="ab-currency">TND</div>
+  </div>
+  <div class="amount-box">
+    <div class="ab-label">Part Réassureurs</div>
+    <div class="ab-value" style="color:var(--green)">{{formatNumber (default sinistre.partReassureurs 0)}}</div>
+    <div class="ab-currency">TND</div>
+  </div>
+  {{#if sinistre.sap}}
+  <div class="amount-box">
+    <div class="ab-label">SAP au 31/12</div>
+    <div class="ab-value" style="color:var(--dark)">{{formatNumber sinistre.sap}}</div>
+    <div class="ab-currency">TND</div>
+  </div>
+  {{/if}}
+</div>
+
+<!-- Reinsurer participation table -->
+{{#if participations.length}}
+<div class="section-header" style="margin-top:8px">Répartition par Réassureur</div>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Réassureur</th>
+      <th>Quote-Part (%)</th>
+      <th>Montant Part (TND)</th>
+        <th>Notifié</th>
+  <th>Date Notification</th>
+</tr>
+  </thead>
+  <tbody>
+    {{#each participations}}
+    <tr>
+      <td>{{reassureurCode}}</td>
+      <td>{{formatPercent partPct}}</td>
+      <td>{{formatNumber (default montantPart 0)}}</td>
+      <td>
+        {{#if isNotified}}
+          <span class="status-badge s-valide">Oui</span>
+        {{else}}
+          <span class="status-badge s-declare">Non</span>
+        {{/if}}
+      </td>
+      <td>{{formatDate notifiedAt}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td>TOTAL RÉASSUREURS</td>
+      <td>100,000 %</td>
+      <td>{{formatNumber sinistre.partReassureurs}}</td>
+      <td></td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
+{{/if}}
+<!-- Event timeline -->
+{{#if events.length}}
+<div class="section-header" style="margin-top:8px">Chronologie du Dossier</div>
+<div class="timeline">
+  <div class="timeline-title">Historique des événements</div>
+  {{#each events}}
+  <div class="timeline-item">
+    <div class="timeline-dot">{{add @index 1}}</div>
+    <div class="timeline-content">
+      <div class="timeline-action">{{action}}</div>
+      <div class="timeline-meta">{{actorLabel}} — {{formatDate date}}</div>
+      {{#if note}}<div class="timeline-note">{{note}}</div>{{/if}}
+    </div>
+  </div>
+  {{/each}}
+</div>
+{{/if}}
+<!-- Chart -->
+<div class="chart-section">
+  <div class="chart-title">Décomposition des Montants du Sinistre</div>
+  <canvas id="sinistreChart" height="80"></canvas>
+</div>
+<div class="doc-footer">
+  {{company.raisonSociale}} — Document confidentiel — {{sinistre.numero}} — {{generatedAt}}
+</div>
+<script>
+(function() {
+  var reglN   = {{default sinistre.reglementExerciceN 0}};
+  var cumul   = {{default sinistre.cumulReglementAnterieurs 0}};
+  var reserves = {{default sinistre.reserves 0}};
+  var partR   = {{default sinistre.partReassureurs 0}};
+
+  var ctx = document.getElementById('sinistreChart');
+  if (ctx) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['Règlement N', 'Cumul Antérieurs', 'Réserves', 'Part Réassureurs'],
+        datasets: [{
+          label: 'TND',
+          data: [reglN, cumul, reserves, partR],
+          backgroundColor: ['#d52b36','#e87a80','#d68910','#2d6a4f'],
+          borderColor:     ['#d52b36','#e87a80','#d68910','#2d6a4f'],
+          borderWidth:1, borderRadius:3
+        }]
+      },
+      options: {
+        responsive:true,
+        plugins:{ legend:{display:false} },
+        scales:{
+          y:{ beginAtZero:true, ticks:{font:{size:9}}, grid:{color:'#f0f0f0'} },
+          x:{ ticks:{font:{size:9}}, grid:{display:false} }
+        }
+      }
+    });
+  }
+  window.__chartsReady = true;
+  window.dispatchEvent(new Event('chartsReady'));
+})();
+</script>
+</body>
+</html>

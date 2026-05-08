@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<title>Ordre de Virement — {{ordre.reference}}</title>
+<style>
+  :root{--red:#d52b36;--dark:#1a1a2e;--light:#f8f9fa;--border:#dee2e6;--muted:#6c757d}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#212529;background:#fff;line-height:1.5}
+  .page-header{background:var(--red);color:#fff;padding:16px 24px;display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #a51e28}
+  .logo-text{font-size:22px;font-weight:700;letter-spacing:1px}
+  .logo-sub{font-size:9px;opacity:.85}
+  .doc-title{font-size:16px;font-weight:700;letter-spacing:1px;text-align:center}
+  .doc-ref{font-size:10px;opacity:.85;margin-top:4px;text-align:center;letter-spacing:.5px}
+  .watermark{position:relative}
+  .status-strip{
+    background:var(--dark);color:#fff;text-align:center;
+    padding:6px;font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase
+  }
+  .status-strip.brouillon{background:#6c757d}
+  .status-strip.valide{background:#155724}
+  .status-strip.execute{background:var(--red)}
+  .status-strip.swift{background:var(--dark)}
+  .section{padding:16px 24px;border-bottom:1px solid var(--border)}
+  .section-title{font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+  .field{margin-bottom:10px}
+  .field-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+  .field-value{font-size:11px;font-weight:600;padding:4px 8px;border:1px solid var(--border);border-radius:3px;background:var(--light);min-height:22px}
+  .amount-block{
+    background:var(--dark);color:#fff;border-radius:6px;
+    padding:16px 24px;text-align:center;margin:16px 24px
+  }
+  .amount-label{font-size:9px;opacity:.7;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+  .amount-value{font-size:28px;font-weight:700;letter-spacing:1px;color:#fff}
+  .amount-currency{font-size:12px;opacity:.8;margin-top:4px}
+  .amount-words-block{
+    background:#fff8f8;border:1px solid #fcc;border-left:4px solid var(--red);
+    padding:10px 24px;margin:0 24px 16px
+  }
+  .aw-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+  .aw-value{font-size:12px;font-weight:700;color:var(--dark);text-transform:uppercase}
+  .bank-box{
+    background:var(--light);border:1px solid var(--border);border-radius:6px;
+    padding:12px 16px
+  }
+  .bank-title{font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .bank-row{display:flex;justify-content:space-between;border-bottom:1px dotted var(--border);padding:4px 0;font-size:10px}
+  .bank-row:last-child{border-bottom:none}
+  .bank-key{color:var(--muted);font-size:9px}
+  .bank-val{font-weight:600}
+  .ref-box{
+    border:1px solid var(--border);border-radius:6px;padding:12px 16px;
+    display:grid;grid-template-columns:repeat(3,1fr);gap:10px
+  }
+  .ref-item .ri-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .ref-item .ri-value{font-size:10.5px;font-weight:600}
+  .signatures-grid{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;
+    border-top:2px solid var(--red)
+  }
+  .sig-col{padding:16px 20px;border-right:1px solid var(--border);text-align:center}
+  .sig-col:last-child{border-right:none}
+  .sig-role{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+  .sig-name{font-size:10px;font-weight:600;margin-bottom:36px}
+  .sig-line{border-top:1px solid var(--border);padding-top:5px;font-size:8px;color:var(--muted)}
+  .swift-block{
+    background:#e8f5e9;border:1px solid #c8e6c9;border-left:4px solid #2d6a4f;
+    padding:10px 24px;margin:0 24px 12px
+  }
+  .swift-label{font-size:8px;font-weight:700;color:#155724;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+  .swift-value{font-size:10px;font-weight:600;color:#155724}
+  .doc-footer{background:var(--dark);color:rgba(255,255,255,.7);text-align:center;font-size:8px;padding:8px}
+  .highlight{color:var(--red)}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="page-header">
+  <div>
+    <div class="logo-text">ARS</div>
+    <div class="logo-sub">Réassurance Tunisie</div>
+  </div>
+  <div>
+    <div class="doc-title">ORDRE DE VIREMENT</div>
+    <div class="doc-ref">Réf. {{ordre.reference}}</div>
+  </div>
+  <div style="text-align:right;font-size:9px">
+    <div style="opacity:.9">{{company.raisonSociale}}</div>
+    <div style="opacity:.7">{{company.adresse}}</div>
+    <div style="opacity:.7">MF: {{company.matriculeFiscal}}</div>
+  </div>
+</div>
+
+<!-- STATUS STRIP -->
+<div class="status-strip {{#ifCond ordre.statut '===' 'BROUILLON'}}brouillon{{else}}{{#ifCond ordre.statut '===' 'VALIDE'}}valide{{else}}{{#ifCond ordre.statut '===' 'EXECUTE'}}execute{{else}}swift{{/ifCond}}{{/ifCond}}{{/ifCond}}">
+  STATUT: {{ordre.statut}}
+  {{#if ordre.dateExecution}} — Exécuté le {{formatDate ordre.dateExecution}}{{/if}}
+</div>
+
+<!-- ISSUER & DATE -->
+<div class="section">
+  <div class="section-title">Informations de l'Ordre</div>
+  <div class="three-col">
+    <div class="field">
+      <div class="field-label">N° de Référence</div>
+      <div class="field-value highlight">{{ordre.reference}}</div>
+    </div>
+    <div class="field">
+      <div class="field-label">Date d'émission</div>
+      <div class="field-value">{{date}}</div>
+    </div>
+    <div class="field">
+      <div class="field-label">Date d'exécution prévue</div>
+      <div class="field-value">{{formatDate ordre.dateExecution}}</div>
+    </div>
+  </div>
+</div>
+
+<!-- BENEFICIARY -->
+<div class="section">
+  <div class="section-title">Bénéficiaire du Virement</div>
+  <div class="two-col">
+    <div>
+      <div class="field">
+        <div class="field-label">Nom / Raison Sociale</div>
+        <div class="field-value" style="font-size:13px;font-weight:700">{{ordre.beneficiaire}}</div>
+      </div>
+    </div>
+    <div>
+      {{#if ordre.bankAccount}}
+      <div class="bank-box">
+        <div class="bank-title">Coordonnées Bancaires</div>
+        <div class="bank-row">
+          <span class="bank-key">Banque</span>
+          <span class="bank-val">{{ordre.bankAccount.banque}}</span>
+        </div>
+        {{#if ordre.bankAccount.agence}}
+        <div class="bank-row">
+          <span class="bank-key">Agence</span>
+          <span class="bank-val">{{ordre.bankAccount.agence}}</span>
+        </div>
+        {{/if}}
+        <div class="bank-row">
+          <span class="bank-key">RIB</span>
+          <span class="bank-val" style="font-family:monospace">{{ordre.bankAccount.rib}}</span>
+        </div>
+        {{#if ordre.bankAccount.swift}}
+        <div class="bank-row">
+          <span class="bank-key">SWIFT / BIC</span>
+          <span class="bank-val" style="color:var(--red);font-family:monospace">{{ordre.bankAccount.swift}}</span>
+        </div>
+        {{/if}}
+        <div class="bank-row">
+          <span class="bank-key">Devise</span>
+          <span class="bank-val">{{ordre.currency}}</span>
+        </div>
+      </div>
+      {{/if}}
+    </div>
+  </div>
+</div>
+
+<!-- AMOUNT -->
+<div class="amount-block">
+  <div class="amount-label">Montant du Virement</div>
+  <div class="amount-value">{{formatNumber ordre.montant}}</div>
+  <div class="amount-currency">{{ordre.currency}}</div>
+</div>
+
+<div class="amount-words-block">
+  <div class="aw-label">Montant en lettres</div>
+  <div class="aw-value">{{montantEnLettres}}</div>
+</div>
+
+<!-- REFERENCES -->
+<div class="section">
+  <div class="section-title">Références</div>
+  <div class="ref-box">
+    <div class="ref-item">
+      <div class="ri-label">Référence Affaire</div>
+      <div class="ri-value">{{default ordre.referenceAffaire '—'}}</div>
+    </div>
+    <div class="ref-item">
+      <div class="ri-label">Référence Bordereau</div>
+      <div class="ri-value">{{default ordre.referenceBordereau '—'}}</div>
+    </div>
+    <div class="ref-item">
+      <div class="ri-label">Motif</div>
+      <div class="ri-value">Règlement prime réassurance</div>
+    </div>
+  </div>
+</div>
+
+<!-- SWIFT CONFIRMATION -->
+{{#if ordre.swiftReceived}}
+<div class="swift-block">
+  <div class="swift-label">✓ Confirmation SWIFT reçue</div>
+  <div class="swift-value">Virement confirmé — Document SWIFT archivé dans le dossier {{ordre.swiftDocumentId}}</div>
+</div>
+{{/if}}
+
+<!-- SIGNATORIES -->
+<div class="section">
+  <div class="section-title">Signataires autorisés</div>
+  <div class="signatures-grid">
+    {{#each ordre.signataires}}
+    <div class="sig-col">
+      <div class="sig-role">Signataire {{add @index 1}}</div>
+      <div class="sig-name">{{this}}</div>
+      <div class="sig-line">Signature</div>
+    </div>
+    {{else}}
+    <div class="sig-col">
+      <div class="sig-role">Directeur Administratif et Financier</div>
+      <div class="sig-name">&nbsp;</div>
+      <div class="sig-line">Signature</div>
+    </div>
+    <div class="sig-col">
+      <div class="sig-role">Direction Générale</div>
+      <div class="sig-name">&nbsp;</div>
+      <div class="sig-line">Signature</div>
+    </div>
+    <div class="sig-col">
+      <div class="sig-role">Contrôleur de Gestion</div>
+      <div class="sig-name">&nbsp;</div>
+      <div class="sig-line">Signature</div>
+    </div>
+    {{/each}}
+  </div>
+</div>
+
+<div class="doc-footer">
+  {{company.raisonSociale}} — {{company.adresse}} — Document officiel — {{ordre.reference}} — {{date}}
+</div>
+
+</body>
+</html>

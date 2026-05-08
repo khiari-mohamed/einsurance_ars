@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<title>Relevé de Compte Traité — {{affaire.numero}}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{--red:#d52b36;--dark:#1a1a2e;--light:#f8f9fa;--border:#dee2e6;--muted:#6c757d;--green:#2d6a4f;--blue:#1565c0}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#212529;background:#fff;line-height:1.4}
+  .page-header{background:var(--red);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #a51e28}
+  .logo-text{font-size:20px;font-weight:700;letter-spacing:1px}
+  .logo-sub{font-size:9px;opacity:.85}
+  .doc-title{font-size:13px;font-weight:700;letter-spacing:.5px;text-align:center}
+  .doc-ref{font-size:9px;opacity:.85;margin-top:3px;text-align:center}
+  .parties{display:flex;border-bottom:1px solid var(--border)}
+  .party-box{flex:1;padding:12px 16px;border-right:1px solid var(--border)}
+  .party-box:last-child{border-right:none}
+  .party-label{font-size:8px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+  .party-name{font-size:12px;font-weight:700}
+  .party-detail{font-size:9px;color:var(--muted);margin-top:2px}
+  .section-header{background:var(--light);border-left:4px solid var(--red);padding:6px 12px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark);margin:0}
+  .info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border)}
+  .info-cell{padding:8px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .info-cell:nth-child(4n){border-right:none}
+  .info-cell .label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .info-cell .value{font-weight:600;font-size:10.5px}
+  /* Debit/Credit table */
+  .account-table{width:100%;border-collapse:collapse;font-size:9.5px}
+  .account-table thead tr{background:var(--dark);color:#fff}
+  .account-table thead th{padding:7px 8px;text-align:right;font-weight:600;font-size:8.5px;text-transform:uppercase;letter-spacing:.3px;border-right:1px solid rgba(255,255,255,.2)}
+  .account-table thead th:first-child{text-align:left}
+  .account-table tbody tr:nth-child(even){background:#fafafa}
+  .account-table tbody td{padding:6px 8px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:right}
+  .account-table tbody td:first-child{text-align:left;font-weight:500}
+  .account-table .debit-col{color:var(--red)}
+  .account-table .credit-col{color:var(--green)}
+  .account-table tfoot tr{background:var(--dark);color:#fff}
+  .account-table tfoot td{padding:8px;font-weight:700;text-align:right;font-size:10px}
+  .account-table tfoot td:first-child{text-align:left}
+  /* Solde block */
+  .solde-block{padding:14px 20px;border-top:2px solid var(--red);border-bottom:2px solid var(--red);display:flex;justify-content:space-between;align-items:center}
+  .solde-direction{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;padding:4px 12px;border-radius:12px}
+  .cedante-doit{background:#d4edda;color:#155724}
+  .ars-doit{background:#f8d7da;color:#721c24}
+  .equilibre{background:#e2e3e5;color:#383d41}
+  .solde-amount{font-size:22px;font-weight:700}
+  .solde-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  /* Situations history */
+  table{width:100%;border-collapse:collapse;font-size:9.5px}
+  thead tr{background:var(--red);color:#fff}
+  thead th{padding:7px 8px;text-align:right;font-weight:600;font-size:8.5px;text-transform:uppercase;border-right:1px solid rgba(255,255,255,.2)}
+  thead th:first-child{text-align:left}
+  tbody tr:nth-child(even){background:#fafafa}
+  tbody td{padding:6px 8px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:right}
+  tbody td:first-child{text-align:left}
+  /* Chart */
+  .chart-section{padding:12px 16px;border-top:1px solid var(--border)}
+  .chart-title{font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .chart-row{display:flex;gap:20px}
+  .chart-col{flex:1}
+  .doc-footer{background:var(--dark);color:rgba(255,255,255,.7);text-align:center;font-size:8px;padding:8px;margin-top:10px}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div><div class="logo-text">ARS</div><div class="logo-sub">Réassurance Tunisie</div></div>
+  <div>
+    <div class="doc-title">RELEVÉ DE COMPTE — TRAITÉ DE RÉASSURANCE</div>
+    <div class="doc-ref">{{affaire.numero}} — {{traite.reassuranceType}} — Émis le {{generatedAt}}</div>
+  </div>
+  <div style="text-align:right;font-size:9px">
+    <div style="opacity:.9">{{company.raisonSociale}}</div>
+    <div style="opacity:.7">MF: {{company.matriculeFiscal}}</div>
+  </div>
+</div>
+
+<div class="parties">
+  <div class="party-box">
+    <div class="party-label">Courtier</div>
+    <div class="party-name">{{company.raisonSociale}}</div>
+    <div class="party-detail">{{company.adresse}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Cédante</div>
+    <div class="party-name">{{affaire.cedante.raisonSociale}}</div>
+    <div class="party-detail">Code: {{affaire.cedante.code}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Traité Référence</div>
+    <div class="party-name">{{affaire.numero}}</div>
+    <div class="party-detail">Réf: {{default traite.referenceTraite '—'}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Périodicité</div>
+    <div class="party-name">{{traite.periodicite}}</div>
+    <div class="party-detail">{{traite.reassuranceType}} — {{default traite.formeCouverture '—'}}</div>
+  </div>
+</div>
+
+<div class="section-header">Caractéristiques du Traité</div>
+<div class="info-grid">
+  <div class="info-cell">
+    <div class="label">Date d'effet</div>
+    <div class="value">{{formatDate traite.dateEffet}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Date d'échéance</div>
+    <div class="value">{{formatDate traite.dateEcheance}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Zone Géographique</div>
+    <div class="value">{{default traite.zoneGeographique '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Branche</div>
+    <div class="value">{{default traite.branche '—'}}</div>
+  </div>
+</div>
+
+<!-- Account Rubriques -->
+{{#if traite.accountRubriques.length}}
+<div class="section-header" style="margin-top:6px">Rubriques de Compte</div>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Rubrique</th>
+      <th style="text-align:left">Compte de Référence</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each traite.accountRubriques}}
+    <tr>
+      <td>{{rubrique}}</td>
+      <td>{{compteReference}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+{{/if}}
+
+<!-- Situations history -->
+{{#if situations.length}}
+<div class="section-header" style="margin-top:8px">Historique des Situations</div>
+<table class="account-table">
+  <thead>
+    <tr>
+      <th style="text-align:left">Référence</th>
+      <th>Période</th>
+      <th>Total Débit (Primes)</th>
+      <th>Total Crédit (Sinistres)</th>
+      <th>Solde Net</th>
+      <th>Direction</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each situations}}
+    <tr>
+      <td>{{reference}}</td>
+      <td style="text-align:right">{{formatDate dateDebut}} → {{formatDate dateFin}}</td>
+      <td class="debit-col">{{formatNumber totalDebit}}</td>
+      <td class="credit-col">{{formatNumber totalCredit}}</td>
+      <td style="font-weight:700">{{formatNumber soldeNet}}</td>
+      <td style="text-align:left">
+        {{#ifCond soldeDirection '===' 'CEDANTE_DOIT'}}
+          <span class="solde-direction cedante-doit">Cédante doit</span>
+        {{else}}{{#ifCond soldeDirection '===' 'ARS_DOIT'}}
+          <span class="solde-direction ars-doit">ARS doit</span>
+        {{else}}
+          <span class="solde-direction equilibre">Équilibre</span>
+        {{/ifCond}}{{/ifCond}}
+      </td>
+    </tr>
+    {{/each}}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td colspan="2">CUMUL</td>
+      <td>{{formatNumber totalDebitCumul}}</td>
+      <td>{{formatNumber totalCreditCumul}}</td>
+      <td>{{formatNumber soldeNetCumul}}</td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
+{{/if}}
+
+<!-- Solde net -->
+<div class="solde-block">
+  <div>
+    <div class="solde-label">Solde Net Cumulé</div>
+    <div class="solde-amount" style="color:{{#ifCond soldeNetCumul '>' 0}}var(--green){{else}}var(--red){{/ifCond}}">
+      {{formatNumber soldeNetCumul}} {{affaire.currency}}
+    </div>
+  </div>
+  <div>
+    {{#ifCond soldeNetCumul '>' 0}}
+      <span class="solde-direction cedante-doit" style="font-size:12px;padding:8px 16px">
+        CÉDANTE DOIT À ARS
+      </span>
+    {{else}}{{#ifCond soldeNetCumul '<' 0}}
+      <span class="solde-direction ars-doit" style="font-size:12px;padding:8px 16px">
+        ARS DOIT AUX RÉASSUREURS
+      </span>
+    {{else}}
+      <span class="solde-direction equilibre" style="font-size:12px;padding:8px 16px">
+        COMPTE ÉQUILIBRÉ
+      </span>
+    {{/ifCond}}{{/ifCond}}
+  </div>
+</div>
+
+<!-- Charts -->
+<div class="chart-section">
+  <div class="chart-title">Évolution Primes vs Sinistres</div>
+  <div class="chart-row">
+    <div class="chart-col">
+      <canvas id="evolutionChart" height="120"></canvas>
+    </div>
+    <div class="chart-col">
+      <canvas id="repartitionChart" height="120"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="doc-footer">
+  {{company.raisonSociale}} — Document confidentiel — Traité {{affaire.numero}} — {{generatedAt}}
+</div>
+
+<script>
+(function() {
+  var situations = {{{json situations}}};
+  if (!situations) situations = [];
+
+  var labels  = situations.map(function(s) { return s.reference || '—'; });
+  var debits  = situations.map(function(s) { return Number(s.totalDebit) || 0; });
+  var credits = situations.map(function(s) { return Number(s.totalCredit) || 0; });
+  var soldes  = situations.map(function(s) { return Number(s.soldeNet) || 0; });
+
+  var totalD = debits.reduce(function(a,b){return a+b},0);
+  var totalC = credits.reduce(function(a,b){return a+b},0);
+
+  // Evolution bar chart
+  var ctx1 = document.getElementById('evolutionChart');
+  if (ctx1 && labels.length) {
+    new Chart(ctx1, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Primes (Débit)',   data: debits,  backgroundColor: '#1a1a2e', borderRadius: 2 },
+          { label: 'Sinistres (Crédit)', data: credits, backgroundColor: '#d52b36', borderRadius: 2 },
+          { label: 'Solde Net', data: soldes, type: 'line', borderColor: '#2d6a4f', backgroundColor: 'rgba(45,106,79,0.1)', tension: 0.3, pointRadius: 3, fill: true }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'top', labels: { font: { size: 8 }, boxWidth: 10 } } },
+        scales: {
+          y: { beginAtZero: true, ticks: { font: { size: 8 } }, grid: { color: '#f0f0f0' } },
+          x: { ticks: { font: { size: 8 } }, grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  // Repartition doughnut
+  var ctx2 = document.getElementById('repartitionChart');
+  if (ctx2 && (totalD > 0 || totalC > 0)) {
+    new Chart(ctx2, {
+      type: 'doughnut',
+      data: {
+        labels: ['Primes Cumulées', 'Sinistres Cumulés'],
+        datasets: [{
+          data: [totalD, totalC],
+          backgroundColor: ['#1a1a2e', '#d52b36'],
+          borderColor: ['#fff', '#fff'],
+          borderWidth: 2
+        }]
+      },
+      options: {
+        responsive: true,
+        cutout: '55%',
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 8 }, boxWidth: 10 } },
+          tooltip: { callbacks: { label: function(c) { return c.label + ': ' + c.parsed.toFixed(3); } } }
+        }
+      }
+    });
+  }
+
+  window.__chartsReady = true;
+  window.dispatchEvent(new Event('chartsReady'));
+})();
+</script>
+</body>
+</html>

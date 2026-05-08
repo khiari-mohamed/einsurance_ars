@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Bordereau de Cession — {{affaire.numero}}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --ars-red: #d52b36;
+    --ars-dark: #1a1a2e;
+    --ars-light: #f8f9fa;
+    --border: #dee2e6;
+    --text: #212529;
+    --muted: #6c757d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10.5px;
+    color: var(--text);
+    background: #fff;
+    line-height: 1.4;
+  }
+
+  /* ── Header ─────────────────────────────────────────────────── */
+  .page-header {
+    background: var(--ars-red);
+    color: #fff;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 4px solid #a51e28;
+  }
+  .page-header .logo-block { display: flex; align-items: center; gap: 12px; }
+  .page-header .logo-text {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .page-header .logo-sub { font-size: 9px; opacity: 0.85; }
+  .page-header .doc-title {
+    text-align: right;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .page-header .doc-ref { font-size: 9px; opacity: 0.85; margin-top: 3px; }
+
+  /* ── Parties block ───────────────────────────────────────────── */
+  .parties {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .party-box {
+    flex: 1;
+    padding: 12px 16px;
+    border-right: 1px solid var(--border);
+  }
+  .party-box:last-child { border-right: none; }
+  .party-label {
+    font-size: 8px;
+    font-weight: 700;
+    color: var(--ars-red);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 4px;
+  }
+  .party-name { font-size: 12px; font-weight: 700; }
+  .party-detail { font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Section heading ─────────────────────────────────────────── */
+  .section-header {
+    background: var(--ars-light);
+    border-left: 4px solid var(--ars-red);
+    padding: 6px 12px;
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--ars-dark);
+    margin: 0;
+  }
+
+  /* ── Info grid ───────────────────────────────────────────────── */
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .info-cell {
+    padding: 8px 12px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .info-cell:nth-child(3n) { border-right: none; }
+  .info-cell .label {
+    font-size: 8px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+  .info-cell .value { font-weight: 600; font-size: 10.5px; }
+
+  /* ── Table ───────────────────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5px;
+  }
+  thead tr {
+    background: var(--ars-red);
+    color: #fff;
+  }
+  thead th {
+    padding: 7px 8px;
+    text-align: right;
+    font-weight: 600;
+    font-size: 8.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-right: 1px solid rgba(255,255,255,0.2);
+  }
+  thead th:first-child { text-align: left; border-left: none; }
+  tbody tr:nth-child(even) { background: #fafafa; }
+  tbody tr:hover { background: #fff5f5; }
+  tbody td {
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    text-align: right;
+    vertical-align: middle;
+  }
+  tbody td:first-child { text-align: left; font-weight: 500; }
+  tfoot tr { background: var(--ars-dark); color: #fff; }
+  tfoot td {
+    padding: 8px;
+    font-weight: 700;
+    text-align: right;
+    font-size: 10px;
+    border-right: 1px solid rgba(255,255,255,0.15);
+  }
+  tfoot td:first-child { text-align: left; }
+
+  /* ── Totals bar ──────────────────────────────────────────────── */
+  .totals-bar {
+    display: flex;
+    gap: 0;
+    border-top: 2px solid var(--ars-red);
+    border-bottom: 2px solid var(--ars-red);
+    margin: 0;
+  }
+  .total-cell {
+    flex: 1;
+    padding: 10px 14px;
+    border-right: 1px solid var(--border);
+    text-align: center;
+  }
+  .total-cell:last-child { border-right: none; }
+  .total-cell .t-label {
+    font-size: 8px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .total-cell .t-value {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--ars-red);
+    margin-top: 3px;
+  }
+  .total-cell .t-currency { font-size: 8px; color: var(--muted); }
+
+  /* ── Amount in words ─────────────────────────────────────────── */
+  .amount-words {
+    background: #fff8f8;
+    border: 1px solid #fcc;
+    border-left: 4px solid var(--ars-red);
+    padding: 10px 14px;
+    margin: 10px 0;
+  }
+  .amount-words .aw-label {
+    font-size: 8px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 3px;
+  }
+  .amount-words .aw-value {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--ars-dark);
+    text-transform: uppercase;
+  }
+
+  /* ── Chart container ─────────────────────────────────────────── */
+  .chart-section {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .chart-title {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--ars-red);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .chart-wrap {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+  .chart-canvas-wrap { width: 200px; height: 200px; flex-shrink: 0; }
+  .chart-legend { flex: 1; }
+  .legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 9px;
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-label { flex: 1; color: var(--text); }
+  .legend-value { font-weight: 700; color: var(--ars-dark); }
+
+  /* ── Signatures ──────────────────────────────────────────────── */
+  .signatures {
+    display: flex;
+    gap: 0;
+    border-top: 1px solid var(--border);
+    margin-top: 16px;
+  }
+  .sig-block {
+    flex: 1;
+    padding: 14px 16px;
+    border-right: 1px solid var(--border);
+    text-align: center;
+  }
+  .sig-block:last-child { border-right: none; }
+  .sig-label {
+    font-size: 8px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 40px;
+  }
+  .sig-line {
+    border-top: 1px solid var(--border);
+    padding-top: 5px;
+    font-size: 8px;
+    color: var(--muted);
+  }
+
+  /* ── Footer ──────────────────────────────────────────────────── */
+  .doc-footer {
+    background: var(--ars-dark);
+    color: rgba(255,255,255,0.7);
+    text-align: center;
+    font-size: 8px;
+    padding: 8px;
+    margin-top: auto;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .badge-placed { background: #d4edda; color: #155724; }
+  .badge-preview { background: #fff3cd; color: #856404; }
+  .badge-quote { background: #d1ecf1; color: #0c5460; }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══════════════════════════════════════════════════════ -->
+<div class="page-header">
+  <div class="logo-block">
+    <div>
+      <div class="logo-text">ARS</div>
+      <div class="logo-sub">Réassurance Tunisie</div>
+    </div>
+  </div>
+  <div style="text-align:center">
+    <div class="doc-title">{{#if title}}{{title}}{{else}}BORDEREAU DE CESSION{{/if}}</div>
+    <div class="doc-ref">N° {{affaire.numero}} — Émis le {{generatedAt}}</div>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:9px;opacity:0.85">{{company.raisonSociale}}</div>
+    <div style="font-size:8px;opacity:0.7">{{company.adresse}}</div>
+    <div style="font-size:8px;opacity:0.7">MF: {{company.matriculeFiscal}}</div>
+  </div>
+</div>
+
+<!-- ══ PARTIES ═════════════════════════════════════════════════════ -->
+<div class="parties">
+  <div class="party-box">
+    <div class="party-label">Courtier / Réassureur</div>
+    <div class="party-name">{{company.raisonSociale}}</div>
+    <div class="party-detail">{{company.adresse}}</div>
+    <div class="party-detail">MF: {{company.matriculeFiscal}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Cédante</div>
+    <div class="party-name">{{affaire.cedante.raisonSociale}}</div>
+    <div class="party-detail">Code: {{affaire.cedante.code}}</div>
+    <div class="party-detail">Compte: {{affaire.cedante.compteComptable}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Assuré</div>
+    <div class="party-name">{{facultative.assure.raisonSociale}}</div>
+    <div class="party-detail">Code: {{facultative.assure.code}}</div>
+    {{#if facultative.assure.rne}}<div class="party-detail">RNE: {{facultative.assure.rne}}</div>{{/if}}
+  </div>
+</div>
+
+<!-- ══ CONTRACT INFO ════════════════════════════════════════════════ -->
+<div class="section-header">Informations Contractuelles</div>
+<div class="info-grid">
+  <div class="info-cell">
+    <div class="label">N° Police Cédante</div>
+    <div class="value">{{default facultative.numeroPoliceCedante '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Branche</div>
+    <div class="value">{{default facultative.branche '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Produit</div>
+    <div class="value">{{default facultative.produit '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Date d'effet</div>
+    <div class="value">{{formatDate facultative.dateEffet}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Date d'échéance</div>
+    <div class="value">{{formatDate facultative.dateEcheance}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Mode de renouvellement</div>
+    <div class="value">{{default facultative.modeRenouvellement '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Type de réassurance</div>
+    <div class="value">{{facultative.reassuranceType}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Pays de l'assuré</div>
+    <div class="value">{{default facultative.paysAssure 'Tunisie'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Statut affaire</div>
+    <div class="value">
+      {{#ifCond affaire.statut '===' 'PLACEMENT_REALISE'}}
+        <span class="badge badge-placed">Placée</span>
+      {{else}}{{#ifCond affaire.statut '===' 'PREVISION'}}
+        <span class="badge badge-preview">Prévision</span>
+      {{else}}
+        <span class="badge badge-quote">En cotation</span>
+      {{/ifCond}}{{/ifCond}}
+    </div>
+  </div>
+</div>
+
+<!-- ══ GUARANTEE LINES ══════════════════════════════════════════════ -->
+{{#if facultative.guaranteeLines.length}}
+<div class="section-header">Capitaux Assurés par Garantie</div>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Garantie</th>
+      <th>Capitaux Assurés 100% ({{affaire.currency}})</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each facultative.guaranteeLines}}
+    <tr>
+      <td>{{garantie}}</td>
+      <td>{{formatNumber capitauxAssures100}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+</table>
+{{/if}}
+
+<!-- ══ FINANCIAL TABLE ══════════════════════════════════════════════ -->
+<div class="section-header" style="margin-top:8px">Données Financières</div>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Libellé / Garantie</th>
+      <th>Prime 100%</th>
+      <th>Taux Cession</th>
+      <th>Prime Brute Cédée</th>
+      <th>Commission Cédante</th>
+      <th>Commission ARS</th>
+      <th>Prime Nette</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each affaire.reassureurs}}
+    <tr>
+      <td>{{../affaire.numero}} — Part {{reassureur.code}} ({{formatPercent partPct}})</td>
+      <td>{{formatNumber ../facultative.prime100Pct}}</td>
+      <td>{{formatPercent ../facultative.tauxCession}}</td>
+      <td>{{formatNumber primeBrute}}</td>
+      <td>{{formatNumber commissionCedante}}</td>
+      <td>{{formatNumber commissionArs}}</td>
+      <td style="color:#155724;font-weight:700">{{formatNumber primeNetteReassureur}}</td>
+    </tr>
+    {{/each}}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td>TOTAUX</td>
+      <td>{{formatNumber facultative.prime100Pct}}</td>
+      <td>{{formatPercent facultative.tauxCession}}</td>
+      <td>{{formatNumber facultative.primeCedee}}</td>
+      <td>{{formatNumber facultative.commissionCedante}}</td>
+      <td></td>
+      <td>{{formatNumber (subtract facultative.primeCedee facultative.commissionCedante)}}</td>
+    </tr>
+  </tfoot>
+</table>
+
+<!-- ══ TOTALS BAR ═══════════════════════════════════════════════════ -->
+<div class="totals-bar">
+  <div class="total-cell">
+    <div class="t-label">Prime Cédée Brute</div>
+    <div class="t-value">{{formatNumber facultative.primeCedee}}</div>
+    <div class="t-currency">{{affaire.currency}}</div>
+  </div>
+  <div class="total-cell">
+    <div class="t-label">Commission Cédante</div>
+    <div class="t-value">{{formatNumber facultative.commissionCedante}}</div>
+    <div class="t-currency">{{affaire.currency}}</div>
+  </div>
+  <div class="total-cell">
+    <div class="t-label">Prime Nette à Régler</div>
+    <div class="t-value" style="color:var(--ars-red)">
+      {{formatNumber (subtract facultative.primeCedee facultative.commissionCedante)}}
+    </div>
+    <div class="t-currency">{{affaire.currency}}</div>
+  </div>
+  <div class="total-cell">
+    <div class="t-label">Taux de Cession</div>
+    <div class="t-value">{{formatPercent facultative.tauxCession}}</div>
+    <div class="t-currency">&nbsp;</div>
+  </div>
+</div>
+
+<!-- ══ AMOUNT IN WORDS ══════════════════════════════════════════════ -->
+<div style="padding: 0 0 0 0">
+  <div class="amount-words">
+    <div class="aw-label">Montant en lettres (Prime nette)</div>
+    <div class="aw-value">{{montantEnLettres}}</div>
+  </div>
+</div>
+
+<!-- ══ CHART ════════════════════════════════════════════════════════ -->
+<div class="chart-section">
+  <div class="chart-title">Répartition de la Prime Cédée</div>
+  <div class="chart-wrap">
+    <div class="chart-canvas-wrap">
+      <canvas id="primeChart" width="200" height="200"></canvas>
+    </div>
+    <div class="chart-legend">
+      <div class="legend-row">
+        <div class="legend-dot" style="background:#d52b36"></div>
+        <div class="legend-label">Commission Cédante</div>
+        <div class="legend-value">{{formatNumber facultative.commissionCedante}} {{affaire.currency}}</div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-dot" style="background:#1a1a2e"></div>
+        <div class="legend-label">Prime Nette Réassureurs</div>
+        <div class="legend-value">
+          {{formatNumber (subtract facultative.primeCedee facultative.commissionCedante)}} {{affaire.currency}}
+        </div>
+      </div>
+      <div class="legend-row" style="margin-top:10px;border-top:1px solid #dee2e6;padding-top:8px">
+        <div class="legend-dot" style="background:#dee2e6"></div>
+        <div class="legend-label">Total Prime Cédée</div>
+        <div class="legend-value" style="color:#d52b36">{{formatNumber facultative.primeCedee}} {{affaire.currency}}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SIGNATURES ═══════════════════════════════════════════════════ -->
+<div class="signatures">
+  <div class="sig-block">
+    <div class="sig-label">Pour la Cédante<br>{{affaire.cedante.raisonSociale}}</div>
+    <div class="sig-line">Signature et cachet</div>
+  </div>
+  <div class="sig-block">
+    <div class="sig-label">Pour ARS Réassurance<br>{{company.raisonSociale}}</div>
+    <div class="sig-line">Signature et cachet</div>
+  </div>
+  <div class="sig-block">
+    <div class="sig-label">Date d'émission</div>
+    <div class="sig-line">{{generatedAt}}</div>
+  </div>
+</div>
+
+<!-- ══ FOOTER ═══════════════════════════════════════════════════════ -->
+<div class="doc-footer">
+  {{company.raisonSociale}} — {{company.adresse}} — MF: {{company.matriculeFiscal}} — Document confidentiel
+</div>
+
+<script>
+(function() {
+  var primeCedee    = {{default facultative.primeCedee 0}};
+  var commCed       = {{default facultative.commissionCedante 0}};
+  var primeNette    = primeCedee - commCed;
+
+  var ctx = document.getElementById('primeChart');
+  if (ctx) {
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Commission Cédante', 'Prime Nette Réassureurs'],
+        datasets: [{
+          data: [commCed, primeNette],
+          backgroundColor: ['#d52b36', '#1a1a2e'],
+          borderColor: ['#fff', '#fff'],
+          borderWidth: 2,
+          hoverOffset: 4
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        cutout: '60%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                var val = context.parsed;
+                var pct = primeCedee > 0 ? ((val / primeCedee) * 100).toFixed(1) : 0;
+                return context.label + ': ' + val.toFixed(3) + ' (' + pct + '%)';
+              }
+            }
+          }
+        }
+      }
+    });
+  }
+
+  window.__chartsReady = true;
+  window.dispatchEvent(new Event('chartsReady'));
+})();
+</script>
+</body>
+</html>

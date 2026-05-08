@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<title>Bordereau Cession Réassureur — {{affaire.numero}}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root { --red:#d52b36; --dark:#1a1a2e; --light:#f8f9fa; --border:#dee2e6; --muted:#6c757d; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#212529;background:#fff;line-height:1.4}
+  .page-header{background:var(--red);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #a51e28}
+  .logo-text{font-size:20px;font-weight:700;letter-spacing:1px}
+  .logo-sub{font-size:9px;opacity:.85}
+  .doc-title{font-size:13px;font-weight:700;letter-spacing:.5px;text-align:center}
+  .doc-ref{font-size:9px;opacity:.85;margin-top:3px;text-align:center}
+  .parties{display:flex;border-bottom:1px solid var(--border)}
+  .party-box{flex:1;padding:12px 16px;border-right:1px solid var(--border)}
+  .party-box:last-child{border-right:none}
+  .party-label{font-size:8px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+  .party-name{font-size:12px;font-weight:700}
+  .party-detail{font-size:9px;color:var(--muted);margin-top:2px}
+  .section-header{background:var(--light);border-left:4px solid var(--red);padding:6px 12px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark)}
+  .info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--border)}
+  .info-cell{padding:8px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .info-cell:nth-child(4n){border-right:none}
+  .info-cell .label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+  .info-cell .value{font-weight:600;font-size:10.5px}
+  table{width:100%;border-collapse:collapse;font-size:9.5px}
+  thead tr{background:var(--red);color:#fff}
+  thead th{padding:7px 8px;text-align:right;font-weight:600;font-size:8.5px;text-transform:uppercase;letter-spacing:.3px;border-right:1px solid rgba(255,255,255,.2)}
+  thead th:first-child{text-align:left;border-left:none}
+  tbody tr:nth-child(even){background:#fafafa}
+  tbody td{padding:6px 8px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:right}
+  tbody td:first-child{text-align:left;font-weight:500}
+  tfoot tr{background:var(--dark);color:#fff}
+  tfoot td{padding:8px;font-weight:700;text-align:right;font-size:10px;border-right:1px solid rgba(255,255,255,.15)}
+  tfoot td:first-child{text-align:left}
+  .totals-bar{display:flex;border-top:2px solid var(--red);border-bottom:2px solid var(--red)}
+  .total-cell{flex:1;padding:10px 14px;border-right:1px solid var(--border);text-align:center}
+  .total-cell:last-child{border-right:none}
+  .t-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .t-value{font-size:13px;font-weight:700;color:var(--red);margin-top:3px}
+  .t-currency{font-size:8px;color:var(--muted)}
+  .amount-words{background:#fff8f8;border:1px solid #fcc;border-left:4px solid var(--red);padding:10px 14px;margin:10px 0}
+  .aw-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+  .aw-value{font-size:11px;font-weight:700;color:var(--dark);text-transform:uppercase}
+  .chart-section{padding:12px 16px;border-top:1px solid var(--border)}
+  .chart-title{font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .signatures{display:flex;border-top:1px solid var(--border);margin-top:16px}
+  .sig-block{flex:1;padding:14px 16px;border-right:1px solid var(--border);text-align:center}
+  .sig-block:last-child{border-right:none}
+  .sig-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:40px}
+  .sig-line{border-top:1px solid var(--border);padding-top:5px;font-size:8px;color:var(--muted)}
+  .doc-footer{background:var(--dark);color:rgba(255,255,255,.7);text-align:center;font-size:8px;padding:8px;margin-top:10px}
+  .highlight-row td{background:#fff5f5!important;font-weight:700}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <div class="logo-text">ARS</div>
+    <div class="logo-sub">Réassurance Tunisie</div>
+  </div>
+  <div>
+    <div class="doc-title">BORDEREAU DE CESSION — RÉASSUREUR</div>
+    <div class="doc-ref">Réf. {{affaire.numero}} | Réassureur: {{reassureurCode}} | Émis le {{generatedAt}}</div>
+  </div>
+  <div style="text-align:right;font-size:9px">
+    <div style="opacity:.9">{{company.raisonSociale}}</div>
+    <div style="opacity:.7">MF: {{company.matriculeFiscal}}</div>
+  </div>
+</div>
+
+<div class="parties">
+  <div class="party-box">
+    <div class="party-label">Courtier</div>
+    <div class="party-name">{{company.raisonSociale}}</div>
+    <div class="party-detail">{{company.adresse}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Cédante</div>
+    <div class="party-name">{{affaire.cedante.raisonSociale}}</div>
+    <div class="party-detail">Code: {{affaire.cedante.code}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Réassureur</div>
+    <div class="party-name">{{reassureur.raisonSociale}}</div>
+    <div class="party-detail">Code: {{reassureurCode}}</div>
+    <div class="party-detail">Compte: {{reassureur.compteComptable}}</div>
+  </div>
+</div>
+
+<div class="section-header">Détail de la Participation</div>
+<div class="info-grid">
+  <div class="info-cell">
+    <div class="label">N° Affaire ARS</div>
+    <div class="value">{{affaire.numero}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Quote-Part</div>
+    <div class="value" style="color:var(--red);font-size:14px">{{formatPercent participation.partPct}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Date d'effet</div>
+    <div class="value">{{formatDate facultative.dateEffet}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Date d'échéance</div>
+    <div class="value">{{formatDate facultative.dateEcheance}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Branche</div>
+    <div class="value">{{default facultative.branche '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Produit</div>
+    <div class="value">{{default facultative.produit '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Garantie</div>
+    <div class="value">{{default facultative.garantie '—'}}</div>
+  </div>
+  <div class="info-cell">
+    <div class="label">Devise</div>
+    <div class="value">{{affaire.currency}}</div>
+  </div>
+</div>
+
+<div class="section-header" style="margin-top:8px">Ventilation Financière</div>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Désignation</th>
+      <th>Prime 100%</th>
+      <th>Taux Cession</th>
+      <th>Prime Brute (Part {{formatPercent participation.partPct}})</th>
+      <th>Commission Cédante</th>
+      <th>Commission ARS</th>
+      <th>Prime Nette Réassureur</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="highlight-row">
+      <td>{{affaire.numero}} — {{default facultative.branche 'Toutes garanties'}}</td>
+      <td>{{formatNumber facultative.prime100Pct}}</td>
+      <td>{{formatPercent facultative.tauxCession}}</td>
+      <td>{{formatNumber participation.primeBrute}}</td>
+      <td>{{formatNumber participation.commissionCedante}}</td>
+      <td>{{formatNumber participation.commissionArs}}</td>
+      <td style="color:#155724;font-weight:700">{{formatNumber participation.primeNetteReassureur}}</td>
+    </tr>
+  </tbody>
+  <tfoot>
+    <tr>
+      <td>TOTAL À VERSER</td>
+      <td></td>
+      <td></td>
+      <td>{{formatNumber participation.primeBrute}}</td>
+      <td>{{formatNumber participation.commissionCedante}}</td>
+      <td>{{formatNumber participation.commissionArs}}</td>
+      <td>{{formatNumber participation.primeNetteReassureur}}</td>
+    </tr>
+  </tfoot>
+</table>
+
+<div class="totals-bar">
+  <div class="total-cell">
+    <div class="t-label">Prime Brute (Part {{formatPercent participation.partPct}})</div>
+    <div class="t-value">{{formatNumber participation.primeBrute}}</div>
+    <div class="t-currency">{{affaire.currency}}</div>
+  </div>
+  <div class="total-cell">
+    <div class="t-label">Déductions (Comm. Ced. + ARS)</div>
+    <div class="t-value">{{formatNumber (add participation.commissionCedante participation.commissionArs)}}</div>
+    <div class="t-currency">{{affaire.currency}}</div>
+  </div>
+  <div class="total-cell">
+    <div class="t-label">Prime Nette due au Réassureur</div>
+    <div class="t-value" style="color:var(--red)">{{formatNumber participation.primeNetteReassureur}}</div>
+    <div class="t-currency">{{affaire.currency}}</div>
+  </div>
+</div>
+
+<div style="padding:0 0">
+  <div class="amount-words">
+    <div class="aw-label">Montant net en lettres</div>
+    <div class="aw-value">{{montantEnLettres}}</div>
+  </div>
+</div>
+
+<div class="chart-section">
+  <div class="chart-title">Décomposition de la Prime Réassureur</div>
+  <canvas id="barChart" height="80"></canvas>
+</div>
+
+<div class="signatures">
+  <div class="sig-block">
+    <div class="sig-label">Pour ARS Réassurance</div>
+    <div class="sig-line">Signature et cachet</div>
+  </div>
+  <div class="sig-block">
+    <div class="sig-label">Pour {{reassureur.raisonSociale}}</div>
+    <div class="sig-line">Signature et cachet</div>
+  </div>
+  <div class="sig-block">
+    <div class="sig-label">Date</div>
+    <div class="sig-line">{{generatedAt}}</div>
+  </div>
+</div>
+
+<div class="doc-footer">
+  {{company.raisonSociale}} — {{company.adresse}} — Document confidentiel — Ne pas diffuser
+</div>
+
+<script>
+(function() {
+  var primeBrute   = {{default participation.primeBrute 0}};
+  var commCed      = {{default participation.commissionCedante 0}};
+  var commArs      = {{default participation.commissionArs 0}};
+  var primeNette   = {{default participation.primeNetteReassureur 0}};
+
+  var ctx = document.getElementById('barChart');
+  if (ctx) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: ['Prime Brute', 'Commission Cédante', 'Commission ARS', 'Prime Nette'],
+        datasets: [{
+          label: '{{affaire.currency}}',
+          data: [primeBrute, commCed, commArs, primeNette],
+          backgroundColor: ['#1a1a2e', '#d52b36', '#e87a80', '#2d6a4f'],
+          borderColor:     ['#1a1a2e', '#d52b36', '#e87a80', '#2d6a4f'],
+          borderWidth: 1,
+          borderRadius: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(c) { return c.parsed.y.toFixed(3) + ' {{affaire.currency}}'; }
+            }
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: { callback: function(v) { return v.toFixed(0); }, font: { size: 9 } },
+            grid: { color: '#f0f0f0' }
+          },
+          x: { ticks: { font: { size: 9 } }, grid: { display: false } }
+        }
+      }
+    });
+  }
+  window.__chartsReady = true;
+  window.dispatchEvent(new Event('chartsReady'));
+})();
+</script>
+</body>
+</html>

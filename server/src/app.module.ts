@@ -12,6 +12,8 @@ import { SystemModule } from './modules/system/system.module';
 import { ExchangeRatesModule } from './modules/exchange-rates/exchange-rates.module';
 import { MasterDataModule } from './modules/master-data/master-data.module';
 import { AffairesModule } from './modules/affaires/affaires.module';
+import { FacultativeModule } from './modules/affaires/facultative/facultative.module';
+import { TraitesModule } from './modules/affaires/traites/traites.module';
 import { SinistresModule } from './modules/sinistres/sinistres.module';
 import { FinancesModule } from './modules/finances/finances.module';
 import { ComptabiliteModule } from './modules/comptabilite/comptabilite.module';
@@ -37,6 +39,8 @@ import { WorkflowModule } from './modules/workflow/workflow.module';
     ExchangeRatesModule,
     MasterDataModule,
     AffairesModule,
+    FacultativeModule,
+    TraitesModule,
     SinistresModule,
     FinancesModule,
     ComptabiliteModule,
