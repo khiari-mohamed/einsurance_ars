@@ -68,11 +68,13 @@ export class ExchangeRatesService {
         data: { code: dto.currencyCode, label: dto.currencyCode },
       });
     }
+    const dateEffet = new Date(dto.dateEffet);
+    dateEffet.setUTCHours(0, 0, 0, 0);  // Normalize to UTC midnight
     return this.prisma.exchangeRate.upsert({
       where: {
         currencyCode_dateEffet: {
           currencyCode: dto.currencyCode,
-          dateEffet: new Date(dto.dateEffet),
+          dateEffet,
         },
       },
       update: {
@@ -85,7 +87,7 @@ export class ExchangeRatesService {
         currencyCode: dto.currencyCode,
         tauxRealisation: dto.tauxRealisation,
         tauxReglement: dto.tauxReglement,
-        dateEffet: new Date(dto.dateEffet),
+        dateEffet,
         isMonthly: dto.isMonthly ?? false,
       },
       include: { currency: true },

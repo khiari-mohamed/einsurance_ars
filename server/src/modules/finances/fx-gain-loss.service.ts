@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { FxGainLossType, JournalEntryType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SequenceService } from '@/shared/services/sequence.service';
 
 export interface FxComputeInput {
   montantDevise: number;
@@ -16,7 +17,10 @@ export interface FxComputeInput {
 export class FxGainLossService {
   private readonly logger = new Logger(FxGainLossService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+  private prisma: PrismaService,
+  private sequence: SequenceService,   // ADD THIS
+) {}
 
   /**
    * Core FX logic from the CDC:
@@ -93,7 +97,7 @@ export class FxGainLossService {
 
     // Create journal entry + FxGainLoss record in one transaction
     await this.prisma.$transaction(async (tx) => {
-      const entryNumero = `JNL-FX-${Date.now()}`;
+      const entryNumero = await this.sequence.next('JOURNAL_ENTRY');
 
       const journalEntry = await tx.journalEntry.create({
         data: {

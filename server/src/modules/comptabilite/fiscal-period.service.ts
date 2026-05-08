@@ -15,15 +15,16 @@ export class FiscalPeriodService {
     const annee = now.getFullYear();
     const mois = now.getMonth() + 1;
 
-    let period = await this.prisma.fiscalPeriod.findUnique({ where: { annee_mois: { annee, mois } } });
+    // Use findFirst to avoid null uniqueness issue
+    let period = await this.prisma.fiscalPeriod.findFirst({
+      where: { annee, mois },
+    });
     if (!period) {
+      // Check there's no duplicate before creating
+      const existing = await this.prisma.fiscalPeriod.findFirst({ where: { annee, mois } });
+      if (existing) return existing;
       period = await this.prisma.fiscalPeriod.create({
-        data: {
-          annee,
-          mois,
-          dateDebut: new Date(annee, mois - 1, 1),
-          dateFin: new Date(annee, mois, 0, 23, 59, 59),
-        },
+        data: { annee, mois, dateDebut: new Date(annee, mois - 1, 1), dateFin: new Date(annee, mois, 0, 23, 59, 59) },
       });
     }
     return period;

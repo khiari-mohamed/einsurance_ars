@@ -1,4 +1,6 @@
 import { Global, Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SequenceService } from './services/sequence.service';
 import { AmountToWordsService } from './services/amount-to-words.service';
 import { EmailService } from './services/email.service';
@@ -9,6 +11,16 @@ import { PdfService } from './services/pdf.service';
 
 @Global()
 @Module({
+  imports: [
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get('app.jwtSecret'),
+        signOptions: { expiresIn: config.get('app.jwtExpiresIn') },
+      }),
+    }),
+  ],
   providers: [
     SequenceService,
     AmountToWordsService,

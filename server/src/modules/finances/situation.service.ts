@@ -97,11 +97,20 @@ export class SituationService {
     let totalDebit = 0;
     let totalCredit = 0;
 
-    const lines = affaires.map((a) => {
+    const lines = await Promise.all(affaires.map(async (a) => {
       // Debit side: prime cédée nette de commission cedante
       const debit = a.facultativeData
         ? Number(a.facultativeData.primeCedee ?? 0) - Number(a.facultativeData.commissionCedante ?? 0)
-        : Number(a.traiteData?.pmd ?? 0); // treaty: use PMD tranche or prime previsionnelle
+        : await (async () => {
+            if (!a.traiteData) return 0;
+            const dueInstalments = await this.prisma.pmdInstalment.findMany({
+              where: {
+                traiteId: a.traiteData.id,
+                dateEcheance: { gte: dateDebut, lte: dateFin },
+              },
+            });
+            return dueInstalments.reduce((s, inst) => s + Number(inst.montant), 0);
+          })();
 
       // Credit side: sum of sinistre reserves in period
       const credit = a.sinistres.reduce((s, sin) => s + Number(sin.partReassureurs ?? 0), 0);
@@ -117,7 +126,7 @@ export class SituationService {
         solde,
         description: a.numero,
       };
-    });
+    }));
 
     const soldeNet = Math.round((totalDebit - totalCredit) * 1000) / 1000;
     let soldeDirection: SituationSoldeDirection;

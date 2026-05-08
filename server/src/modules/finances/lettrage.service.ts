@@ -46,7 +46,7 @@ export class LettrageService {
     const totalMatched = matches.reduce((s, m) => s + m.montant, 0);
     if (totalMatched <= 0) throw new BadRequestException('Montant lettrée doit être > 0');
 
-    const reference = await this.sequence.next('SETTLEMENT');
+    const reference = await this.sequence.next('LETTRAGE');
     const residuel = Math.round((Number(enc.montant) - totalMatched) * 1000) / 1000;
 
     const lettrage = await this.prisma.$transaction(async (tx) => {

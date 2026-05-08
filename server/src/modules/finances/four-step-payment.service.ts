@@ -38,10 +38,28 @@ export class FourStepPaymentService {
       (sum, r) => sum + Number(r.commissionArs ?? 0), 0,
     );
 
+    const existingStep = await this.prisma.encaissement.findFirst({
+      where: { affaireId, stepNumber: { in: [1, 3] } },
+    });
+    if (existingStep) {
+      throw new BadRequestException(
+        `Le flux 4 étapes a déjà été exécuté pour l'affaire ${affaire.numero} (référence: ${existingStep.reference})`,
+      );
+    }
+
+    // Step 1 amount = what goes to ALL reinsurers combined
+    // (cedante pays this + separately pays ARS commission in step 3)
+    const step1Amount = Math.round(
+      (Number(fac.primeCedee ?? 0) - Number(fac.commissionCedante ?? 0) - totalArsCommission) * 1000,
+    ) / 1000;
+
+    if (step1Amount <= 0) {
+      throw new BadRequestException('Montant net à transférer aux réassureurs est nul ou négatif');
+    }
+
     const results: any[] = [];
 
-    // STEP 1 — Encaissement from cedante: prime nette cédante (primeCedee − commissionCedante)
-    const primeNetteCedante = Number(fac.primeCedee ?? 0) - Number(fac.commissionCedante ?? 0);
+    // STEP 1 — Encaissement montant net réassureurs (sans commission ARS)
     const step1Ref = await this.sequence.next('ENCAISSEMENT');
     const step1 = await this.prisma.encaissement.create({
       data: {
@@ -49,10 +67,10 @@ export class FourStepPaymentService {
         affaireId,
         partyType: 'CEDANTE',
         cedanteId: affaire.cedanteId,
-        montant: Math.round(primeNetteCedante * 1000) / 1000,
+        montant: step1Amount,
         currency: affaire.currency,
         stepNumber: 1,
-        description: `Étape 1/4 — Prime cédée nette commission cédante — Affaire ${affaire.numero}`,
+        description: `Étape 1/4 — Prime nette cédée (hors commission ARS) — Affaire ${affaire.numero}`,
       },
     });
     results.push({ step: 1, type: 'ENCAISSEMENT', id: step1.id, montant: step1.montant });

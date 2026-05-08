@@ -56,6 +56,11 @@ export class AccountingEngineService {
       this.prisma.planComptable.findFirst({ where: { compte: { startsWith: '532' } } }),
     ]);
 
+    // Validate required accounts exist before creating any entry
+    if (!cedanteAccount) {
+      throw new Error('Compte 411xxxxx (cédantes) manquant dans le plan comptable — veuillez initialiser le plan comptable');
+    }
+
     const totalArsComm = affaire.reassureurs.reduce((s, r) => s + Number(r.commissionArs ?? 0), 0);
 
     const lines: any[] = [];

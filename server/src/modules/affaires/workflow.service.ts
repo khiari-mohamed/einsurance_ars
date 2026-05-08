@@ -1,4 +1,5 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { AffaireStatut, AffaireType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../../shared/services/notification.service';
@@ -11,7 +12,13 @@ const TRANSITIONS: Record<AffaireStatut, AffaireStatut[]> = {
 
 @Injectable()
 export class AffaireWorkflowService {
-  constructor(private prisma: PrismaService, private notification: NotificationService) {}
+  private readonly logger = new Logger(AffaireWorkflowService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    private notification: NotificationService,
+    private config: ConfigService,
+  ) {}
 
   async transition(affaireId: string, targetStatus: AffaireStatut, userId: string): Promise<void> {
     const affaire = await this.prisma.affaire.findUniqueOrThrow({
@@ -85,10 +92,22 @@ export class AffaireWorkflowService {
       if (!affaire.traiteData) throw new BadRequestException('Données du traité manquantes');
     }
 
-    // Check document checklist completeness (warn only — don't block placement)
+    // Check document checklist completeness
     const checklist = await this.prisma.documentChecklist.findUnique({ where: { affaireId: affaire.id } });
     if (checklist && checklist.completionPct < 100) {
-      // In production, this could be a configurable threshold
+      const enforceChecklist = this.config.get<boolean>('app.enforceChecklistBeforePlacement', false);
+      const incompletePct = 100 - checklist.completionPct;
+
+      if (enforceChecklist) {
+        throw new BadRequestException(
+          `Dossier physique incomplet (${incompletePct.toFixed(0)}% manquant). Le placement nécessite un dossier complet selon PR_24.`,
+        );
+      } else {
+        this.logger.warn(
+          `Affaire ${affaire.numero} placée avec dossier incomplet (${incompletePct.toFixed(0)}% manquant). ` +
+          `Activer ENFORCE_CHECKLIST_BEFORE_PLACEMENT=true pour bloquer.`,
+        );
+      }
     }
   }
 }

@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
+import { configValidationSchema } from './config/config.validation';
 import { PrismaModule } from './prisma/prisma.module';
 import { SharedModule } from './shared/shared.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -28,6 +29,8 @@ import { WorkflowModule } from './modules/workflow/workflow.module';
       isGlobal: true,
       load: [appConfig, databaseConfig],
       envFilePath: ['.env.local', '.env'],
+      validationSchema: configValidationSchema,
+      validationOptions: { abortEarly: false },
     }),
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({ wildcard: true }),

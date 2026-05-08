@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { BordereauStatut, BordereauType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../shared/services/sequence.service';
@@ -10,6 +10,8 @@ import { GenerateBordereauDto } from './dto/generate-bordereau.dto';
 
 @Injectable()
 export class BordereauxService {
+  private readonly logger = new Logger(BordereauxService.name);
+
   constructor(
     private prisma: PrismaService,
     private sequence: SequenceService,
@@ -120,7 +122,15 @@ export class BordereauxService {
       results.push(b);
 
       // Auto-generate accounting entry
-      await this.accounting.generateForFacultativeAffaire(affaire.id).catch(() => null);
+      try {
+        await this.accounting.generateForFacultativeAffaire(affaire.id);
+      } catch (err: any) {
+        this.logger.error(
+          `Accounting entry generation failed for affaire ${affaire.id}: ${err.message}`,
+        );
+        // Do NOT rethrow — bordereau is valid even if accounting draft fails
+        // but log it prominently so it can be regenerated manually
+      }
     }
 
     if (dto.type === BordereauType.CESSION_REASSUREUR) {
@@ -140,6 +150,34 @@ export class BordereauxService {
         });
         results.push(b);
       }
+    }
+
+    if (dto.type === BordereauType.SINISTRE_FACULTATIVE) {
+      if (!dto.affaireId) throw new BadRequestException('affaireId requis pour bordereau sinistre');
+      const sinistres = await this.prisma.sinistre.findMany({
+        where: {
+          affaireId: dto.affaireId,
+          statut: { in: ['VALIDE', 'DECLARE_REASSUREURS', 'EN_RECUPERATION', 'RECUPERE', 'CLOS'] },
+          ...(dto.datePeriodeDebut && { dateSurvenance: { gte: new Date(dto.datePeriodeDebut) } }),
+          ...(dto.datePeriodeFin && { dateSurvenance: { lte: new Date(dto.datePeriodeFin) } }),
+        },
+      });
+
+      const b = await this.create({
+        type: BordereauType.SINISTRE_FACULTATIVE,
+        affaireId: dto.affaireId,
+        datePeriodeDebut: dto.datePeriodeDebut,
+        datePeriodeFin: dto.datePeriodeFin,
+        currency: affaire.currency,
+        lines: sinistres.map((s, i) => ({
+          libelle: `Sinistre ${s.numero} — ${new Date(s.dateSurvenance).toLocaleDateString('fr-TN')}`,
+          sinistresPayes: Number(s.partReassureurs ?? 0),
+          recConstitues: Number(s.reserves ?? 0),
+          sapConstitues: Number(s.sap ?? 0),
+          ordre: i + 1,
+        })),
+      });
+      results.push(b);
     }
 
     return results;

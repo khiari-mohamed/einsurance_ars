@@ -52,15 +52,10 @@ export class SinistreNotificationService {
     }));
 
     await this.prisma.$transaction([
-      ...participations.map((p) =>
-        this.prisma.sinistreParticipation.upsert({
-          where: {
-            id: (null as any), // create-only
-          },
-          create: p,
-          update: { isNotified: false },
-        }),
-      ),
+     this.prisma.sinistreParticipation.createMany({
+  data: participations,
+  skipDuplicates: true,
+}),
       this.prisma.sinistre.update({
         where: { id: sinistreId },
         data: { statut: SinistreStatut.DECLARE_REASSUREURS },

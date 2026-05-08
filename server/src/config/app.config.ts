@@ -21,4 +21,5 @@ export default registerAs('app', () => ({
   smtpPass: process.env.SMTP_PASS ?? '',
   smtpFrom: process.env.SMTP_FROM ?? 'noreply@ars-tunisie.com',
   bcryptRounds: parseInt(process.env.BCRYPT_ROUNDS ?? '12', 10),
+  enforceChecklistBeforePlacement: process.env.ENFORCE_CHECKLIST_BEFORE_PLACEMENT === 'true',
 }));

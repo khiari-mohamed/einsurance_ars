@@ -424,7 +424,16 @@ export class TraitesService {
   ) {
     const traite = await this.prisma.traiteAffaire.findUnique({
       where: { affaireId },
-      select: { id: true },
+      include: {
+        affaire: {
+          select: {
+            id: true,
+            numero: true,
+            cedanteId: true,
+            currency: true,
+          },
+        },
+      },
     });
     if (!traite) throw new NotFoundException('Traité introuvable');
 
@@ -436,10 +445,25 @@ export class TraitesService {
     if (instalment.isPaid)
       throw new BadRequestException('Tranche déjà marquée comme payée');
 
-    return this.prisma.pmdInstalment.update({
+    const updated = await this.prisma.pmdInstalment.update({
       where: { id: instalmentId },
       data: { isPaid: true, paidAt: new Date() },
     });
+
+    // Trigger accounting entry for PMD payment
+    await this.prisma.encaissement.create({
+      data: {
+        reference: `PMD-${traite.affaire.numero}-T${instalment.numeroTranche}`,
+        affaireId: traite.affaire.id,
+        partyType: 'CEDANTE',
+        cedanteId: traite.affaire.cedanteId,
+        montant: Number(instalment.montant),
+        currency: traite.affaire.currency,
+        description: `PMD Tranche ${instalment.numeroTranche} — ${traite.affaire.numero}`,
+      },
+    }).catch((err) => this.logger.error(`PMD payment encaissement failed: ${err.message}`));
+
+    return updated;
   }
 
   // ── Liquidation calculation ──────────────────────────────────────

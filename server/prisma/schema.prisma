@@ -778,6 +778,7 @@ model SinistreParticipation {
   montantPart     Decimal? @db.Decimal(20, 3)
   isNotified      Boolean  @default(false)   // declared to this reinsurer
   notifiedAt      DateTime?
+  @@unique([sinistreId, reassureurCode])
 }
 
 // Cash call workflow — triggered when appelAuComptant = true
@@ -1144,6 +1145,8 @@ model FiscalPeriod {
   createdAt      DateTime       @default(now())
 
   @@unique([annee, mois])
+  // For annual periods (mois = null), enforce uniqueness via application layer
+  @@index([annee])
 }
 
 // Journal entry — generated as BROUILLON, validated by accountant before export

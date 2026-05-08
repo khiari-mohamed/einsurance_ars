@@ -14,7 +14,8 @@ export type SequenceEntity =
   | 'ENCAISSEMENT'
   | 'DECAISSEMENT'
   | 'JOURNAL_ENTRY'
-  | 'SITUATION';
+  | 'SITUATION'
+  | 'LETTRAGE';
 
 const PREFIXES: Record<SequenceEntity, string> = {
   ASSURE: 'ASS',
@@ -30,6 +31,7 @@ const PREFIXES: Record<SequenceEntity, string> = {
   DECAISSEMENT: 'DEC',
   JOURNAL_ENTRY: 'JNL',
   SITUATION: 'SIT',
+  LETTRAGE: 'LET',
 };
 
 @Injectable()

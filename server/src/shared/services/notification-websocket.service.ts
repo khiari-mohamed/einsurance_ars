@@ -7,6 +7,8 @@ import {
 import { Server, Socket } from 'socket.io';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { NotificationPayload } from './notification.service';
 
 @WebSocketGateway({ cors: { origin: '*' }, namespace: '/notifications' })
@@ -17,10 +19,33 @@ export class NotificationWebsocketService
   private readonly logger = new Logger(NotificationWebsocketService.name);
   private userSockets = new Map<string, string>(); // userId → socketId
 
+  constructor(
+    private jwtService: JwtService,
+    private config: ConfigService,
+  ) {}
+
   handleConnection(client: Socket) {
-    const userId = client.handshake.query.userId as string;
-    if (userId) this.userSockets.set(userId, client.id);
-    this.logger.log(`Client connected: ${client.id} (user: ${userId})`);
+    try {
+      const token =
+        client.handshake.auth?.token ||
+        (client.handshake.headers.authorization?.split(' ')[1]);
+
+      if (!token) {
+        client.disconnect(true);
+        return;
+      }
+
+      const payload = this.jwtService.verify(token, {
+        secret: this.config.get('app.jwtSecret'),
+      });
+
+      const userId = payload.sub as string;
+      if (userId) this.userSockets.set(userId, client.id);
+      this.logger.log(`Client connected: ${client.id} (user: ${userId})`);
+    } catch {
+      client.disconnect(true);
+      this.logger.warn(`WebSocket connection rejected — invalid token`);
+    }
   }
 
   handleDisconnect(client: Socket) {
