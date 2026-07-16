@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, X, Eye } from 'lucide-react';
-import api from '../../lib/api';
+import { Plus, Search, Edit2, Trash2, X, Eye, Shield, Globe } from 'lucide-react';
+import { cedantesApi } from '../../api/master-data.api';
 import { Cedante } from '../../types/cedante.types';
 
 export default function CedantesList() {
@@ -15,8 +15,8 @@ export default function CedantesList() {
   const { data: cedantes = [], isLoading, error } = useQuery({
     queryKey: ['cedantes'],
     queryFn: async () => {
-      const { data } = await api.get('/cedantes');
-      return data;
+      const { data } = await cedantesApi.getAll();
+      return data.data;
     },
   });
 
@@ -25,7 +25,7 @@ export default function CedantesList() {
   }
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/cedantes/${id}`),
+    mutationFn: (id: string) => cedantesApi.delete(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cedantes'] });
     },
@@ -34,7 +34,9 @@ export default function CedantesList() {
   const filteredCedantes = cedantes.filter((cedante: Cedante) =>
     cedante.raisonSociale?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cedante.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cedante.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    cedante.compteComptable?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    cedante.identifiantUnique?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    cedante.pays?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const handleEdit = (cedante: Cedante) => {
@@ -43,7 +45,7 @@ export default function CedantesList() {
   };
 
   const handleDelete = (id: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cette cédante ?')) {
+    if (window.confirm('Êtes-vous sûr de vouloir supprimer cette compagnie d\'assurances ?')) {
       deleteMutation.mutate(id);
     }
   };
@@ -56,13 +58,16 @@ export default function CedantesList() {
   return (
     <div className="p-4 lg:p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-        <h1 className="text-[24px] font-semibold text-gray-900">Cédantes</h1>
+        <div>
+          <h1 className="text-[24px] font-semibold text-gray-900">Compagnies d'assurances</h1>
+          <p className="text-[13px] text-gray-500 mt-1">Anciennement: Cédantes</p>
+        </div>
         <button
           onClick={() => setIsModalOpen(true)}
           className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-[13px] font-medium"
         >
           <Plus size={18} />
-          Nouveau
+          Nouvelle compagnie
         </button>
       </div>
 
@@ -72,7 +77,7 @@ export default function CedantesList() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
-              placeholder="Rechercher par raison sociale, code ou email..."
+              placeholder="Rechercher par raison sociale, code, compte comptable, identifiant unique ou pays..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -83,7 +88,7 @@ export default function CedantesList() {
         {isLoading ? (
           <div className="p-8 text-center text-gray-500">Chargement...</div>
         ) : filteredCedantes.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">Aucune cédante trouvée</div>
+          <div className="p-8 text-center text-gray-500">Aucune compagnie trouvée</div>
         ) : (
           <>
             <div className="hidden md:block overflow-x-auto">
@@ -92,9 +97,10 @@ export default function CedantesList() {
                   <tr>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Code</th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Raison Sociale</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Email</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Téléphone</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Ville</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Compte</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Identifiant Unique</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Résident</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Pays</th>
                     <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
@@ -103,9 +109,22 @@ export default function CedantesList() {
                     <tr key={cedante.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-[13px] font-medium text-gray-900">{cedante.code}</td>
                       <td className="px-4 py-3 text-[13px] text-gray-900">{cedante.raisonSociale}</td>
-                      <td className="px-4 py-3 text-[13px] text-gray-600">{cedante.email || '-'}</td>
-                      <td className="px-4 py-3 text-[13px] text-gray-600">{cedante.telephone || '-'}</td>
-                      <td className="px-4 py-3 text-[13px] text-gray-600">{cedante.ville || '-'}</td>
+                      <td className="px-4 py-3 text-[13px] text-gray-600 font-mono">{cedante.compteComptable || '-'}</td>
+                      <td className="px-4 py-3 text-[13px] text-gray-600 font-mono">{cedante.identifiantUnique || '-'}</td>
+                      <td className="px-4 py-3 text-[13px] text-gray-600">
+                        {cedante.resident ? (
+                          <span className="flex items-center gap-1 text-green-700">
+                            <Shield size={14} />
+                            Oui
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-blue-600">
+                            <Globe size={14} />
+                            Non
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-[13px] text-gray-600">{cedante.pays || '-'}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
@@ -171,24 +190,28 @@ export default function CedantesList() {
                       <p className="text-[11px] text-gray-500 uppercase font-medium">Raison Sociale</p>
                       <p className="text-[13px] text-gray-900">{cedante.raisonSociale}</p>
                     </div>
-                    {cedante.email && (
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase font-medium">Email</p>
-                        <p className="text-[13px] text-gray-600">{cedante.email}</p>
+                        <p className="text-[11px] text-gray-500 uppercase font-medium">Compte</p>
+                        <p className="text-[13px] text-gray-600 font-mono">{cedante.compteComptable || '-'}</p>
                       </div>
-                    )}
-                    {cedante.telephone && (
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase font-medium">Téléphone</p>
-                        <p className="text-[13px] text-gray-600">{cedante.telephone}</p>
+                        <p className="text-[11px] text-gray-500 uppercase font-medium">Identifiant Unique</p>
+                        <p className="text-[13px] text-gray-600 font-mono">{cedante.identifiantUnique || '-'}</p>
                       </div>
-                    )}
-                    {cedante.ville && (
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase font-medium">Ville</p>
-                        <p className="text-[13px] text-gray-600">{cedante.ville}</p>
+                        <p className="text-[11px] text-gray-500 uppercase font-medium">Résident</p>
+                        <p className="text-[13px] text-gray-600">
+                          {cedante.resident ? 'Oui (Tunisien)' : 'Non (Étranger)'}
+                        </p>
                       </div>
-                    )}
+                      <div>
+                        <p className="text-[11px] text-gray-500 uppercase font-medium">Pays</p>
+                        <p className="text-[13px] text-gray-600">{cedante.pays || '-'}</p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -216,51 +239,90 @@ function CedanteModal({ cedante, onClose }: CedanteModalProps) {
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState<Partial<Cedante>>(
     cedante || {
-      code: '',
       raisonSociale: '',
+      compteComptable: '',
+      identifiantUnique: '',
+      resident: true,
       formeJuridique: '',
       adresse: '',
-      ville: '',
-      codePostal: '',
       pays: 'Tunisie',
-      telephone: '',
-      email: '',
-      matriculeFiscale: '',
-      rib: '',
-      banque: '',
-      codeComptableAuxiliaire: '',
-      notes: '',
+      capital: undefined,
+      rne: '',
     }
   );
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const mutation = useMutation({
     mutationFn: (data: Partial<Cedante>) => {
       if (cedante) {
-        return api.put(`/cedantes/${cedante.id}`, data);
+        return cedantesApi.update(cedante.id, data);
       }
-      return api.post('/cedantes', data);
+      return cedantesApi.create(data as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cedantes'] });
       onClose();
     },
+    onError: (error: any) => {
+      if (error.response?.data?.message) {
+        setErrors({ submit: error.response.data.message });
+      }
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
+
+    // Validate identifiantUnique format
+    if (formData.resident && !formData.identifiantUnique) {
+      setErrors({ identifiantUnique: 'Identifiant unique obligatoire pour les entités tunisiennes' });
+      return;
+    }
+    if (formData.identifiantUnique && !/^[0-9]{7}[A-Z]$/.test(formData.identifiantUnique)) {
+      setErrors({ identifiantUnique: 'Format: 7 chiffres + 1 lettre majuscule (ex: 1234567A)' });
+      return;
+    }
+
+    // Validate compteComptable format
+    if (formData.compteComptable && !/^401200[0-9]{2}$/.test(formData.compteComptable)) {
+      setErrors({ compteComptable: 'Format: 401200xx (ex: 40120000)' });
+      return;
+    }
+
     mutation.mutate(formData);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData({ ...formData, [name]: checked });
+      // If resident is unchecked, identifiantUnique becomes optional
+      if (name === 'resident' && !checked) {
+        setFormData(prev => ({ ...prev, resident: false, identifiantUnique: prev.identifiantUnique }));
+      } else if (name === 'resident' && checked) {
+        setFormData(prev => ({ ...prev, resident: true }));
+      }
+    } else {
+      setFormData({ ...formData, [name]: value.toUpperCase ? value.toUpperCase() : value });
+    }
+    // Clear error for this field
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
   };
+
+  const isEdit = !!cedante;
+  const isAccountLocked = cedante?.isAccountLocked || false;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <h2 className="text-[18px] font-semibold text-gray-900">
-            {cedante ? 'Modifier la cédante' : 'Nouvelle cédante'}
+            {cedante ? 'Modifier la compagnie' : 'Nouvelle compagnie d\'assurances'}
           </h2>
           <button
             onClick={onClose}
@@ -271,161 +333,151 @@ function CedanteModal({ cedante, onClose }: CedanteModalProps) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Code *</label>
-              <input
-                type="text"
-                name="code"
-                value={formData.code}
-                onChange={handleChange}
-                required
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
+          {errors.submit && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
+              {errors.submit}
             </div>
+          )}
 
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Raison Sociale *</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Raison Sociale */}
+            <div className="md:col-span-2">
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                Raison Sociale <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 name="raisonSociale"
-                value={formData.raisonSociale}
+                value={formData.raisonSociale || ''}
                 onChange={handleChange}
                 required
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
+            {/* Compte Comptable */}
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                Compte Comptable <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                name="compteComptable"
+                value={formData.compteComptable || ''}
+                onChange={handleChange}
+                required
+                disabled={isEdit && isAccountLocked}
+                placeholder="401200xx"
+                className={`w-full px-3 py-2 border ${errors.compteComptable ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${isEdit && isAccountLocked ? 'bg-gray-100 text-gray-500' : ''}`}
+              />
+              {errors.compteComptable && (
+                <p className="mt-1 text-[11px] text-red-500">{errors.compteComptable}</p>
+              )}
+              {isEdit && isAccountLocked && (
+                <p className="mt-1 text-[11px] text-gray-400">Verrouillé après création</p>
+              )}
+            </div>
+
+            {/* Forme Juridique */}
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Forme Juridique</label>
               <input
                 type="text"
                 name="formeJuridique"
-                value={formData.formeJuridique}
+                value={formData.formeJuridique || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
+            {/* Résident Toggle */}
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Matricule Fiscale</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Résident Tunisien</label>
+              <div className="flex items-center gap-4 mt-1.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="resident"
+                    checked={formData.resident === true}
+                    onChange={handleChange}
+                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                  />
+                  <span className="text-[13px] text-gray-700">Oui</span>
+                </label>
+                {formData.resident && (
+                  <span className="text-[11px] text-gray-400">(Identifiant Unique requis)</span>
+                )}
+              </div>
+            </div>
+
+            {/* Identifiant Unique */}
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                Identifiant Unique
+                {formData.resident && <span className="text-red-500 ml-1">*</span>}
+              </label>
               <input
                 type="text"
-                name="matriculeFiscale"
-                value={formData.matriculeFiscale}
+                name="identifiantUnique"
+                value={formData.identifiantUnique || ''}
+                onChange={handleChange}
+                placeholder="1234567A"
+                className={`w-full px-3 py-2 border ${errors.identifiantUnique ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent uppercase`}
+              />
+              {errors.identifiantUnique && (
+                <p className="mt-1 text-[11px] text-red-500">{errors.identifiantUnique}</p>
+              )}
+              {formData.resident && !errors.identifiantUnique && (
+                <p className="mt-1 text-[11px] text-gray-400">7 chiffres + 1 lettre (ex: 1234567A)</p>
+              )}
+            </div>
+
+            {/* RNE (legacy) */}
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">RNE (legacy)</label>
+              <input
+                type="text"
+                name="rne"
+                value={formData.rne || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
+              <p className="mt-1 text-[11px] text-gray-400">Ancien format — remplacé par Identifiant Unique</p>
             </div>
 
+            {/* Adresse */}
             <div className="md:col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Adresse</label>
               <input
                 type="text"
                 name="adresse"
-                value={formData.adresse}
+                value={formData.adresse || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Ville</label>
-              <input
-                type="text"
-                name="ville"
-                value={formData.ville}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Code Postal</label>
-              <input
-                type="text"
-                name="codePostal"
-                value={formData.codePostal}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
+            {/* Pays */}
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays</label>
               <input
                 type="text"
                 name="pays"
-                value={formData.pays}
+                value={formData.pays || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
+            {/* Capital */}
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Téléphone</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Capital (TND)</label>
               <input
-                type="tel"
-                name="telephone"
-                value={formData.telephone}
+                type="number"
+                name="capital"
+                value={formData.capital || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Email</label>
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">RIB</label>
-              <input
-                type="text"
-                name="rib"
-                value={formData.rib}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Banque</label>
-              <input
-                type="text"
-                name="banque"
-                value={formData.banque}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Code Comptable Auxiliaire (401xxxxx)</label>
-              <input
-                type="text"
-                name="codeComptableAuxiliaire"
-                value={formData.codeComptableAuxiliaire}
-                onChange={handleChange}
-                placeholder="Auto-généré si vide"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Notes</label>
-              <textarea
-                name="notes"
-                value={formData.notes}
-                onChange={handleChange}
-                rows={3}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               />
             </div>
           </div>

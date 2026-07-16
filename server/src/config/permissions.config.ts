@@ -41,6 +41,7 @@ export enum Permission {
   SYSTEM_READ = 'system:read',
   SYSTEM_UPDATE = 'system:update',
   USERS_MANAGE = 'users:manage',
+  SUPER_ADMIN = 'system:super_admin',
 
   // Reporting
   REPORTING_READ = 'reporting:read',

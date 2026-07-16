@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Save, AlertCircle } from 'lucide-react';
-import api from '../../lib/api';
+import masterDataApi from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
 import { Affaire, AffaireCategory, CommissionCalculMode, CreateAffaireReinsurer } from '../../types/affaire.types';
 
@@ -50,24 +50,24 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
   const { data: assures = [] } = useQuery({
     queryKey: ['assures'],
     queryFn: async () => {
-      const { data } = await api.get('/assures');
-      return data;
+      const { data } = await masterDataApi.assures.getAll();
+      return data.data;
     },
   });
 
   const { data: cedantes = [] } = useQuery({
     queryKey: ['cedantes'],
     queryFn: async () => {
-      const { data } = await api.get('/cedantes');
-      return data;
+      const { data } = await masterDataApi.cedantes.getAll();
+      return data.data;
     },
   });
 
   const { data: reassureurs = [] } = useQuery({
     queryKey: ['reassureurs'],
     queryFn: async () => {
-      const { data } = await api.get('/reassureurs');
-      return data;
+      const { data } = await masterDataApi.reassureurs.getAll();
+      return data.data;
     },
   });
 

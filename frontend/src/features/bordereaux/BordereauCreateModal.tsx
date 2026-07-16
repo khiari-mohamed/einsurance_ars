@@ -5,7 +5,7 @@ import { bordereauxApi } from '../../api/bordereaux.api';
 import type { BordereauType, CreateBordereauDto } from '../../types/bordereau.types';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
-import api from '../../lib/api';
+import masterDataApi from '../../api/master-data.api';
 
 interface BordereauCreateModalProps {
   isOpen: boolean;
@@ -43,13 +43,19 @@ export default function BordereauCreateModal({ isOpen, onClose }: BordereauCreat
   // Fetch cedantes
   const { data: cedantes } = useQuery({
     queryKey: ['cedantes'],
-    queryFn: () => api.get('/cedantes'),
+    queryFn: async () => {
+      const { data } = await masterDataApi.cedantes.getAll();
+      return data.data;
+    },
   });
 
   // Fetch reassureurs
   const { data: reassureurs } = useQuery({
     queryKey: ['reassureurs'],
-    queryFn: () => api.get('/reassureurs'),
+    queryFn: async () => {
+      const { data } = await masterDataApi.reassureurs.getAll();
+      return data.data;
+    },
     enabled: formData.type === 'reassureur',
   });
 

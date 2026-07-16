@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import api from '../../lib/api';
+import { cedantesApi } from '../../api/master-data.api';
 import { CedanteContact } from '../../types/cedante.types';
 
 interface CedanteContactModalProps {
@@ -16,35 +16,53 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
     contact || {
       nom: '',
       prenom: '',
-      fonction: '',
+      poste: '',           // CHANGED: fonction → poste
       telephone: '',
-      mobile: '',
       email: '',
-      principal: false,
+      isDefault: false,    // CHANGED: principal → isDefault
     }
   );
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const mutation = useMutation({
     mutationFn: (data: Partial<CedanteContact>) => {
       if (contact) {
-        return api.put(`/cedantes/${cedanteId}/contacts/${contact.id}`, data);
+        return cedantesApi.updateContact(cedanteId, contact.id, data);
       }
-      return api.post(`/cedantes/${cedanteId}/contacts`, data);
+      return cedantesApi.addContact(cedanteId, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cedantes', cedanteId] });
       onClose();
     },
+    onError: (error: any) => {
+      if (error.response?.data?.message) {
+        setErrors({ submit: error.response.data.message });
+      }
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
+
+    // Validate email format if provided
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setErrors({ email: 'Format d\'email invalide' });
+      return;
+    }
+
     mutation.mutate(formData);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
+    // Clear error for this field
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
   };
 
   return (
@@ -63,13 +81,21 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+          {errors.submit && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
+              {errors.submit}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Nom *</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                Nom <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 name="nom"
-                value={formData.nom}
+                value={formData.nom || ''}
                 onChange={handleChange}
                 required
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -77,11 +103,13 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prénom *</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                Prénom <span className="text-red-500">*</span>
+              </label>
               <input
                 type="text"
                 name="prenom"
-                value={formData.prenom}
+                value={formData.prenom || ''}
                 onChange={handleChange}
                 required
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -89,11 +117,11 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Fonction</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Poste / Fonction</label>
               <input
                 type="text"
-                name="fonction"
-                value={formData.fonction}
+                name="poste"
+                value={formData.poste || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -104,18 +132,7 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
               <input
                 type="tel"
                 name="telephone"
-                value={formData.telephone}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mobile</label>
-              <input
-                type="tel"
-                name="mobile"
-                value={formData.mobile}
+                value={formData.telephone || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -126,23 +143,27 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
               <input
                 type="email"
                 name="email"
-                value={formData.email}
+                value={formData.email || ''}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`w-full px-3 py-2 border ${errors.email ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
               />
+              {errors.email && (
+                <p className="mt-1 text-[11px] text-red-500">{errors.email}</p>
+              )}
             </div>
 
             <div className="md:col-span-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  name="principal"
-                  checked={formData.principal}
+                  name="isDefault"
+                  checked={formData.isDefault || false}
                   onChange={handleChange}
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                 />
                 <span className="text-[13px] font-medium text-gray-700">Contact principal</span>
               </label>
+              <p className="mt-1 text-[11px] text-gray-400">Le contact principal sera affiché en premier</p>
             </div>
           </div>
 

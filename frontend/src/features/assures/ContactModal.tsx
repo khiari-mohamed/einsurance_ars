@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import api from '../../lib/api';
+import masterDataApi from '../../api/master-data.api';
 import { AssureContact } from '../../types/assure.types';
 
 interface ContactModalProps {
@@ -27,9 +27,9 @@ export default function ContactModal({ assureId, contact, onClose }: ContactModa
   const mutation = useMutation({
     mutationFn: (data: Partial<AssureContact>) => {
       if (contact) {
-        return api.put(`/assures/${assureId}/contacts/${contact.id}`, data);
+        return masterDataApi.assures.updateContact(assureId, contact.id, data);
       }
-      return api.post(`/assures/${assureId}/contacts`, data);
+      return masterDataApi.assures.addContact(assureId, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assures', assureId] });

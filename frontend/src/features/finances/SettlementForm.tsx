@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { financesApi } from '@/api/finances.api';
 import { SettlementType } from '@/types/finance.types';
 import { toast } from 'sonner';
-import api from '@/lib/api';
+import masterDataApi from '@/api/master-data.api';
 
 interface SettlementFormProps {
   settlementId?: string;
@@ -52,11 +52,11 @@ export default function SettlementForm({ settlementId, onSuccess, onCancel }: Se
   const loadReferenceData = async () => {
     try {
       const [cedantesRes, reassureursRes] = await Promise.all([
-        api.get('/cedantes'),
-        api.get('/reassureurs'),
+        masterDataApi.cedantes.getAll(),
+        masterDataApi.reassureurs.getAll(),
       ]);
-      setCedantes(cedantesRes.data);
-      setReassureurs(reassureursRes.data);
+      setCedantes(cedantesRes.data.data);
+      setReassureurs(reassureursRes.data.data);
     } catch (error) {
       console.error('Error loading reference data:', error);
     }

@@ -13,6 +13,7 @@ import { useAuthStore } from '../../lib/store';
 import type { UserRole } from '../../lib/store';
 import api from '../../lib/api';
 import { dashboardApi, type DashboardFilters } from '../../api/dashboard.api';
+import { cedantesApi, reassureursApi } from '../../api/master-data.api';
 
 // ── Palette used across all charts ────────────────────────────────────────────
 
@@ -1102,13 +1103,13 @@ function FilterBar({
 }) {
   const { data: cedantesResponse } = useQuery({
     queryKey: ['cedantes-list'],
-    queryFn:  () => api.get('/master-data/cedantes?limit=1000').then((r) => r.data),
+    queryFn:  () => cedantesApi.getAll({ limit: 1000 }).then((r) => r.data),
     staleTime: 5 * 60_000,
   });
 
   const { data: reassureursResponse } = useQuery({
     queryKey: ['reassureurs-list'],
-    queryFn:  () => api.get('/master-data/reassureurs?limit=1000').then((r) => r.data),
+    queryFn:  () => reassureursApi.getAll({ limit: 1000 }).then((r) => r.data),
     staleTime: 5 * 60_000,
   });
 

@@ -6,7 +6,10 @@ import { UpdateCedanteDto } from './dto/update-cedante.dto';
 
 @Injectable()
 export class CedantesService {
-  constructor(private prisma: PrismaService, private sequence: SequenceService) {}
+  constructor(
+    private prisma: PrismaService,
+    private sequence: SequenceService,
+  ) {}
 
   async findAll(search?: string, page = 1, limit = 20) {
     const skip = (page - 1) * limit;
@@ -16,12 +19,16 @@ export class CedantesService {
         { raisonSociale: { contains: search, mode: 'insensitive' } },
         { code: { contains: search, mode: 'insensitive' } },
         { compteComptable: { contains: search } },
+        { identifiantUnique: { contains: search, mode: 'insensitive' } },
       ];
     }
     const [data, total] = await Promise.all([
       this.prisma.cedante.findMany({
-        where, include: { contacts: true, bankAccounts: true },
-        skip, take: limit, orderBy: { createdAt: 'desc' },
+        where,
+        include: { contacts: true, bankAccounts: true },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
       }),
       this.prisma.cedante.count({ where }),
     ]);
@@ -34,23 +41,54 @@ export class CedantesService {
       include: {
         contacts: true,
         bankAccounts: true,
-        affaires: { where: { isActive: true }, take: 10, orderBy: { createdAt: 'desc' } },
+        affaires: {
+          where: { isActive: true },
+          take: 10,
+          orderBy: { createdAt: 'desc' },
+          include: { reassureurs: true },
+        },
         auxiliaryAccounts: true,
+        documents: {
+          where: { entityType: 'CEDANTE' },
+          include: { document: true },
+        },
       },
     });
-    if (!c) throw new NotFoundException('Cédante introuvable');
+    if (!c) throw new NotFoundException('Compagnie d\'assurances introuvable');
     return c;
   }
 
   async create(dto: CreateCedanteDto) {
-    const [ec, er] = await Promise.all([
+    // --- UNIQUENESS CHECKS ---
+    const [existingAccount, existingRne, existingIdentifiant] = await Promise.all([
       this.prisma.cedante.findUnique({ where: { compteComptable: dto.compteComptable } }),
       dto.rne ? this.prisma.cedante.findUnique({ where: { rne: dto.rne } }) : null,
+      dto.identifiantUnique
+        ? this.prisma.cedante.findUnique({ where: { identifiantUnique: dto.identifiantUnique } })
+        : null,
     ]);
-    if (ec) throw new ConflictException('Compte comptable déjà utilisé');
-    if (er) throw new ConflictException('RNE déjà utilisé');
 
-    const code = await this.sequence.next('CEDANTE');
+    if (existingAccount) {
+      throw new ConflictException(`Compte comptable ${dto.compteComptable} déjà utilisé`);
+    }
+    if (existingRne) {
+      throw new ConflictException(`RNE ${dto.rne} déjà utilisé`);
+    }
+    if (existingIdentifiant) {
+      throw new ConflictException(`Identifiant unique ${dto.identifiantUnique} déjà utilisé`);
+    }
+
+    // --- BUSINESS RULE: identifiantUnique required for Tunisian entities ---
+    if (dto.resident && !dto.identifiantUnique) {
+      throw new BadRequestException(
+        'Identifiant unique obligatoire pour les entités tunisiennes (resident = true)',
+      );
+    }
+
+    // --- GENERATE CODE ---
+    const code = await this.sequence.next('CEDANTE'); // returns CAS-0001, CAS-0002...
+
+    // --- CREATE ---
     return this.prisma.cedante.create({
       data: {
         code,
@@ -58,6 +96,8 @@ export class CedantesService {
         isAccountLocked: true, // locked immediately and permanently
         raisonSociale: dto.raisonSociale,
         rne: dto.rne,
+        identifiantUnique: dto.identifiantUnique,
+        resident: dto.resident,
         formeJuridique: dto.formeJuridique,
         adresse: dto.adresse,
         pays: dto.pays,
@@ -71,16 +111,55 @@ export class CedantesService {
   }
 
   async update(id: string, dto: UpdateCedanteDto) {
-    await this.findOne(id);
-    if (dto.contacts !== undefined)
+    // --- VERIFY EXISTS ---
+    const existing = await this.findOne(id);
+
+    // --- UNIQUENESS CHECKS FOR UPDATED FIELDS ---
+    if (dto.rne && dto.rne !== existing.rne) {
+      const conflict = await this.prisma.cedante.findUnique({
+        where: { rne: dto.rne },
+      });
+      if (conflict) throw new ConflictException(`RNE ${dto.rne} déjà utilisé par une autre entité`);
+    }
+
+    if (dto.identifiantUnique && dto.identifiantUnique !== existing.identifiantUnique) {
+      const conflict = await this.prisma.cedante.findUnique({
+        where: { identifiantUnique: dto.identifiantUnique },
+      });
+      if (conflict) {
+        throw new ConflictException(
+          `Identifiant unique ${dto.identifiantUnique} déjà utilisé par une autre entité`,
+        );
+      }
+    }
+
+    // --- BUSINESS RULE: identifiantUnique required if resident becomes true ---
+    const resident = dto.resident ?? existing.resident;
+    const identifiantUnique = dto.identifiantUnique ?? existing.identifiantUnique;
+    if (resident && !identifiantUnique) {
+      throw new BadRequestException(
+        'Identifiant unique obligatoire pour les entités tunisiennes (resident = true)',
+      );
+    }
+
+    // --- HANDLE CONTACTS (delete & recreate) ---
+    if (dto.contacts !== undefined) {
       await this.prisma.contact.deleteMany({ where: { cedanteId: id } });
-    if (dto.bankAccounts !== undefined)
+    }
+
+    // --- HANDLE BANK ACCOUNTS (delete & recreate) ---
+    if (dto.bankAccounts !== undefined) {
       await this.prisma.bankAccount.deleteMany({ where: { cedanteId: id } });
+    }
+
+    // --- UPDATE ---
     return this.prisma.cedante.update({
       where: { id },
       data: {
-        ...(dto.raisonSociale && { raisonSociale: dto.raisonSociale }),
+        ...(dto.raisonSociale !== undefined && { raisonSociale: dto.raisonSociale }),
         ...(dto.rne !== undefined && { rne: dto.rne }),
+        ...(dto.identifiantUnique !== undefined && { identifiantUnique: dto.identifiantUnique }),
+        ...(dto.resident !== undefined && { resident: dto.resident }),
         ...(dto.formeJuridique !== undefined && { formeJuridique: dto.formeJuridique }),
         ...(dto.adresse !== undefined && { adresse: dto.adresse }),
         ...(dto.pays !== undefined && { pays: dto.pays }),
@@ -95,9 +174,71 @@ export class CedantesService {
 
   async remove(id: string) {
     await this.findOne(id);
-    const active = await this.prisma.affaire.count({ where: { cedanteId: id, isActive: true } });
-    if (active > 0)
-      throw new BadRequestException('Impossible de supprimer: des affaires actives existent pour cette cédante');
-    return this.prisma.cedante.update({ where: { id }, data: { isActive: false } });
+
+    // Check for active affaires before deactivating
+    const activeAffaires = await this.prisma.affaire.count({
+      where: { cedanteId: id, isActive: true },
+    });
+    if (activeAffaires > 0) {
+      throw new BadRequestException(
+        `Impossible de désactiver: ${activeAffaires} affaire(s) active(s) existent pour cette compagnie`,
+      );
+    }
+
+    // Soft delete: set inactive
+    return this.prisma.cedante.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  /**
+   * ADMIN ONLY: Allow super admin to modify the auto-generated code.
+   * This advances the sequence ONLY if the new code is a valid next value.
+   * If it's a manual override (not following the pattern), do NOT advance the sequence.
+   */
+  async overrideCode(id: string, newCode: string, userId: string) {
+    const existing = await this.findOne(id);
+
+    // Validate code format (CAS-XXXX)
+    if (!/^CAS-[0-9]{4}$/.test(newCode)) {
+      throw new BadRequestException('Le code doit être au format CAS-XXXX');
+    }
+
+    // Check if code already exists
+    const conflict = await this.prisma.cedante.findUnique({
+      where: { code: newCode },
+    });
+    if (conflict) {
+      throw new ConflictException(`Le code ${newCode} est déjà utilisé`);
+    }
+
+    // Store old code before update
+    const oldCode = existing.code;
+
+    // Update with audit trail
+    const updated = await this.prisma.cedante.update({
+      where: { id },
+      data: {
+        code: newCode,
+        codeModifiedBy: userId,
+        codeModifiedAt: new Date(),
+        oldCode: oldCode,
+      },
+    });
+
+    // Log the change in AuditLog (you'll need to inject AuditLogService or use prisma directly)
+    await this.prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'CODE_OVERRIDE',
+        entityType: 'CEDANTE',
+        entityId: id,
+        before: { code: oldCode },
+        after: { code: newCode },
+      },
+    });
+
+    return updated;
   }
 }

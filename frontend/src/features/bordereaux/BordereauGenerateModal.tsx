@@ -5,7 +5,7 @@ import { bordereauxApi } from '../../api/bordereaux.api';
 import type { BordereauType } from '../../types/bordereau.types';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
-import api from '../../lib/api';
+import masterDataApi from '../../api/master-data.api';
 
 interface BordereauGenerateModalProps {
   isOpen: boolean;
@@ -37,12 +37,18 @@ export default function BordereauGenerateModal({ isOpen, onClose }: BordereauGen
   // Fetch data
   const { data: cedantes } = useQuery({
     queryKey: ['cedantes'],
-    queryFn: () => api.get('/cedantes'),
+    queryFn: async () => {
+      const { data } = await masterDataApi.cedantes.getAll();
+      return data.data;
+    },
   });
 
   const { data: reassureurs } = useQuery({
     queryKey: ['reassureurs'],
-    queryFn: () => api.get('/reassureurs'),
+    queryFn: async () => {
+      const { data } = await masterDataApi.reassureurs.getAll();
+      return data.data;
+    },
     enabled: generationType === 'reassureur' || generationType === 'situation',
   });
 

@@ -43,15 +43,17 @@ const navigation: NavigationItem[] = [
     icon: Home,
   },
 
-  // Renamed from "Données de Base" to "Référentiel" per client decision
+  // ============================================================
+  // RÉFÉRENTIEL — Updated labels per June 26 meeting
+  // ============================================================
   {
     name: 'Référentiel',
     icon: Database,
     subItems: [
-      { name: 'Assurés',      href: '/assures' },
-      { name: 'Cédantes',     href: '/cedantes' },
-      { name: 'Réassureurs',  href: '/reassureurs' },
-      { name: 'Co-Courtiers', href: '/co-courtiers' },
+      { name: 'Clients',                     href: '/assures' },          // WAS: 'Assurés'
+      { name: 'Compagnies d\'assurances',    href: '/cedantes' },        // WAS: 'Cédantes'
+      { name: 'Réassureurs',                 href: '/reassureurs' },     // UNCHANGED
+      { name: 'Courtiers en réassurance',    href: '/co-courtiers' },   // WAS: 'Co-Courtiers'
     ],
   },
 

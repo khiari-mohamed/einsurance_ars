@@ -430,16 +430,20 @@ model BankAccount {
   createdAt     DateTime    @default(now())
 }
 
-// Fiche Assuré
+// Fiche Assuré (Client) — no compte comptable, 4 tabs only
 model Assure {
   id             String               @id @default(uuid())
   code           String               @unique    // auto-generated at validation
   raisonSociale  String
-  rne            String?              @unique
+  rne            String?              @unique    // Optional for clients
   formeJuridique String?
   adresse        String?
   pays           String?
   capital        Decimal?             @db.Decimal(20, 3)
+  // NEW: Audit trail for admin code modifications
+  codeModifiedBy   String?            // User ID who last modified the auto-generated code
+  codeModifiedAt   DateTime?          // Timestamp of last code modification
+  oldCode          String?            // Previous code value (for rollback/audit)
   freeFields     Json?
 
   contacts       Contact[]
@@ -451,18 +455,26 @@ model Assure {
   updatedAt      DateTime             @updatedAt
 }
 
-// Fiche Cédante — compte 411xxxxx, locked after first save
+// Fiche Cédante (Compagnie d'assurances) — compte 401200xx, locked after first save
 model Cedante {
   id               String             @id @default(uuid())
   code             String             @unique
-  compteComptable  String             @unique    // 411xxxxx — mandatory, locked
+  compteComptable  String             @unique    // 401200xx (NOT 411xxxxx) — mandatory, locked
   isAccountLocked  Boolean            @default(false)
   raisonSociale    String
-  rne              String?            @unique
+  rne              String?            @unique     // Legacy RNE, kept for compatibility
+  // NEW: Identifiant Unique (7 digits + 1 letter) — mandatory for Tunisian entities
+  identifiantUnique String?           @unique
+  // NEW: Resident status (true = Tunisian resident, false = non-resident)
+  resident         Boolean?
   formeJuridique   String?
   adresse          String?
   pays             String?
   capital          Decimal?           @db.Decimal(20, 3)
+  // NEW: Audit trail for admin code modifications
+  codeModifiedBy   String?            // User ID who last modified the auto-generated code
+  codeModifiedAt   DateTime?          // Timestamp of last code modification
+  oldCode          String?            // Previous code value (for rollback/audit)
   freeFields       Json?
 
   contacts         Contact[]
@@ -479,18 +491,26 @@ model Cedante {
   updatedAt        DateTime           @updatedAt
 }
 
-// Fiche Réassureur — compte 401xxxxx, locked after first save
+// Fiche Réassureur — compte 401300xx, locked after first save
 model Reassureur {
   id               String              @id @default(uuid())
   code             String              @unique
-  compteComptable  String              @unique    // 401xxxxx — mandatory, locked
+  compteComptable  String              @unique    // 401300xx — mandatory, locked
   isAccountLocked  Boolean             @default(false)
   raisonSociale    String
-  rne              String?
+  rne              String?             // Optional for foreign entities
+  // NEW: Identifiant Unique (7 digits + 1 letter) — mandatory for Tunisian reinsurers
+  identifiantUnique String?            @unique
+  // NEW: Resident status (true = Tunisian resident, false = non-resident)
+  resident         Boolean?
   formeJuridique   String?
   adresse          String?
   pays             String?
   capital          Decimal?            @db.Decimal(20, 3)
+  // NEW: Audit trail for admin code modifications
+  codeModifiedBy   String?             // User ID who last modified the auto-generated code
+  codeModifiedAt   DateTime?           // Timestamp of last code modification
+  oldCode          String?             // Previous code value (for rollback/audit)
   freeFields       Json?
 
   contacts         Contact[]
@@ -505,14 +525,18 @@ model Reassureur {
   updatedAt        DateTime            @updatedAt
 }
 
-// Fiche Co-courtier
+// Fiche Co-courtier (Courtier en réassurance) — identical structure to Réassureur
 model CoCourtier {
   id               String         @id @default(uuid())
   code             String         @unique
-  compteComptable  String         @unique
+  compteComptable  String         @unique    // 401300xx (confirmed by data)
   isAccountLocked  Boolean        @default(false)
   raisonSociale    String
-  rne              String?
+  rne              String?        // Optional for foreign courtiers
+  // NEW: Audit trail for admin code modifications
+  codeModifiedBy   String?        // User ID who last modified the auto-generated code
+  codeModifiedAt   DateTime?      // Timestamp of last code modification
+  oldCode          String?        // Previous code value (for rollback/audit)
   formeJuridique   String?
   adresse          String?
   pays             String?
