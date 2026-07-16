@@ -39,9 +39,9 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
-  @RequirePermissions(Permission.USERS_MANAGE)
+  @Public()
   @Post('register')
-  @ApiOperation({ summary: 'Créer un utilisateur (admin seulement)' })
+  @ApiOperation({ summary: 'Créer un utilisateur' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }

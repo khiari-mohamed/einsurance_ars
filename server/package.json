@@ -39,6 +39,7 @@
     "compression": "^1.8.1",
     "handlebars": "^4.7.9",
     "helmet": "^8.1.0",
+    "joi": "^18.2.1",
     "nodemailer": "^8.0.7",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",

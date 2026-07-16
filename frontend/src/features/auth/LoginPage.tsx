@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '../../lib/store';
-import api from '../../lib/api';
+import api, { extractErrorMessage } from '../../lib/api';
 import AuthLayout from './AuthLayout';
 
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [showPwd, setShowPwd]   = useState(false);
+  const [error, setError]       = useState('');
+  const [loading, setLoading]   = useState(false);
+
   const { setAuth } = useAuthStore();
-  const navigate = useNavigate();
+  const navigate    = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,11 +21,13 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // Interceptor unwraps { success, data } → data, so response is
+      // { accessToken, refreshToken, user } directly.
       const { data } = await api.post('/auth/login', { email, password });
-      setAuth(data.access_token, data.user);
+      setAuth(data.accessToken, data.refreshToken, data.user);
       navigate('/');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Une erreur est survenue lors de la connexion');
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err, 'Une erreur est survenue lors de la connexion'));
     } finally {
       setLoading(false);
     }
@@ -39,8 +43,11 @@ export default function LoginPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Email */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Adresse e-mail</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Adresse e-mail
+            </label>
             <div className="relative">
               <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -48,12 +55,14 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
-                placeholder="prenom.nom@ars.tn"
+                placeholder="prenom.nom@arstunisie.com"
+                autoComplete="email"
                 required
               />
             </div>
           </div>
 
+          {/* Password */}
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
               <label className="block text-sm font-medium text-slate-700">Mot de passe</label>
@@ -67,13 +76,23 @@ export default function LoginPage() {
             <div className="relative">
               <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                type="password"
+                type={showPwd ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
                 placeholder="Saisissez votre mot de passe"
+                autoComplete="current-password"
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPwd((v) => !v)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                tabIndex={-1}
+                aria-label={showPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
+              >
+                {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
           </div>
 
@@ -85,7 +104,7 @@ export default function LoginPage() {
             {loading ? (
               <>
                 <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                <span>Connexion en cours...</span>
+                <span>Connexion en cours…</span>
               </>
             ) : (
               <>

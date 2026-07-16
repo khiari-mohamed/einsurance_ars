@@ -1,50 +1,69 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User as UserIcon, ArrowRight, ArrowLeft } from 'lucide-react';
-import api from '../../lib/api';
+import { Mail, Lock, Eye, EyeOff, User as UserIcon, ArrowRight, ArrowLeft } from 'lucide-react';
+import api, { extractErrorMessage } from '../../lib/api';
 import AuthLayout from './AuthLayout';
 
-const roles = [
-  { value: 'ADMINISTRATEUR', label: 'Administrateur' },
-  { value: 'DIRECTEUR_GENERAL', label: 'Directeur général' },
-  { value: 'DIRECTEUR_COMMERCIAL', label: 'Directeur commercial' },
-  { value: 'DIRECTEUR_FINANCIER', label: 'Directeur financier' },
-  { value: 'CHARGE_DE_DOSSIER', label: 'Chargé de dossier' },
-  { value: 'RESPONSABLE_PRODUCTION', label: 'Responsable production' },
-  { value: 'TECHNICIEN_SINISTRES', label: 'Technicien sinistres' },
-  { value: 'AGENT_FINANCIER', label: 'Agent financier' },
-  { value: 'COMPTABLE', label: 'Comptable' },
-];
+// SUPER_ADMIN is excluded from self-registration — must be created by an existing admin
+const ROLES = [
+  { value: 'DIRECTION_GENERALE',    label: 'Direction Générale' },
+  { value: 'DIRECTION_COMMERCIALE', label: 'Direction Commerciale' },
+  { value: 'DIRECTION_REASSURANCE', label: 'Direction Réassurance' },
+  { value: 'DAF',                   label: 'DAF' },
+  { value: 'SERVICE_IRDS',          label: 'Service IRDS' },
+] as const;
+
+const MIN_PASSWORD_LENGTH = 8; // matches backend PasswordPolicy.longueurMin default
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
-    email: '',
-    password: '',
-    firstName: '',
-    lastName: '',
-    role: 'CHARGE_DE_DOSSIER',
+    prenom:          '',
+    nom:             '',
+    email:           '',
+    password:        '',
+    confirmPassword: '',
+    role:            'DIRECTION_COMMERCIALE' as string,
   });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [showPwd,    setShowPwd]    = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error,      setError]      = useState('');
+  const [loading,    setLoading]    = useState(false);
   const navigate = useNavigate();
+
+  const set = (field: keyof typeof formData) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+      setFormData((prev) => ({ ...prev, [field]: e.target.value }));
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
 
+    if (formData.password !== formData.confirmPassword) {
+      setError('Les mots de passe ne correspondent pas.');
+      return;
+    }
+    if (formData.password.length < MIN_PASSWORD_LENGTH) {
+      setError(`Le mot de passe doit contenir au moins ${MIN_PASSWORD_LENGTH} caractères.`);
+      return;
+    }
+
+    setLoading(true);
     try {
-      await api.post('/auth/register', formData);
+      const { prenom, nom, email, password, role } = formData;
+      await api.post('/auth/register', { prenom, nom, email, password, role });
       navigate('/login');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'Une erreur est survenue lors de la création du compte');
+    } catch (err: unknown) {
+      setError(extractErrorMessage(err, 'Une erreur est survenue lors de la création du compte'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <AuthLayout title="Créer un compte" subtitle="Demandez votre accès à l’environnement professionnel ARS Tunisie">
+    <AuthLayout
+      title="Créer un compte"
+      subtitle="Demandez votre accès à l'environnement professionnel ARS Tunisie"
+    >
       <div className="space-y-5">
         <Link
           to="/login"
@@ -61,6 +80,7 @@ export default function RegisterPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Prénom / Nom */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Prénom</label>
@@ -68,31 +88,33 @@ export default function RegisterPage() {
                 <UserIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  value={formData.firstName}
-                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  value={formData.prenom}
+                  onChange={set('prenom')}
                   className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
                   placeholder="Prénom"
+                  autoComplete="given-name"
                   required
                 />
               </div>
             </div>
-
             <div>
               <label className="mb-2 block text-sm font-medium text-slate-700">Nom</label>
               <div className="relative">
                 <UserIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  value={formData.lastName}
-                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  value={formData.nom}
+                  onChange={set('nom')}
                   className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
                   placeholder="Nom"
+                  autoComplete="family-name"
                   required
                 />
               </div>
             </div>
           </div>
 
+          {/* Email */}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Adresse e-mail</label>
             <div className="relative">
@@ -100,41 +122,82 @@ export default function RegisterPage() {
               <input
                 type="email"
                 value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={set('email')}
                 className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
-                placeholder="prenom.nom@ars.tn"
+                placeholder="prenom.nom@arstunisie.com"
+                autoComplete="email"
                 required
               />
             </div>
           </div>
 
+          {/* Password */}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Mot de passe</label>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
-                type="password"
+                type={showPwd ? 'text' : 'password'}
                 value={formData.password}
-                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
-                placeholder="Créer un mot de passe"
+                onChange={set('password')}
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                placeholder={`Minimum ${MIN_PASSWORD_LENGTH} caractères`}
+                autoComplete="new-password"
                 required
-                minLength={6}
+                minLength={MIN_PASSWORD_LENGTH}
               />
+              <button
+                type="button"
+                onClick={() => setShowPwd((v) => !v)}
+                tabIndex={-1}
+                aria-label={showPwd ? 'Masquer' : 'Afficher'}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+              >
+                {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
             </div>
-            <p className="mt-2 text-xs text-slate-500">Minimum 6 caractères.</p>
           </div>
 
+          {/* Confirm password */}
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-700">
+              Confirmer le mot de passe
+            </label>
+            <div className="relative">
+              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type={showConfirm ? 'text' : 'password'}
+                value={formData.confirmPassword}
+                onChange={set('confirmPassword')}
+                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                placeholder="Répétez votre mot de passe"
+                autoComplete="new-password"
+                required
+                minLength={MIN_PASSWORD_LENGTH}
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirm((v) => !v)}
+                tabIndex={-1}
+                aria-label={showConfirm ? 'Masquer' : 'Afficher'}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+              >
+                {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+
+          {/* Role */}
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700">Rôle</label>
             <select
               value={formData.role}
-              onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+              onChange={set('role')}
               className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100"
             >
-              {roles.map((role) => (
-                <option key={role.value} value={role.value}>
-                  {role.label}
+              {ROLES.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
                 </option>
               ))}
             </select>
@@ -148,7 +211,7 @@ export default function RegisterPage() {
             {loading ? (
               <>
                 <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                <span>Création en cours...</span>
+                <span>Création en cours…</span>
               </>
             ) : (
               <>
