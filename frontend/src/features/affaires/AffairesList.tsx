@@ -54,16 +54,21 @@ export default function AffairesList() {
         status: statusFilter || undefined,
         category: categoryFilter || undefined,
       });
-      return data;
+      return data.data || data;
     },
   });
 
   const { data: stats } = useQuery({
     queryKey: ['affaires-stats'],
     queryFn: async () => {
-      const { data } = await affairesApi.getStatistics();
-      return data;
+      try {
+        const { data } = await affairesApi.getStatistics();
+        return (data as any)?.data || data;
+      } catch {
+        return null;
+      }
     },
+    retry: false,
   });
 
 
@@ -189,8 +194,8 @@ export default function AffairesList() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-gray-900">{affaire.assure.raisonSociale}</td>
-                    <td className="px-4 py-3 text-[13px] text-gray-900">{affaire.cedante.raisonSociale}</td>
+                    <td className="px-4 py-3 text-[13px] text-gray-900">{affaire.assure?.raisonSociale || '-'}</td>
+                    <td className="px-4 py-3 text-[13px] text-gray-900">{affaire.cedante?.raisonSociale || '-'}</td>
                     <td className="px-4 py-3 text-[13px] text-right font-medium text-gray-900">
                       {formatCurrency(affaire.primeCedee, affaire.devise)}
                     </td>

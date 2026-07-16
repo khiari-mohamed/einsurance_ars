@@ -55,7 +55,6 @@ export class SettlementService {
       },
     });
 
-    // Auto-compute FX gain/loss if foreign currency with different rates
     if (currency !== 'TND' && tauxRealisation !== tauxReglement) {
       await this.fxService.compute({
         montantDevise: dto.montant,
@@ -69,6 +68,30 @@ export class SettlementService {
     }
 
     return settlement;
+  }
+
+  async findOne(id: string) {
+    const s = await this.prisma.settlement.findUnique({
+      where: { id },
+      include: { encaissements: true, decaissements: true, affaire: { select: { numero: true, currency: true } } },
+    });
+    if (!s) throw new NotFoundException('Settlement introuvable');
+    return s;
+  }
+
+  async calculate(id: string) {
+    const s = await this.findOne(id);
+    const currency = s.currency ?? 'TND';
+    const tauxReglement = s.tauxReglement ?? 1;
+    const montantTnd = currency !== 'TND'
+      ? Math.round(Number(s.montant) * Number(tauxReglement) * 1000) / 1000
+      : s.montant;
+    return this.prisma.settlement.update({ where: { id }, data: { montantTnd } });
+  }
+
+  async validate(id: string) {
+    await this.findOne(id);
+    return this.prisma.settlement.update({ where: { id }, data: {} });
   }
 
   async delete(id: string) {

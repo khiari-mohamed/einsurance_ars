@@ -25,7 +25,7 @@ export default function SinistreDocuments({ sinistreId }: Props) {
     queryKey: ['sinistre-documents', sinistreId],
     queryFn: async () => {
       const { data } = await sinistresApi.getDocuments(sinistreId);
-      return data;
+      return (data as any)?.data || data;
     },
   });
 

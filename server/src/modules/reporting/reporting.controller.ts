@@ -21,6 +21,8 @@ export class ReportingController {
     private budget: BudgetService,
   ) {}
 
+  // ── Dashboard ─────────────────────────────────────────────────
+
   @Get('dashboard/summary')
   @RequirePermissions(Permission.REPORTING_READ)
   getSummary() { return this.dashboard.getSummary(); }
@@ -142,6 +144,138 @@ export class ReportingController {
     return this.dashboard.getPanel4QuarterlyReport(year, quarter);
   }
 
+  // ── Chiffre d'affaires / Primes aging / Budget vs actual ─────
+
+  @Get('chiffre-affaires')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'mode', required: false })
+  @ApiQuery({ name: 'period', required: false })
+  getChiffreAffaires(@Query('mode') mode?: string, @Query('period') period?: string) {
+    return this.reporting.getChiffreAffaires(mode, period);
+  }
+
+  @Get('primes-aging')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'period', required: false })
+  getPrimesAging(@Query('period') period?: string) {
+    return this.reporting.getPrimesAging(period);
+  }
+
+  @Get('budget-vs-actual')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'period', required: false })
+  getBudgetVsActual(@Query('period') period?: string) {
+    return this.reporting.getBudgetVsActual(period);
+  }
+
+  // ── Portfolio ─────────────────────────────────────────────────
+
+  @Get('portfolio/performance')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'groupBy', required: false })
+  getPortfolioPerformance(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('groupBy') groupBy?: string,
+  ) { return this.reporting.getPortfolioPerformance({ startDate, endDate, groupBy }); }
+
+  @Get('portfolio/concentration')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'type', required: false })
+  getRiskConcentration(@Query('type') type?: string) {
+    return this.reporting.getRiskConcentration(type);
+  }
+
+  // ── Reinsurers ────────────────────────────────────────────────
+
+  @Get('reinsurers/performance')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  getReinsurersPerformance(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) { return this.reporting.getReinsurersPerformance({ startDate, endDate }); }
+
+  // ── SAP Report ────────────────────────────────────────────────
+
+  @Get('sap/report')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  getSAPReport(@Query('startDate') startDate?: string, @Query('endDate') endDate?: string) {
+    return this.reporting.getSAPReport({ startDate, endDate });
+  }
+
+  // ── Production monthly ────────────────────────────────────────
+
+  @Get('production/monthly')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'year', required: false })
+  @ApiQuery({ name: 'month', required: false })
+  getMonthlyProduction(@Query('year') year?: number, @Query('month') month?: number) {
+    return this.reporting.getMonthlyProduction(year, month);
+  }
+
+  // ── Commissions analysis ──────────────────────────────────────
+
+  @Get('commissions/analysis')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  getCommissionAnalysis(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) { return this.reporting.getCommissionAnalysis({ startDate, endDate }); }
+
+  // ── Cedantes performance ──────────────────────────────────────
+
+  @Get('cedantes/performance')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  getCedantesPerformance(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) { return this.reporting.getCedantesPerformance({ startDate, endDate }); }
+
+  // ── Branches analysis ─────────────────────────────────────────
+
+  @Get('branches/analysis')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  getBranchesAnalysis(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) { return this.reporting.getBranchesAnalysis({ startDate, endDate }); }
+
+  // ── Payment aging ─────────────────────────────────────────────
+
+  @Get('payment/aging')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'type', required: false })
+  getPaymentAging(@Query('type') type?: string) {
+    return this.reporting.getPaymentAging(type);
+  }
+
+  // ── Portfolio / bordereaux summary ────────────────────────────
+
+  @Get('bordereaux/summary')
+  @RequirePermissions(Permission.REPORTING_READ)
+  @ApiQuery({ name: 'startDate', required: false })
+  @ApiQuery({ name: 'endDate', required: false })
+  @ApiQuery({ name: 'type', required: false })
+  getBordereauxSummary(
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('type') type?: string,
+  ) { return this.reporting.getBordereauxSummary({ startDate, endDate, type }); }
+
+  // ── Cedante / Reassureur statements ───────────────────────────
+
   @Get('cedante/:cedanteId')
   @RequirePermissions(Permission.REPORTING_READ)
   @ApiQuery({ name: 'year', required: false })
@@ -156,10 +290,14 @@ export class ReportingController {
     return this.reporting.getReassureurStatement(code, year ?? new Date().getFullYear());
   }
 
+  // ── Annual report ─────────────────────────────────────────────
+
   @Get('annual/:year')
   @RequirePermissions(Permission.REPORTING_READ)
   @ApiOperation({ summary: 'Rapport annuel exportable — Direction Générale' })
   getAnnualReport(@Param('year') year: number) { return this.reporting.getAnnualReport(year); }
+
+  // ── Budget ────────────────────────────────────────────────────
 
   @Get('budget')
   @RequirePermissions(Permission.REPORTING_READ)

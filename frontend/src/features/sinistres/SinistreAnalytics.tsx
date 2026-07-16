@@ -10,7 +10,7 @@ export default function SinistreAnalytics() {
     queryKey: ['sinistres-evolution'],
     queryFn: async () => {
       const { data } = await sinistresApi.getEvolution(12);
-      return data;
+      return (data as any)?.data || data;
     },
   });
 
@@ -18,7 +18,7 @@ export default function SinistreAnalytics() {
     queryKey: ['sinistres-by-cedante'],
     queryFn: async () => {
       const { data } = await sinistresApi.getByCedante();
-      return data;
+      return (data as any)?.data || data;
     },
   });
 
@@ -26,7 +26,7 @@ export default function SinistreAnalytics() {
     queryKey: ['sinistres-by-status'],
     queryFn: async () => {
       const { data } = await sinistresApi.getByStatus();
-      return data;
+      return (data as any)?.data || data;
     },
   });
 
@@ -34,7 +34,7 @@ export default function SinistreAnalytics() {
     queryKey: ['sinistres-aging'],
     queryFn: async () => {
       const { data } = await sinistresApi.getAging();
-      return data;
+      return (data as any)?.data || data;
     },
   });
 
@@ -42,7 +42,7 @@ export default function SinistreAnalytics() {
     queryKey: ['sinistres-sap'],
     queryFn: async () => {
       const { data } = await sinistresApi.getSAPAnalysis();
-      return data;
+      return (data as any)?.data || data;
     },
   });
 

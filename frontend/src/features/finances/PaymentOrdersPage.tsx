@@ -21,7 +21,7 @@ export default function PaymentOrdersPage() {
   const loadOrders = async () => {
     try {
       const data = await financesApi.getOrdresPaiement();
-      setOrders(data);
+      setOrders((data as any)?.data || data);
     } catch (error) {
       toast.error('Erreur lors du chargement');
     }

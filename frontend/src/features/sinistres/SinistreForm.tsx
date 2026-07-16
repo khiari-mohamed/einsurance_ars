@@ -29,7 +29,7 @@ export default function SinistreForm() {
     queryKey: ['affaires'],
     queryFn: async () => {
       const { data } = await affairesApi.getAll();
-      return data;
+      return Array.isArray(data) ? data : (data as any).data || data;
     },
   });
 

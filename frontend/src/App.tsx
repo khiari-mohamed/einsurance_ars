@@ -30,6 +30,7 @@ import AffairesList from './features/affaires/AffairesList';
 import AffaireDetail from './features/affaires/AffaireDetail';
 
 // ── Traités ───────────────────────────────────────────────────────────────────────
+import FacultativesList from './features/affaires/FacultativesList';
 import TraitesList from './features/traites/TraitesList';
 
 // ── Sinistres ─────────────────────────────────────────────────────────────────────
@@ -203,6 +204,16 @@ export default function App() {
                 element={
                   <ProtectedRoute path="/affaires">
                     <AffaireDetail />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* ── Facultatives ───────────────────────────────────────────── */}
+              <Route
+                path="facultatives"
+                element={
+                  <ProtectedRoute path="/affaires">
+                    <FacultativesList />
                   </ProtectedRoute>
                 }
               />

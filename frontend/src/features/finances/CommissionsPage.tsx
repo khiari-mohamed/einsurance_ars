@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
 export default function CommissionsPage() {
-  const [commissions, setCommissions] = useState<Commission[]>([]);
+  const [commissions, setCommissions] = useState<any[]>([]);
   const [filters, setFilters] = useState<{
     type: string;
     statut: string;
@@ -31,51 +31,58 @@ export default function CommissionsPage() {
 
   useEffect(() => {
     loadCommissions();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters]);
+
+  const unwrap = (responseData: any): any[] => {
+    if (Array.isArray(responseData)) return responseData;
+    const inner = (responseData as any)?.data;
+    return Array.isArray(inner) ? inner : [];
+  };
 
   const loadCommissions = async () => {
     try {
       const response = await financesApi.getCommissions({
-        ...filters,
         type: filters.type || undefined,
-        statut: filters.statut ? (filters.statut as CommissionStatus) : undefined,
+        statut: filters.statut ? (filters.statut as any) : undefined,
         affaireId: filters.affaireId || undefined,
       });
-      setCommissions(response.data);
-      calculateStats(response.data);
+      const list = unwrap(response.data);
+      setCommissions(list);
+      calculateStats(list);
     } catch (error) {
       toast.error('Erreur lors du chargement');
     }
   };
 
-  const calculateStats = (data: Commission[]) => {
-    const stats = {
-      totalCalculee: data.filter(c => c.statut === CommissionStatus.CALCULEE).reduce((sum, c) => sum + Number(c.montant), 0),
-      totalAPayer: data.filter(c => c.statut === CommissionStatus.A_PAYER).reduce((sum, c) => sum + Number(c.montant), 0),
-      totalPayee: data.filter(c => c.statut === CommissionStatus.PAYEE).reduce((sum, c) => sum + Number(c.montant), 0),
-      countARS: data.filter(c => c.type === CommissionType.ARS).length,
-      countCedante: data.filter(c => c.type === CommissionType.CEDANTE).length,
-    };
-    setStats(stats);
+  const calculateStats = (data: any[]) => {
+    const arr = Array.isArray(data) ? data : [];
+    setStats({
+      totalCalculee: arr.filter((c) => c.statut === CommissionStatus.CALCULEE).reduce((sum, c) => sum + Number(c.montant ?? 0), 0),
+      totalAPayer: arr.filter((c) => c.statut === CommissionStatus.A_PAYER).reduce((sum, c) => sum + Number(c.montant ?? 0), 0),
+      totalPayee: arr.filter((c) => c.statut === CommissionStatus.PAYEE).reduce((sum, c) => sum + Number(c.montant ?? 0), 0),
+      countARS: arr.filter((c) => c.type === CommissionType.ARS).length,
+      countCedante: arr.filter((c) => c.type === CommissionType.CEDANTE).length,
+    });
   };
 
   const getStatusBadge = (statut: CommissionStatus) => {
-    const colors = {
+    const colors: Record<string, string> = {
       [CommissionStatus.CALCULEE]: 'bg-blue-500',
       [CommissionStatus.A_PAYER]: 'bg-yellow-500',
       [CommissionStatus.PAYEE]: 'bg-green-500',
       [CommissionStatus.ANNULEE]: 'bg-red-500',
     };
-    return <Badge className={colors[statut]}>{statut.toUpperCase()}</Badge>;
+    return <Badge className={colors[statut] || 'bg-gray-500'}>{statut.toUpperCase()}</Badge>;
   };
 
   const getTypeBadge = (type: CommissionType) => {
-    const colors = {
+    const colors: Record<string, string> = {
       [CommissionType.ARS]: 'bg-purple-500',
       [CommissionType.CEDANTE]: 'bg-indigo-500',
       [CommissionType.COURTIER]: 'bg-cyan-500',
     };
-    return <Badge className={colors[type]}>{type.toUpperCase()}</Badge>;
+    return <Badge className={colors[type] || 'bg-gray-500'}>{type.toUpperCase()}</Badge>;
   };
 
   return (
@@ -209,24 +216,23 @@ export default function CommissionsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {commissions.map((comm) => (
+                {commissions.map((comm: any) => (
                   <tr key={comm.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium">{comm.numero}</td>
-                    <td className="px-4 py-3">{getTypeBadge(comm.type)}</td>
+                    <td className="px-4 py-3 text-sm font-medium">{comm.numero || comm.id?.slice(0, 8)}</td>
+                    <td className="px-4 py-3">{getTypeBadge(comm.type || 'ARS')}</td>
                     <td className="px-4 py-3 text-sm">
-                      {comm.affaire?.numero || comm.affaireId}
+                      {comm.affaire?.numero || comm.affaireId || '-'}
                     </td>
                     <td className="px-4 py-3 text-sm">
-                      {formatCurrency(comm.baseMontant)}
+                      {formatCurrency(comm.baseMontant ?? comm.primeBrute ?? 0)}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium">
-                      {Number(comm.taux).toFixed(2)}%
-                      {comm.tauxOverride && <span className="ml-1 text-orange-500">*</span>}
+                      {comm.taux != null ? `${Number(comm.taux).toFixed(2)}%` : `${Number(comm.partPct ?? 0).toFixed(2)}%`}
                     </td>
                     <td className="px-4 py-3 text-sm font-bold text-green-600">
-                      {formatCurrency(comm.montant)}
+                      {formatCurrency(comm.montant ?? comm.commissionArs ?? 0)}
                     </td>
-                    <td className="px-4 py-3">{getStatusBadge(comm.statut)}</td>
+                    <td className="px-4 py-3">{getStatusBadge(comm.statut || 'CALCULEE')}</td>
                     <td className="px-4 py-3 text-sm">
                       {comm.dateCalcul ? formatDate(comm.dateCalcul) : '-'}
                     </td>

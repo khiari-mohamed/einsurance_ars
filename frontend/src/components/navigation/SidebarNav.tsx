@@ -62,6 +62,7 @@ const navigation: NavigationItem[] = [
     icon: FileText,
     subItems: [
       { name: 'Toutes les affaires', href: '/affaires' },
+      { name: 'Facultatives',        href: '/facultatives' },
       { name: 'Traités',             href: '/traites' },
     ],
   },

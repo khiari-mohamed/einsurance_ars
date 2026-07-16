@@ -24,7 +24,7 @@ export default function SettlementsPage() {
   const loadSettlements = async () => {
     try {
       const response = await financesApi.getSettlements();
-      setSettlements(response.data);
+      setSettlements((response.data as any)?.data || response.data);
     } catch (error) {
       toast.error('Erreur lors du chargement');
     }

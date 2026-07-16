@@ -16,16 +16,17 @@ export default function SinistreBordereau() {
   const generateMutation = useMutation({
     mutationFn: (data: any) => sinistresApi.generateBordereau(data),
     onSuccess: (response) => {
-      setBordereau(response.data);
+      setBordereau((response.data as any)?.data || response.data);
     },
   });
 
   const generatePDFMutation = useMutation({
     mutationFn: (data: any) => sinistresApi.generateBordereauPDF(data),
     onSuccess: (response) => {
-      setBordereau(response.data);
-      if (response.data.pdfUrl) {
-        window.open(response.data.pdfUrl, '_blank');
+      const data = (response.data as any)?.data || response.data;
+      setBordereau(data);
+      if (data.pdfUrl) {
+        window.open(data.pdfUrl, '_blank');
       }
     },
   });

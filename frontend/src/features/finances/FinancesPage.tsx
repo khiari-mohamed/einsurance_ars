@@ -29,14 +29,16 @@ export default function FinancesPage() {
     loadData();
   }, [activeTab]);
 
+  const unwrap = (d: any): any[] => (Array.isArray(d) ? d : (d as any)?.data ?? []);
+
   const loadData = async () => {
     try {
       if (activeTab === 'encaissements') {
         const response = await financesApi.getEncaissements();
-        setEncaissements(response.data);
+        setEncaissements(unwrap(response.data));
       } else if (activeTab === 'decaissements') {
         const response = await financesApi.getDecaissements();
-        setDecaissements(response.data);
+        setDecaissements(unwrap(response.data));
       }
       await loadStats();
     } catch (error) {
@@ -49,7 +51,7 @@ export default function FinancesPage() {
       const startDate = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
       const endDate = new Date().toISOString().split('T')[0];
       const data = await financesApi.getCashFlowReport(startDate, endDate);
-      setStats(data);
+      setStats((data as any)?.data || data);
     } catch (error) {
       console.error('Error loading stats:', error);
     }
@@ -85,7 +87,8 @@ export default function FinancesPage() {
     }
   };
 
-  const getStatusBadge = (statut: string) => {
+  const getStatusBadge = (statut: string | undefined | null) => {
+    const status = statut ?? '';
     const colors: Record<string, string> = {
       brouillon: 'bg-gray-500',
       saisi: 'bg-blue-500',
@@ -97,7 +100,7 @@ export default function FinancesPage() {
       execute: 'bg-green-600',
       annule: 'bg-red-500',
     };
-    return <Badge className={colors[statut] || 'bg-gray-500'}>{statut.toUpperCase()}</Badge>;
+    return <Badge className={colors[status] || 'bg-gray-500'}>{status.toUpperCase() || 'INCONNU'}</Badge>;
   };
 
   return (

@@ -3,12 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Bell, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 import { sinistresApi } from '../../api/sinistres.api';
-import {  SinistreStatus, PaymentStatus } from '../../types/sinistre.types';
+import { Sinistre, SinistreStatus, PaymentStatus } from '../../types/sinistre.types';
 import { formatCurrency } from '../../lib/currency';
 import SinistreDocuments from './SinistreDocuments';
 import SinistreSAP from './SinistreSAP';
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; color: string }> = {
   [SinistreStatus.DECLARE]: { label: 'Déclaré', color: 'bg-blue-100 text-blue-800' },
   [SinistreStatus.EN_EXPERTISE]: { label: 'En Expertise', color: 'bg-purple-100 text-purple-800' },
   [SinistreStatus.EN_REGLEMENT]: { label: 'En Règlement', color: 'bg-yellow-100 text-yellow-800' },
@@ -18,12 +18,15 @@ const statusConfig = {
   [SinistreStatus.CLOS]: { label: 'Clos', color: 'bg-gray-100 text-gray-800' },
 };
 
-const paymentStatusConfig = {
+const paymentStatusConfig: Record<string, { label: string; color: string; icon: any }> = {
   [PaymentStatus.EN_ATTENTE]: { label: 'En Attente', color: 'text-gray-600', icon: Clock },
   [PaymentStatus.PARTIEL]: { label: 'Partiel', color: 'text-orange-600', icon: AlertTriangle },
   [PaymentStatus.PAYE]: { label: 'Payé', color: 'text-green-600', icon: CheckCircle },
   [PaymentStatus.EN_RETARD]: { label: 'En Retard', color: 'text-red-600', icon: AlertTriangle },
 };
+
+const getCfg = (s: any) => statusConfig[s as keyof typeof statusConfig] ?? { label: String(s ?? 'INCONNU'), color: 'bg-gray-100 text-gray-800' };
+const getPayCfg = (s: any) => paymentStatusConfig[s as keyof typeof paymentStatusConfig] ?? { label: String(s ?? 'INCONNU'), color: 'text-gray-600', icon: Clock };
 
 export default function SinistreDetail() {
   const { id } = useParams<{ id: string }>();
@@ -31,17 +34,17 @@ export default function SinistreDetail() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('fiche');
 
-  const { data: sinistre, isLoading } = useQuery({
+  const { data: sinistre, isLoading } = useQuery<Sinistre>({
     queryKey: ['sinistre', id],
     queryFn: async () => {
       const { data } = await sinistresApi.getOne(id!);
-      return data;
+      return data;  // Backend returns the sinistre directly (no wrapper)
     },
     enabled: !!id,
   });
 
   const notifyMutation = useMutation({
-    mutationFn: () => sinistresApi.notifyReinsurers(id!),
+    mutationFn: () => sinistresApi.declareToReassureurs(id!),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sinistre', id] });
     },
@@ -72,8 +75,8 @@ export default function SinistreDetail() {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          <span className={`px-4 py-2 rounded-full text-sm font-medium ${statusConfig[sinistre.statut].color}`}>
-            {statusConfig[sinistre.statut].label}
+          <span className={`px-4 py-2 rounded-full text-sm font-medium ${getCfg(sinistre.statut).color}`}>
+            {getCfg(sinistre.statut).label}
           </span>
           {canNotify && (
             <button
@@ -188,7 +191,8 @@ export default function SinistreDetail() {
                 </thead>
                 <tbody className="divide-y">
                   {sinistre.participations?.map((p) => {
-                    const StatusIcon = paymentStatusConfig[p.statutPaiement].icon;
+                    const pay = getPayCfg(p.statutPaiement);
+                    const StatusIcon = pay.icon;
                     return (
                       <tr key={p.id}>
                         <td className="px-4 py-3 text-sm font-medium">{p.reassureur?.nom}</td>
@@ -196,9 +200,9 @@ export default function SinistreDetail() {
                         <td className="px-4 py-3 text-sm font-semibold">{formatCurrency(p.montantPart)}</td>
                         <td className="px-4 py-3 text-sm">{formatCurrency(p.montantPaye)}</td>
                         <td className="px-4 py-3">
-                          <span className={`flex items-center gap-1 text-sm font-medium ${paymentStatusConfig[p.statutPaiement].color}`}>
+                          <span className={`flex items-center gap-1 text-sm font-medium ${pay.color}`}>
                             <StatusIcon size={16} />
-                            {paymentStatusConfig[p.statutPaiement].label}
+                            {pay.label}
                           </span>
                         </td>
                       </tr>
@@ -241,12 +245,12 @@ export default function SinistreDetail() {
                       <p className="text-sm text-gray-600">Part: {p.partPourcentage}% - {formatCurrency(p.montantPart)}</p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      p.statutPaiement === PaymentStatus.PAYE ? 'bg-green-100 text-green-800' :
-                      p.statutPaiement === PaymentStatus.PARTIEL ? 'bg-orange-100 text-orange-800' :
-                      p.statutPaiement === PaymentStatus.EN_RETARD ? 'bg-red-100 text-red-800' :
+                      getPayCfg(p.statutPaiement).label === 'Payé' ? 'bg-green-100 text-green-800' :
+                      getPayCfg(p.statutPaiement).label === 'Partiel' ? 'bg-orange-100 text-orange-800' :
+                      getPayCfg(p.statutPaiement).label === 'En Retard' ? 'bg-red-100 text-red-800' :
                       'bg-gray-100 text-gray-800'
                     }`}>
-                      {paymentStatusConfig[p.statutPaiement].label}
+                      {getPayCfg(p.statutPaiement).label}
                     </span>
                   </div>
                   
@@ -354,7 +358,7 @@ export default function SinistreDetail() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-medium text-gray-900">Dernière modification</p>
-                      <p className="text-sm text-gray-700 mt-1">Statut actuel: {statusConfig[sinistre.statut].label}</p>
+                      <p className="text-sm text-gray-700 mt-1">Statut actuel: {getCfg(sinistre.statut).label}</p>
                     </div>
                     <span className="text-sm text-gray-600">{new Date(sinistre.updatedAt).toLocaleString('fr-FR')}</span>
                   </div>

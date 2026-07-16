@@ -34,6 +34,14 @@ const ROUTE_ACCESS: Record<string, UserRole[]> = {
     'DIRECTION_COMMERCIALE', 'DIRECTION_REASSURANCE',
     'DIRECTION_GENERALE', 'SUPER_ADMIN',
   ],
+  '/facultatives': [
+    'DIRECTION_COMMERCIALE', 'DIRECTION_REASSURANCE',
+    'DIRECTION_GENERALE', 'SUPER_ADMIN',
+  ],
+  '/traites': [
+    'DIRECTION_COMMERCIALE', 'DIRECTION_REASSURANCE',
+    'DIRECTION_GENERALE', 'SUPER_ADMIN',
+  ],
 
   // ── Bordereaux ────────────────────────────────────────────────────────────────
   '/bordereaux': [

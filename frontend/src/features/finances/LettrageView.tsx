@@ -20,8 +20,8 @@ export default function LettrageView() {
   const loadLettrages = async () => {
     setLoading(true);
     try {
-      const data = await financesApi.getLettrages();
-      setLettrages(data);
+      const result = await financesApi.getLettrages();
+      setLettrages((result as any)?.data || result);
     } catch (error) {
       toast.error('Erreur lors du chargement');
     } finally {

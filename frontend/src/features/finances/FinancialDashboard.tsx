@@ -30,9 +30,9 @@ export default function FinancialDashboard() {
         financesApi.getAgingReport('dettes'),
       ]);
 
-      setCashFlow(cashFlowData);
-      setAgingCreances(creancesData);
-      setAgingDettes(dettesData);
+      setCashFlow((cashFlowData as any)?.data || cashFlowData);
+      setAgingCreances((creancesData as any)?.data || creancesData);
+      setAgingDettes((dettesData as any)?.data || dettesData);
     } catch (error) {
       toast.error('Erreur lors du chargement');
     } finally {

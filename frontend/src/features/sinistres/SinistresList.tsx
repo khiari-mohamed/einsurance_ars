@@ -20,20 +20,27 @@ export default function SinistresList() {
   const navigate = useNavigate();
   const [filters, setFilters] = useState({ statut: '', cedanteId: '' });
 
-  const { data: sinistres, isLoading } = useQuery({
+  const { data: sinistres = [], isLoading } = useQuery({
     queryKey: ['sinistres', filters],
     queryFn: async () => {
       const { data } = await sinistresApi.getAll(filters);
-      return data;
+      if (Array.isArray(data)) return data;
+      const inner = (data as any)?.data;
+      return Array.isArray(inner) ? inner : [];
     },
   });
 
   const { data: stats } = useQuery({
-    queryKey: ['sinistres-stats'],
+    queryKey: ['sinistres-kpis'],
     queryFn: async () => {
-      const { data } = await sinistresApi.getDashboardStats();
-      return data;
+      try {
+        const { data } = await sinistresApi.getKpis();
+        return (data as any)?.data ?? data;
+      } catch {
+        return null;
+      }
     },
+    retry: false,
   });
 
   return (
@@ -106,7 +113,8 @@ export default function SinistresList() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {sinistres?.map((sinistre: Sinistre) => {
-                const StatusIcon = statusConfig[sinistre.statut].icon;
+                const cfg = statusConfig[sinistre.statut as keyof typeof statusConfig] || { label: sinistre.statut, color: 'bg-gray-100 text-gray-800', icon: AlertCircle };
+                const StatusIcon = cfg.icon;
                 return (
                   <tr key={sinistre.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-sm font-medium text-blue-600">{sinistre.numero}</td>
@@ -116,9 +124,9 @@ export default function SinistresList() {
                     <td className="px-6 py-4 text-sm font-semibold">{formatCurrency(sinistre.montantTotal)}</td>
                     <td className="px-6 py-4 text-sm">{formatCurrency(sinistre.sapActuel)}</td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusConfig[sinistre.statut].color}`}>
+                      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${cfg.color}`}>
                         <StatusIcon size={14} />
-                        {statusConfig[sinistre.statut].label}
+                        {cfg.label}
                       </span>
                     </td>
                     <td className="px-6 py-4">
