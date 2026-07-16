@@ -43,6 +43,8 @@ export default function AffaireDetail() {
     },
   });
 
+  const reassureurs = affaire?.reinsurers ?? affaire?.reassureurs ?? [];
+
   const deleteMutation = useMutation({
     mutationFn: () => affairesApi.delete(id!),
     onSuccess: () => {
@@ -97,7 +99,8 @@ export default function AffaireDetail() {
           <div>
             <h1 className="text-[24px] font-semibold text-gray-900">{affaire.numeroAffaire}</h1>
             <p className="text-[13px] text-gray-600 mt-1">
-              Créée le {formatDate(affaire.createdAt)} par {affaire.createdBy.firstName} {affaire.createdBy.lastName}
+              Créée le {formatDate(affaire.createdAt)}
+              {affaire.createdBy ? ` par ${affaire.createdBy.firstName} ${affaire.createdBy.lastName}` : ' par utilisateur inconnu'}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -158,7 +161,7 @@ export default function AffaireDetail() {
             </div>
             <div>
               <p className="text-[11px] text-gray-500 uppercase font-medium">Réassureurs</p>
-              <p className="text-[20px] font-semibold text-gray-900">{affaire.reinsurers.length}</p>
+              <p className="text-[20px] font-semibold text-gray-900">{reassureurs.length}</p>
             </div>
           </div>
         </div>
@@ -211,11 +214,11 @@ export default function AffaireDetail() {
                     <div className="space-y-3">
                       <div>
                         <p className="text-[11px] text-gray-500 uppercase font-medium mb-1">Assuré</p>
-                        <p className="text-[13px] text-gray-900">{affaire.assure.raisonSociale}</p>
+                        <p className="text-[13px] text-gray-900">{affaire.assure?.raisonSociale || '-'}</p>
                       </div>
                       <div>
                         <p className="text-[11px] text-gray-500 uppercase font-medium mb-1">Cédante</p>
-                        <p className="text-[13px] text-gray-900">{affaire.cedante.raisonSociale}</p>
+                        <p className="text-[13px] text-gray-900">{affaire.cedante?.raisonSociale || '-'}</p>
                       </div>
                       {affaire.coCourtier && (
                         <div>
@@ -329,7 +332,7 @@ export default function AffaireDetail() {
                 <div>
                   <h3 className="text-[14px] font-semibold text-gray-900 mb-4">Distribution des Réassureurs</h3>
                   <div className="space-y-3">
-                    {affaire.reinsurers.map((reinsurer) => (
+                    {reassureurs.map((reinsurer) => (
                       <div key={reinsurer.id} className="p-4 border border-gray-200 rounded-lg">
                         <div className="flex items-center justify-between mb-3">
                           <div>

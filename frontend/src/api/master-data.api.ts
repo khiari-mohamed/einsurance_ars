@@ -4,28 +4,24 @@ import {
   CreateAssureDto,
   UpdateAssureDto,
   AssuresListResponse,
-  AssureSingleResponse,
 } from '../types/assure.types';
 import {
   Cedante,
   CreateCedanteDto,
   UpdateCedanteDto,
   CedantesListResponse,
-  CedanteSingleResponse,
 } from '../types/cedante.types';
 import {
   Reassureur,
   CreateReassureurDto,
   UpdateReassureurDto,
   ReassureursListResponse,
-  ReassureurSingleResponse,
 } from '../types/reassureur.types';
 import {
   CoCourtier,
   CreateCoCourtierDto,
   UpdateCoCourtierDto,
   CoCourtiersListResponse,
-  CoCourtierSingleResponse,
 } from '../types/co-courtier.types';
 
 // ============================================================
@@ -43,7 +39,7 @@ export const assuresApi = {
    * Get a single client by ID
    */
   getOne: (id: string) =>
-    api.get<AssureSingleResponse>(`/master-data/assures/${id}`),
+    api.get<Assure>(`/master-data/assures/${id}`),
 
   /**
    * Create a new client
@@ -110,7 +106,7 @@ export const cedantesApi = {
    * Get a single compagnie by ID
    */
   getOne: (id: string) =>
-    api.get<CedanteSingleResponse>(`/master-data/cedantes/${id}`),
+    api.get<Cedante>(`/master-data/cedantes/${id}`),
 
   /**
    * Create a new compagnie
@@ -203,7 +199,7 @@ export const reassureursApi = {
    * Get a single réassureur by ID
    */
   getOne: (id: string) =>
-    api.get<ReassureurSingleResponse>(`/master-data/reassureurs/${id}`),
+    api.get<Reassureur>(`/master-data/reassureurs/${id}`),
 
   /**
    * Create a new réassureur
@@ -302,7 +298,7 @@ export const coCourtiersApi = {
    * Get a single courtier by ID
    */
   getOne: (id: string) =>
-    api.get<CoCourtierSingleResponse>(`/master-data/co-courtiers/${id}`),
+    api.get<CoCourtier>(`/master-data/co-courtiers/${id}`),
 
   /**
    * Create a new courtier

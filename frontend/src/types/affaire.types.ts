@@ -89,12 +89,13 @@ export interface Affaire {
     raisonSociale: string;
   };
   coCourtierId?: string;
-  createdBy: {
+  createdBy?: {
     id: string;
     firstName: string;
     lastName: string;
   };
   createdById: string;
+  reassureurs?: AffaireReinsurer[];
   numeroPolice?: string;
   branche?: string;
   garantie?: string;

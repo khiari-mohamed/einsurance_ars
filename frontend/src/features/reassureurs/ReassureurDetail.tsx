@@ -2,73 +2,63 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit2, Trash2, Plus, Mail, Phone, Building2, CreditCard, FileText, FileCheck, Shield, Globe } from 'lucide-react';
-import { cedantesApi } from '../../api/master-data.api';
+import { reassureursApi } from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
-import { Cedante, CedanteContact, CedanteBankAccount } from '../../types/cedante.types';
-import CedanteContactModal from './CedanteContactModal';
+import { Reassureur, ReassureurContact, ReassureurBankAccount } from '../../types/reassureur.types';
 
-export default function CedanteDetail() {
+export default function ReassureurDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
-  const [editingContact, setEditingContact] = useState<CedanteContact | null>(null);
-  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-  const [editingBank, setEditingBank] = useState<CedanteBankAccount | null>(null);
+  const [editingContact, setEditingContact] = useState<ReassureurContact | null>(null);
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [newCode, setNewCode] = useState('');
 
-  const { data: cedante, isLoading } = useQuery({
-    queryKey: ['cedantes', id],
+  const { data: reassureur, isLoading } = useQuery({
+    queryKey: ['reassureurs', id],
     queryFn: async () => {
-      const { data } = await cedantesApi.getOne(id!);
+      const { data } = await reassureursApi.getOne(id!);
       return data;
     },
     enabled: !!id,
   });
 
   const { data: contracts = [] } = useQuery({
-    queryKey: ['cedantes', id, 'contracts'],
+    queryKey: ['reassureurs', id, 'contracts'],
     queryFn: async () => {
-      const { data } = await affairesApi.getAll({ cedanteId: id, limit: 100 });
-      return data.data || data;
+      const { data } = await reassureursApi.getParticipations(id!);
+      return data.data || data || [];
     },
     enabled: !!id,
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => cedantesApi.delete(id!),
+    mutationFn: () => reassureursApi.delete(id!),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cedantes'] });
-      navigate('/cedantes');
+      queryClient.invalidateQueries({ queryKey: ['reassureurs'] });
+      navigate('/reassureurs');
     },
   });
 
   const deleteContactMutation = useMutation({
-    mutationFn: (contactId: string) => cedantesApi.deleteContact(id!, contactId),
+    mutationFn: (contactId: string) => reassureursApi.deleteContact(id!, contactId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cedantes', id] });
-    },
-  });
-
-  const deleteBankMutation = useMutation({
-    mutationFn: (bankId: string) => cedantesApi.deleteBankAccount(id!, bankId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cedantes', id] });
+      queryClient.invalidateQueries({ queryKey: ['reassureurs', id] });
     },
   });
 
   const overrideCodeMutation = useMutation({
-    mutationFn: (code: string) => cedantesApi.overrideCode(id!, code),
+    mutationFn: (code: string) => reassureursApi.overrideCode(id!, code),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cedantes', id] });
+      queryClient.invalidateQueries({ queryKey: ['reassureurs', id] });
       setIsOverrideModalOpen(false);
       setNewCode('');
     },
   });
 
   const handleDelete = () => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cette compagnie d\'assurances ?')) {
+    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce réassureur ?')) {
       deleteMutation.mutate();
     }
   };
@@ -79,15 +69,9 @@ export default function CedanteDetail() {
     }
   };
 
-  const handleDeleteBank = (bankId: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce compte bancaire ?')) {
-      deleteBankMutation.mutate(bankId);
-    }
-  };
-
   const handleOverrideCode = () => {
-    if (!newCode.match(/^CAS-[0-9]{4}$/)) {
-      alert('Le code doit être au format CAS-XXXX (ex: CAS-0042)');
+    if (!newCode.match(/^REA-[0-9]{4}$/)) {
+      alert('Le code doit être au format REA-XXXX (ex: REA-0042)');
       return;
     }
     if (window.confirm(`Confirmer le changement de code vers ${newCode} ?`)) {
@@ -103,15 +87,15 @@ export default function CedanteDetail() {
     );
   }
 
-  if (!cedante) {
+  if (!reassureur) {
     return (
       <div className="p-6 text-center text-gray-500">
-        Compagnie d'assurances non trouvée
+        Réassureur non trouvé
       </div>
     );
   }
 
-  const isAdmin = true; // TODO: Get from user context
+  const isAdmin = true;
 
   return (
     <div className="p-4 lg:p-6">
@@ -119,21 +103,21 @@ export default function CedanteDetail() {
       <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate('/cedantes')}
+            onClick={() => navigate('/reassureurs')}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
           >
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-[24px] font-semibold text-gray-900">{cedante.raisonSociale}</h1>
+            <h1 className="text-[24px] font-semibold text-gray-900">{reassureur.raisonSociale}</h1>
             <div className="flex items-center gap-3 mt-1">
-              <p className="text-[13px] text-gray-500">Code: {cedante.code}</p>
-              {cedante.oldCode && (
-                <p className="text-[11px] text-gray-400">Ancien code: {cedante.oldCode}</p>
+              <p className="text-[13px] text-gray-500">Code: {reassureur.code}</p>
+              {reassureur.oldCode && (
+                <p className="text-[11px] text-gray-400">Ancien code: {reassureur.oldCode}</p>
               )}
-              {cedante.codeModifiedAt && (
+              {reassureur.codeModifiedAt && (
                 <p className="text-[11px] text-gray-400">
-                  Modifié le {new Date(cedante.codeModifiedAt).toLocaleDateString()}
+                  Modifié le {new Date(reassureur.codeModifiedAt).toLocaleDateString()}
                 </p>
               )}
             </div>
@@ -162,33 +146,33 @@ export default function CedanteDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Onglet 1: Informations Générales */}
+          {/* Informations Générales */}
           <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
             <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <Building2 size={18} />
               Informations générales
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InfoField label="Raison Sociale" value={cedante.raisonSociale} />
-              <InfoField label="Code" value={cedante.code} />
-              <InfoField label="Compte Comptable" value={cedante.compteComptable} />
-              <InfoField label="Forme Juridique" value={cedante.formeJuridique} />
-              <InfoField label="Identifiant Unique" value={cedante.identifiantUnique || 'À renseigner'} />
+              <InfoField label="Raison Sociale" value={reassureur.raisonSociale} />
+              <InfoField label="Code" value={reassureur.code} />
+              <InfoField label="Compte Comptable" value={reassureur.compteComptable} />
+              <InfoField label="Forme Juridique" value={reassureur.formeJuridique} />
+              <InfoField label="Identifiant Unique" value={reassureur.identifiantUnique || 'À renseigner'} />
               <InfoField 
                 label="Résident" 
-                value={cedante.resident ? 'Oui (Tunisien)' : 'Non (Étranger)'} 
-                icon={cedante.resident ? <Shield size={14} /> : <Globe size={14} />}
+                value={reassureur.resident ? 'Oui (Tunisien)' : 'Non (Étranger)'} 
+                icon={reassureur.resident ? <Shield size={14} /> : <Globe size={14} />}
               />
-              <InfoField label="RNE (legacy)" value={cedante.rne || '-'} />
-              <InfoField label="Pays" value={cedante.pays || '-'} />
-              <InfoField label="Adresse" value={cedante.adresse || '-'} className="md:col-span-2" />
-              <InfoField label="Capital" value={cedante.capital ? `${cedante.capital} TND` : '-'} />
+              <InfoField label="RNE (legacy)" value={reassureur.rne || '-'} />
+              <InfoField label="Pays" value={reassureur.pays || '-'} />
+              <InfoField label="Adresse" value={reassureur.adresse || '-'} className="md:col-span-2" />
+              <InfoField label="Capital" value={reassureur.capital ? `${reassureur.capital} TND` : '-'} />
             </div>
-            {cedante.freeFields && Object.keys(cedante.freeFields).length > 0 && (
+            {reassureur.freeFields && Object.keys(reassureur.freeFields).length > 0 && (
               <div className="mt-4 pt-4 border-t border-gray-100">
                 <h3 className="text-[12px] font-medium text-gray-500 mb-2">Champs libres</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {Object.entries(cedante.freeFields).map(([key, value]) => (
+                  {Object.entries(reassureur.freeFields).map(([key, value]) => (
                     <InfoField key={key} label={key} value={String(value)} />
                   ))}
                 </div>
@@ -214,9 +198,9 @@ export default function CedanteDetail() {
                 Ajouter
               </button>
             </div>
-            {cedante.contacts && cedante.contacts.length > 0 ? (
+            {reassureur.contacts && reassureur.contacts.length > 0 ? (
               <div className="space-y-3">
-                {cedante.contacts.map((contact: CedanteContact) => (
+                {reassureur.contacts.map((contact: ReassureurContact) => (
                   <div key={contact.id} className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
                     <div className="flex items-start justify-between mb-2">
                       <div>
@@ -277,20 +261,10 @@ export default function CedanteDetail() {
                 <CreditCard size={18} />
                 Coordonnées bancaires
               </h2>
-              <button
-                onClick={() => {
-                  setEditingBank(null);
-                  setIsBankModalOpen(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-              >
-                <Plus size={16} />
-                Ajouter
-              </button>
             </div>
-            {cedante.bankAccounts && cedante.bankAccounts.length > 0 ? (
+            {reassureur.bankAccounts && reassureur.bankAccounts.length > 0 ? (
               <div className="space-y-3">
-                {cedante.bankAccounts.map((bank: CedanteBankAccount) => (
+                {reassureur.bankAccounts.map((bank: ReassureurBankAccount) => (
                   <div key={bank.id} className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -305,24 +279,10 @@ export default function CedanteDetail() {
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
                           <p className="text-[12px] text-gray-600">RIB: {bank.rib}</p>
                           <p className="text-[12px] text-gray-600">Devise: {bank.currency}</p>
+                          {bank.swift && (
+                            <p className="text-[12px] text-gray-600">SWIFT: {bank.swift}</p>
+                          )}
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => {
-                            setEditingBank(bank);
-                            setIsBankModalOpen(true);
-                          }}
-                          className="p-1 rounded hover:bg-blue-50 text-blue-600"
-                        >
-                          <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteBank(bank.id)}
-                          className="p-1 rounded hover:bg-red-50 text-red-600"
-                        >
-                          <Trash2 size={14} />
-                        </button>
                       </div>
                     </div>
                   </div>
@@ -333,13 +293,13 @@ export default function CedanteDetail() {
             )}
           </div>
 
-          {cedante.freeFields?.notes && (
+          {reassureur.freeFields?.notes && (
             <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
               <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <FileText size={18} />
                 Notes
               </h2>
-              <p className="text-[13px] text-gray-600 whitespace-pre-wrap">{cedante.freeFields.notes}</p>
+              <p className="text-[13px] text-gray-600 whitespace-pre-wrap">{reassureur.freeFields.notes}</p>
             </div>
           )}
         </div>
@@ -352,48 +312,58 @@ export default function CedanteDetail() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[13px] text-gray-600">Actif</span>
-                <span className={`px-2.5 py-1 text-[11px] font-medium rounded-full ${cedante.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                  {cedante.isActive ? 'Oui' : 'Non'}
+                <span className={`px-2.5 py-1 text-[11px] font-medium rounded-full ${reassureur.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  {reassureur.isActive ? 'Oui' : 'Non'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-[13px] text-gray-600">Compte verrouillé</span>
-                <span className={`px-2.5 py-1 text-[11px] font-medium rounded-full ${cedante.isAccountLocked ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                  {cedante.isAccountLocked ? 'Verrouillé' : 'Déverrouillé'}
+                <span className={`px-2.5 py-1 text-[11px] font-medium rounded-full ${reassureur.isAccountLocked ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                  {reassureur.isAccountLocked ? 'Verrouillé' : 'Déverrouillé'}
                 </span>
               </div>
-              {cedante.codeModifiedBy && (
+              {reassureur.codeModifiedBy && (
                 <div className="flex items-center justify-between">
                   <span className="text-[13px] text-gray-600">Code modifié par</span>
-                  <span className="text-[13px] text-gray-900">{cedante.codeModifiedBy}</span>
+                  <span className="text-[13px] text-gray-900">{reassureur.codeModifiedBy}</span>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Contrats */}
+          {/* Participations (Contrats) */}
           <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
-                <FileCheck size={18} />
-                Contrats
-              </h2>
-            </div>
+            <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <FileCheck size={18} />
+              Participations
+            </h2>
             {contracts.length > 0 ? (
               <div className="space-y-2">
-                {contracts.map((contract: any) => (
-                  <div
-                    key={contract.id}
-                    onClick={() => navigate(`/affaires/${contract.id}`)}
-                    className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
-                  >
-                    <p className="text-[13px] font-medium text-gray-900">{contract.numeroPolice || contract.reference}</p>
-                    <p className="text-[11px] text-gray-500">{contract.type}</p>
-                  </div>
-                ))}
+                {contracts.map((participation: any) => {
+                  const affaire = participation.affaire || participation;
+                  return (
+                    <div
+                      key={participation.id}
+                      onClick={() => affaire?.id && navigate(`/affaires/${affaire.id}`)}
+                      className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                    >
+                      <p className="text-[13px] font-medium text-gray-900">
+                        {affaire?.numéroPolice || affaire?.numeroAffaire || affaire?.reference || 'Contrat'}
+                      </p>
+                      <div className="flex items-center justify-between mt-1">
+                        <p className="text-[11px] text-gray-500">
+                          {affaire?.category || participation.type || 'N/A'}
+                        </p>
+                        <span className="text-[11px] font-semibold text-blue-600">
+                          {participation.partPct != null ? `${participation.partPct}%` : ''}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
-              <p className="text-[13px] text-gray-500 text-center py-4">Aucun contrat</p>
+              <p className="text-[13px] text-gray-500 text-center py-4">Aucune participation</p>
             )}
           </div>
         </div>
@@ -401,8 +371,8 @@ export default function CedanteDetail() {
 
       {/* Contact Modal */}
       {isContactModalOpen && (
-        <CedanteContactModal
-          cedanteId={id!}
+        <ReassureurContactModal
+          reassureurId={id!}
           contact={editingContact}
           onClose={() => {
             setIsContactModalOpen(false);
@@ -411,15 +381,13 @@ export default function CedanteDetail() {
         />
       )}
 
-      {/* Bank Account Modal — component not yet available, coming soon */}
-
       {/* Override Code Modal */}
       {isOverrideModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="p-6 border-b border-gray-100">
               <h2 className="text-[18px] font-semibold text-gray-900">Modifier le code</h2>
-              <p className="text-[13px] text-gray-500 mt-1">Format: CAS-XXXX (ex: CAS-0042)</p>
+              <p className="text-[13px] text-gray-500 mt-1">Format: REA-XXXX (ex: REA-0042)</p>
             </div>
             <div className="p-6">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Nouveau code</label>
@@ -427,7 +395,7 @@ export default function CedanteDetail() {
                 type="text"
                 value={newCode}
                 onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-                placeholder="CAS-0001"
+                placeholder="REA-0001"
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="text-[11px] text-amber-600 mt-2">
@@ -459,6 +427,10 @@ export default function CedanteDetail() {
   );
 }
 
+// ------------------------------------------------------------------
+// Sub-components
+// ------------------------------------------------------------------
+
 interface InfoFieldProps {
   label: string;
   value?: string;
@@ -474,6 +446,120 @@ function InfoField({ label, value, icon, className = '' }: InfoFieldProps) {
         {icon}
         {value || '-'}
       </p>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------
+// Contact Modal (inline, no separate file dependency)
+// ------------------------------------------------------------------
+
+interface ReassureurContactModalProps {
+  reassureurId: string;
+  contact: ReassureurContact | null;
+  onClose: () => void;
+}
+
+function ReassureurContactModal({ reassureurId, contact, onClose }: ReassureurContactModalProps) {
+  const queryClient = useQueryClient();
+  const [formData, setFormData] = useState<Partial<ReassureurContact>>(
+    contact || {
+      nom: '',
+      prenom: '',
+      poste: '',
+      telephone: '',
+      email: '',
+      isDefault: false,
+    }
+  );
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const mutation = useMutation({
+    mutationFn: (data: Partial<ReassureurContact>) => {
+      if (contact) {
+        return reassureursApi.updateContact(reassureurId, contact.id, data);
+      }
+      return reassureursApi.addContact(reassureurId, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reassureurs', reassureurId] });
+      onClose();
+    },
+    onError: (error: any) => {
+      if (error.response?.data?.message) {
+        setErrors({ submit: error.response.data.message });
+      }
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrors({});
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setErrors({ email: "Format d'email invalide" });
+      return;
+    }
+    mutation.mutate(formData);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <h2 className="text-[18px] font-semibold text-gray-900">
+            {contact ? 'Modifier le contact' : 'Nouveau contact'}
+          </h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+          {errors.submit && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">{errors.submit}</div>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Nom <span className="text-red-500">*</span></label>
+              <input type="text" name="nom" value={formData.nom || ''} onChange={handleChange} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prénom <span className="text-red-500">*</span></label>
+              <input type="text" name="prenom" value={formData.prenom || ''} onChange={handleChange} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Poste / Fonction</label>
+              <input type="text" name="poste" value={formData.poste || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Téléphone</label>
+              <input type="tel" name="telephone" value={formData.telephone || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Email</label>
+              <input type="email" name="email" value={formData.email || ''} onChange={handleChange} className={`w-full px-3 py-2 border ${errors.email ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500`} />
+              {errors.email && <p className="mt-1 text-[11px] text-red-500">{errors.email}</p>}
+            </div>
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="isDefault" checked={formData.isDefault || false} onChange={handleChange} className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500" />
+                <span className="text-[13px] font-medium text-gray-700">Contact principal</span>
+              </label>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg">Annuler</button>
+            <button type="submit" disabled={mutation.isPending} className="px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+              {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

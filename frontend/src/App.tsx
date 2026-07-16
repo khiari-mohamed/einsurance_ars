@@ -22,6 +22,7 @@ import AssureDetail from './features/assures/AssureDetail';
 import CedantesList from './features/cedantes/CedantesList';
 import CedanteDetail from './features/cedantes/CedanteDetail';
 import ReassureursList from './features/reassureurs/ReassureursList';
+import ReassureurDetail from './features/reassureurs/ReassureurDetail';
 import CoCourtiersList from './features/co-courtiers/CoCourtiersList';
 
 // ── Affaires ──────────────────────────────────────────────────────────────────────
@@ -171,12 +172,11 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
-              {/* ReassureurDetail doesn't exist yet — redirect to list */}
               <Route
                 path="reassureurs/:id"
                 element={
                   <ProtectedRoute path="/reassureurs">
-                    <ReassureursList />
+                    <ReassureurDetail />
                   </ProtectedRoute>
                 }
               />
