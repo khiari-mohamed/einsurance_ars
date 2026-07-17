@@ -5,6 +5,7 @@ import { Plus, Search, Eye } from 'lucide-react';
 import { affairesApi } from '../../api/affaires.api';
 import { formatCurrency } from '../../lib/currency';
 import { Affaire, AffaireStatus, AffaireCategory } from '../../types/affaire.types';
+import AffaireCreateModal from '../affaires/AffaireCreateModal';
 
 const statusColors: Record<AffaireStatus, string> = {
   [AffaireStatus.DRAFT]: 'bg-gray-100 text-gray-800',
@@ -36,6 +37,7 @@ const treatyTypeLabels: Record<string, string> = {
 export default function TraitesList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const navigate = useNavigate();
 
   const { data: traites = [], isLoading } = useQuery({
@@ -61,7 +63,7 @@ export default function TraitesList() {
           </p>
         </div>
         <button
-          onClick={() => /* TODO: Open treaty create modal */ alert('Création de traité - à implémenter')}
+          onClick={() => setIsCreateModalOpen(true)}
           className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2.5 rounded-lg hover:bg-purple-700 transition-colors text-[13px] font-medium"
         >
           <Plus size={18} />
@@ -152,6 +154,13 @@ export default function TraitesList() {
           </div>
         )}
       </div>
+
+      {isCreateModalOpen && (
+        <AffaireCreateModal
+          onClose={() => setIsCreateModalOpen(false)}
+          initialCategory={AffaireCategory.TRAITEE}
+        />
+      )}
     </div>
   );
 }

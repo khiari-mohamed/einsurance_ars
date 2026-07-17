@@ -7,14 +7,15 @@ import { CreateAffaireData, AffaireCategory, AffaireType, PaymentMode, Commissio
 
 interface Props {
   onClose: () => void;
+  initialCategory?: AffaireCategory;
 }
 
-export default function AffaireCreateModal({ onClose }: Props) {
+export default function AffaireCreateModal({ onClose, initialCategory }: Props) {
   const [step, setStep] = useState(1);
   const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState<CreateAffaireData>({
-    category: AffaireCategory.FACULTATIVE,
+    category: initialCategory ?? AffaireCategory.FACULTATIVE,
     type: AffaireType.PROPORTIONNEL,
     assureId: '',
     cedanteId: '',

@@ -422,22 +422,32 @@ export class DashboardService {
     }));
   }
 
-  async getEcheances(days = 7) {
+  async getEcheances(days = 7, page = 1, pageSize = 20) {
     const now = new Date();
     const future = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const where = {
+      isActive: true,
+      OR: [
+        { facultativeData: { dateEcheance: { gte: now, lte: future } } },
+        { traiteData: { dateEcheance: { gte: now, lte: future } } },
+      ],
+    };
+
+    const total = await this.prisma.affaire.count({ where });
+
     const affaires = await this.prisma.affaire.findMany({
-      where: {
-        isActive: true,
-        OR: [
-          { facultativeData: { dateEcheance: { gte: now, lte: future } } },
-          { traiteData: { dateEcheance: { gte: now, lte: future } } },
-        ],
-      },
+      where,
       include: { facultativeData: true, traiteData: true },
-      take: 20,
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+      orderBy: [
+        { facultativeData: { dateEcheance: 'asc' } },
+        { traiteData: { dateEcheance: 'asc' } },
+      ],
     });
 
-    return affaires.map(a => ({
+    const items = affaires.map(a => ({
       id: a.id,
       type: a.type,
       affaireNumero: a.numero,
@@ -445,6 +455,8 @@ export class DashboardService {
       dateEcheance: (a.facultativeData?.dateEcheance ?? a.traiteData?.dateEcheance)?.toISOString() ?? '',
       responsable: 'Service Réassurance',
     }));
+
+    return { items, total, page, pageSize };
   }
 
   async getAlerts() {

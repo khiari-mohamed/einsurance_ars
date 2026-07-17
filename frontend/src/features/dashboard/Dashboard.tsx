@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -18,6 +18,32 @@ import { cedantesApi, reassureursApi } from '../../api/master-data.api';
 // ── Palette used across all charts ────────────────────────────────────────────
 
 const C = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4', '#EC4899', '#14B8A6'] as const;
+
+const DASHBOARD_PRINT_STYLES = `
+  @media print {
+    body * {
+      visibility: hidden !important;
+    }
+
+    .dashboard-printable,
+    .dashboard-printable * {
+      visibility: visible !important;
+    }
+
+    .dashboard-printable {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      background: white !important;
+      padding: 0 !important;
+    }
+
+    .dashboard-printable .no-print {
+      display: none !important;
+    }
+  }
+`;
 
 // ── Domain types ───────────────────────────────────────────────────────────────
 
@@ -211,7 +237,10 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
   const handleFilterChange = (f: DashboardFilters) => {
     setFilters(f);
     saveFilters(f);
+    // Reset echeances page when filters change so results start from first page
+    try { setEPage(1); } catch (e) { /* ePage not in scope for other dashboards */ }
   };
+
 
   const qOpts = { staleTime: 30_000, retry: 1 };
 
@@ -222,46 +251,53 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
   });
 
   const { data: caEvolution = [] } = useQuery({
-    queryKey: ['ca-evolution'],
+    queryKey: ['ca-evolution', filters],
     queryFn:  () => dashboardApi.getCAEvolution().then((r) => r.data),
     ...qOpts,
   });
 
   const { data: caCedantes = [] } = useQuery({
-    queryKey: ['ca-cedantes'],
-    queryFn:  () => dashboardApi.getCACedantes({ limit: 8 }).then((r) => r.data),
+    queryKey: ['ca-cedantes', filters],
+    queryFn:  () => dashboardApi.getCACedantes({ limit: 8, startDate: filters.startDate, endDate: filters.endDate }).then((r) => r.data),
     ...qOpts,
   });
 
   const { data: caReassureurs = [] } = useQuery({
-    queryKey: ['ca-reassureurs'],
-    queryFn:  () => dashboardApi.getCAReassureurs({ limit: 6 }).then((r) => r.data),
+    queryKey: ['ca-reassureurs', filters],
+    queryFn:  () => dashboardApi.getCAReassureurs({ limit: 6, startDate: filters.startDate, endDate: filters.endDate }).then((r) => r.data),
     ...qOpts,
   });
 
   const { data: sinistresTrend = [] } = useQuery({
-    queryKey: ['sinistres-trend'],
+    queryKey: ['sinistres-trend', filters],
     queryFn:  () => dashboardApi.getSinistresTrend({ months: 12 }).then((r) => r.data),
     ...qOpts,
   });
 
   const { data: topAffaires = [] } = useQuery<TopAffaire[]>({
-    queryKey: ['top-affaires'],
+    queryKey: ['top-affaires', filters],
     queryFn:  () => dashboardApi.getTopAffaires({ limit: 10 }).then((r) => r.data),
     ...qOpts,
   });
 
   const { data: sinistresMajeurs = [] } = useQuery<SinistreMajeur[]>({
-    queryKey: ['sinistres-majeurs'],
+    queryKey: ['sinistres-majeurs', filters],
     queryFn:  () => dashboardApi.getSinistresMajeurs({ minAmount: 50_000, limit: 10 }).then((r) => r.data),
     ...qOpts,
   });
 
-  const { data: echeances = [] } = useQuery<Echeance[]>({
-    queryKey: ['echeances'],
-    queryFn:  () => dashboardApi.getEcheances({ days: 7 }).then((r) => r.data),
+  const [ePage, setEPage] = useState<number>(1);
+  const [ePageSize] = useState<number>(20);
+
+  const { data: echeancesData } = useQuery<{ items: Echeance[]; total: number; page: number; pageSize: number } | undefined>({
+    queryKey: ['echeances', ePage, ePageSize],
+    queryFn:  () => dashboardApi.getEcheances({ days: 7, page: ePage, pageSize: ePageSize }).then((r) => r.data),
     ...qOpts,
   });
+
+  const echeances = echeancesData?.items ?? [];
+  const echeancesTotal = echeancesData?.total ?? 0;
+  const echeancesLastPage = Math.max(1, Math.ceil(echeancesTotal / ePageSize));
 
   const { data: alerts = [] } = useQuery<DashboardAlert[]>({
     queryKey: ['alerts'],
@@ -272,7 +308,9 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
   if (isLoading) return <div className="p-6"><SkeletonLoader /></div>;
 
   return (
-    <div ref={dashboardRef} className="p-4 lg:p-6 space-y-6">
+    <>
+      <style>{DASHBOARD_PRINT_STYLES}</style>
+      <div ref={dashboardRef} className="dashboard-printable p-4 lg:p-6 space-y-6">
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -493,8 +531,26 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
         </table>
       </TableCard>
 
+      <div className="flex items-center justify-between px-3">
+        <div className="text-sm text-slate-500">{`Total: ${echeancesTotal}`}</div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setEPage((p) => Math.max(1, p - 1))}
+            disabled={ePage <= 1}
+            className="rounded px-3 py-1 text-sm bg-white border border-slate-200 disabled:opacity-50"
+          >Préc</button>
+          <div className="text-sm text-slate-600">Page {ePage} / {echeancesLastPage}</div>
+          <button
+            onClick={() => setEPage((p) => Math.min(echeancesLastPage, p + 1))}
+            disabled={ePage >= echeancesLastPage}
+            className="rounded px-3 py-1 text-sm bg-white border border-slate-200 disabled:opacity-50"
+          >Suiv</button>
+        </div>
+      </div>
+
       <ExchangeRateWidget />
     </div>
+    </>
   );
 }
 
@@ -1116,23 +1172,26 @@ function FilterBar({
   const cedantes = cedantesResponse?.data ?? [];
   const reassureurs = reassureursResponse?.data ?? [];
 
+  const [localFilters, setLocalFilters] = useState<DashboardFilters>(filters);
+  useEffect(() => setLocalFilters(filters), [filters]);
+
   const f = (field: keyof DashboardFilters, value: string) =>
-    onFilterChange({ ...filters, [field]: value });
+    setLocalFilters({ ...localFilters, [field]: value });
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div>
           <label className="mb-1.5 block text-xs font-medium text-slate-500">Date début</label>
-          <input type="date" className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={filters.startDate ?? ''} onChange={(e) => f('startDate', e.target.value)} />
+          <input type="date" className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={localFilters.startDate ?? ''} onChange={(e) => f('startDate', e.target.value)} />
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-slate-500">Date fin</label>
-          <input type="date" className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={filters.endDate ?? ''} onChange={(e) => f('endDate', e.target.value)} />
+          <input type="date" className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={localFilters.endDate ?? ''} onChange={(e) => f('endDate', e.target.value)} />
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-slate-500">Cédante</label>
-          <select className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={filters.cedanteId ?? ''} onChange={(e) => f('cedanteId', e.target.value)}>
+          <select className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={localFilters.cedanteId ?? ''} onChange={(e) => f('cedanteId', e.target.value)}>
             <option value="">Toutes</option>
             {(cedantes as { id: string; raisonSociale: string }[]).map((c) => (
               <option key={c.id} value={c.id}>{c.raisonSociale}</option>
@@ -1141,7 +1200,7 @@ function FilterBar({
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-slate-500">Réassureur</label>
-          <select className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={filters.reassureurId ?? ''} onChange={(e) => f('reassureurId', e.target.value)}>
+          <select className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={localFilters.reassureurId ?? ''} onChange={(e) => f('reassureurId', e.target.value)}>
             <option value="">Tous</option>
             {(reassureurs as { id: string; raisonSociale: string }[]).map((r) => (
               <option key={r.id} value={r.id}>{r.raisonSociale}</option>
@@ -1157,6 +1216,18 @@ function FilterBar({
             <option value="GBP">GBP — Livre Sterling</option>
           </select>
         </div>
+      </div>
+      <div className="mt-3 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          onClick={() => setLocalFilters({})}
+          className="rounded-xl border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600"
+        >Réinitialiser</button>
+        <button
+          type="button"
+          onClick={() => onFilterChange(localFilters)}
+          className="rounded-xl bg-red-600 px-3 py-1 text-sm text-white"
+        >Appliquer</button>
       </div>
     </div>
   );

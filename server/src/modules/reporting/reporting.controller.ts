@@ -88,8 +88,12 @@ export class ReportingController {
   @Get('dashboard/echeances')
   @RequirePermissions(Permission.REPORTING_READ)
   @ApiQuery({ name: 'days', required: false })
-  getEcheances(@Query('days') days?: number) {
-    return this.dashboard.getEcheances(days);
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'pageSize', required: false })
+  getEcheances(@Query('days') days?: number, @Query('page') page?: number, @Query('pageSize') pageSize?: number) {
+    const p = page ? Number(page) : 1;
+    const ps = pageSize ? Number(pageSize) : 20;
+    return this.dashboard.getEcheances(days, p, ps);
   }
 
   @Get('dashboard/alerts')

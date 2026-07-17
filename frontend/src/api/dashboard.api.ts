@@ -33,7 +33,7 @@ export const dashboardApi = {
   getSinistresMajeurs: (params?: { minAmount?: number; limit?: number }) =>
     api.get('/reporting/dashboard/sinistres-majeurs', { params }),
 
-  getEcheances: (params?: { days?: number }) =>
+  getEcheances: (params?: { days?: number; page?: number; pageSize?: number }) =>
     api.get('/reporting/dashboard/echeances', { params }),
 
   getAlerts: () =>
