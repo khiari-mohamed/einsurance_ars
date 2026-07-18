@@ -1,11 +1,12 @@
 /**
  * Assure (Client) Types
- * 
+ *
  * Per CDC: Clients (Assurés) have:
  * - 4 tabs only (NO bank accounts, NO compte comptable)
- * - NO identifiantUnique, NO resident (these are for Compagnies and Réassureurs only)
+ * - NO identifiantUnique, NO resident (these ARE used on Cedante/Reassureur/CoCourtier,
+ *   confirmed — but not on Assuré, whose fiche stays intentionally lighter per the CDC)
  * - Code format: CLI-0001 (auto-generated)
- * - RNE is optional (legacy field)
+ * - RNE is optional
  * - Audit trail for code modifications (admin override)
  */
 
@@ -15,25 +16,22 @@
 
 export interface Assure {
   id: string;
-  code: string;                          // CLI-0001, auto-generated
+  code: string;
   raisonSociale: string;
-  rne?: string;                          // Optional — legacy field
+  rne?: string;
   formeJuridique?: string;
   adresse?: string;
   pays?: string;
   capital?: number;
-  freeFields?: Record<string, any>;      // Contains notes, etc.
+  freeFields?: Record<string, any>;
 
-  // Audit trail for code modifications (admin override)
-  codeModifiedBy?: string;               // User ID who last modified the code
-  codeModifiedAt?: string;               // Timestamp of last code modification
-  oldCode?: string;                      // Previous code value (for rollback/audit)
+  codeModifiedBy?: string;
+  codeModifiedAt?: string;
+  oldCode?: string;
 
-  // Relations
   contacts?: AssureContact[];
-  facultatives?: FacultativeAffaire[];   // Deals linked to this client
+  facultatives?: FacultativeAffaire[];
 
-  // Status
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -46,11 +44,20 @@ export interface Assure {
 export interface AssureContact {
   id: string;
   nom: string;
-  prenom: string;
-  poste?: string;                        // Changed from 'fonction' to match DTO
-  telephone?: string;
+  prenom?: string;
+  poste?: string;
+  // FIX: this type previously had ONLY `telephone`, while CreateAssureContactDto
+  // (below) had `telephone` AND `mobile` — same entity/DTO split bug as
+  // Reassureur. Unified to telephoneFixe/telephoneMobile, matching the shared
+  // backend Contact model. Section 5.7's Assuré contact table lists Prénom/Nom/
+  // Poste/Téléphone/Email without a separate Mobile column, but the backend Contact
+  // model is shared across all 4 entities — keeping the field names consistent here
+  // avoids a 5th divergent shape; telephoneMobile is simply left unused/empty for
+  // Assuré if the client confirms Assuré truly never needs it.
+  telephoneFixe?: string;
+  telephoneMobile?: string;
   email?: string;
-  isDefault?: boolean;                   // Changed from 'principal' to match DTO
+  isDefault?: boolean;
   assureId: string;
   createdAt: string;
   updatedAt: string;
@@ -72,9 +79,6 @@ export interface FacultativeAffaire {
 // DTOs (API Request/Response)
 // ============================================================
 
-/**
- * Create Assure — matches backend CreateAssureDto
- */
 export interface CreateAssureDto {
   raisonSociale: string;
   rne?: string;
@@ -86,9 +90,6 @@ export interface CreateAssureDto {
   contacts?: CreateAssureContactDto[];
 }
 
-/**
- * Update Assure — matches backend UpdateAssureDto
- */
 export interface UpdateAssureDto {
   raisonSociale?: string;
   rne?: string;
@@ -100,17 +101,13 @@ export interface UpdateAssureDto {
   contacts?: CreateAssureContactDto[];
 }
 
-/**
- * Contact DTO for create/update
- */
 export interface CreateAssureContactDto {
   nom: string;
-  prenom: string;
+  prenom?: string;
   poste?: string;
-  telephone?: string;
-  mobile?: string;
+  telephoneFixe?: string;
+  telephoneMobile?: string;
   email?: string;
-  isDefault?: boolean;
 }
 
 // ============================================================
@@ -125,6 +122,4 @@ export interface AssuresListResponse {
   totalPages: number;
 }
 
-export interface AssureSingleResponse {
-  data: Assure;
-}
+// NOTE: AssureSingleResponse removed — see cedante.types.ts note.

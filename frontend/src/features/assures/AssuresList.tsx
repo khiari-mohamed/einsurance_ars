@@ -1,28 +1,52 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Edit2, Trash2, X, Eye } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, X, Eye, ChevronLeft, ChevronRight, AlertCircle } from 'lucide-react';
 import { assuresApi } from '../../api/master-data.api';
 import { Assure } from '../../types/assure.types';
 
+type Statut = 'ACTIVE' | 'INACTIVE' | 'ALL';
+const LIMIT = 20;
+
 export default function AssuresList() {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  const [statut, setStatut] = useState<Statut>('ACTIVE');
+  const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAssure, setEditingAssure] = useState<Assure | null>(null);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const { data: assures = [], isLoading, error } = useQuery({
-    queryKey: ['assures'],
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statut]);
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['assures', search, statut, page],
     queryFn: async () => {
-      const { data } = await assuresApi.getAll();
-      return data.data;
+      const { data } = await assuresApi.getAll({
+        search: search || undefined,
+        page,
+        limit: LIMIT,
+        statut,
+      });
+      return data;
     },
+    placeholderData: (prev) => prev,
   });
 
-  if (error) {
-    console.error('Error loading assures:', error);
-  }
+  const assures = data?.data ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => assuresApi.delete(id),
@@ -31,20 +55,13 @@ export default function AssuresList() {
     },
   });
 
-  const filteredAssures = assures.filter((assure: Assure) =>
-    assure.raisonSociale?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    assure.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    assure.rne?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    assure.pays?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   const handleEdit = (assure: Assure) => {
     setEditingAssure(assure);
     setIsModalOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) {
+  const handleDeactivate = (id: string) => {
+    if (window.confirm('Désactiver ce client ? Il restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.')) {
       deleteMutation.mutate(id);
     }
   };
@@ -71,22 +88,40 @@ export default function AssuresList() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-        <div className="p-4 border-b border-gray-100">
-          <div className="relative">
+        <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
               placeholder="Rechercher par raison sociale, code, RNE ou pays..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 self-start sm:self-auto">
+            {(['ACTIVE', 'INACTIVE', 'ALL'] as Statut[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatut(s)}
+                className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors ${
+                  statut === s ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {s === 'ACTIVE' ? 'Actifs' : s === 'INACTIVE' ? 'Inactifs' : 'Tous'}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {isLoading ? (
+        {error ? (
+          <div className="p-8 text-center">
+            <AlertCircle className="mx-auto text-red-400 mb-2" size={24} />
+            <p className="text-[13px] text-red-600">Erreur lors du chargement des clients. Veuillez réessayer.</p>
+          </div>
+        ) : isLoading ? (
           <div className="p-8 text-center text-gray-500">Chargement...</div>
-        ) : filteredAssures.length === 0 ? (
+        ) : assures.length === 0 ? (
           <div className="p-8 text-center text-gray-500">Aucun client trouvé</div>
         ) : (
           <>
@@ -98,16 +133,24 @@ export default function AssuresList() {
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Raison Sociale</th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">RNE</th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Pays</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Statut</th>
                     <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredAssures.map((assure: Assure) => (
+                  {assures.map((assure: Assure) => (
                     <tr key={assure.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-[13px] font-medium text-gray-900">{assure.code}</td>
                       <td className="px-4 py-3 text-[13px] text-gray-900">{assure.raisonSociale}</td>
                       <td className="px-4 py-3 text-[13px] text-gray-600 font-mono">{assure.rne || '-'}</td>
                       <td className="px-4 py-3 text-[13px] text-gray-600">{assure.pays || '-'}</td>
+                      <td className="px-4 py-3 text-[13px]">
+                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                          assure.isActive === false ? 'bg-gray-100 text-gray-500' : 'bg-green-50 text-green-700'
+                        }`}>
+                          {assure.isActive === false ? 'Inactif' : 'Actif'}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
@@ -124,13 +167,15 @@ export default function AssuresList() {
                           >
                             <Edit2 size={16} />
                           </button>
-                          <button
-                            onClick={() => handleDelete(assure.id)}
-                            className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors"
-                            title="Supprimer"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {assure.isActive !== false && (
+                            <button
+                              onClick={() => handleDeactivate(assure.id)}
+                              className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors"
+                              title="Désactiver"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -140,7 +185,7 @@ export default function AssuresList() {
             </div>
 
             <div className="md:hidden divide-y divide-gray-100">
-              {filteredAssures.map((assure: Assure) => (
+              {assures.map((assure: Assure) => (
                 <div key={assure.id} className="p-4 hover:bg-gray-50 transition-colors">
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
@@ -148,24 +193,17 @@ export default function AssuresList() {
                       <p className="text-[14px] font-semibold text-gray-900">{assure.code}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => navigate(`/assures/${assure.id}`)}
-                        className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
-                      >
+                      <button onClick={() => navigate(`/assures/${assure.id}`)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors">
                         <Eye size={18} />
                       </button>
-                      <button
-                        onClick={() => handleEdit(assure)}
-                        className="p-2 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
-                      >
+                      <button onClick={() => handleEdit(assure)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors">
                         <Edit2 size={18} />
                       </button>
-                      <button
-                        onClick={() => handleDelete(assure.id)}
-                        className="p-2 rounded-lg hover:bg-red-50 text-red-600 transition-colors"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {assure.isActive !== false && (
+                        <button onClick={() => handleDeactivate(assure.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-600 transition-colors">
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -185,25 +223,47 @@ export default function AssuresList() {
                         <p className="text-[13px] text-gray-600">{assure.pays}</p>
                       </div>
                     )}
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                      assure.isActive === false ? 'bg-gray-100 text-gray-500' : 'bg-green-50 text-green-700'
+                    }`}>
+                      {assure.isActive === false ? 'Inactif' : 'Actif'}
+                    </span>
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+              <p className="text-[12px] text-gray-500">
+                {total} client{total !== 1 ? 's' : ''} — page {page} / {totalPages}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="p-1.5 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="p-1.5 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </div>
           </>
         )}
       </div>
 
       {isModalOpen && (
-        <AssureModal
-          assure={editingAssure}
-          onClose={handleCloseModal}
-        />
+        <AssureModal assure={editingAssure} onClose={handleCloseModal} />
       )}
     </div>
   );
 }
-
-// --- Assure Modal Component (4 tabs — no bank accounts, no compte comptable) ---
 
 interface AssureModalProps {
   assure: Assure | null;
@@ -251,9 +311,9 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData((prev) => ({ ...prev, [name]: value }));
     if (errors[name]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
+      setErrors((prev) => ({ ...prev, [name]: '' }));
     }
   };
 
@@ -264,10 +324,7 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
           <h2 className="text-[18px] font-semibold text-gray-900">
             {assure ? 'Modifier le client' : 'Nouveau client'}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-          >
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -280,7 +337,6 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Raison Sociale */}
             <div className="md:col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
                 Raison Sociale <span className="text-red-500">*</span>
@@ -295,7 +351,6 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
               />
             </div>
 
-            {/* RNE (legacy) */}
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">RNE</label>
               <input
@@ -308,7 +363,6 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
               <p className="mt-1 text-[11px] text-gray-400">Ancien format — optionnel pour les clients</p>
             </div>
 
-            {/* Forme Juridique */}
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Forme Juridique</label>
               <input
@@ -320,7 +374,6 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
               />
             </div>
 
-            {/* Adresse */}
             <div className="md:col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Adresse</label>
               <input
@@ -332,7 +385,6 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
               />
             </div>
 
-            {/* Pays */}
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays</label>
               <input
@@ -344,7 +396,6 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
               />
             </div>
 
-            {/* Capital */}
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Capital (TND)</label>
               <input
@@ -358,11 +409,7 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
           </div>
 
           <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
+            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
               Annuler
             </button>
             <button

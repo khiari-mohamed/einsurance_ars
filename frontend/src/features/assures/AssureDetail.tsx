@@ -19,8 +19,12 @@ import { Assure, AssureContact } from '../../types/assure.types';
 import ContactModal from './ContactModal';
 
 // ------------------------------------------------------------------
-// Local types (extend Assure with `documents?: AssureDocumentItem[]`
-// in assure.types.ts if you want strict typing end-to-end)
+// Local types
+// NOTE: `documents` is still accessed via `(assure as any)?.documents` below —
+// Assure type doesn't declare a `documents` field even though this UI clearly
+// depends on it. Worth adding `documents?: AssureDocumentItem[]` to Assure in
+// assure.types.ts properly rather than casting — flagging rather than changing
+// that file again outside its own review pass.
 // ------------------------------------------------------------------
 interface AssureDocumentItem {
   id: string;
@@ -40,9 +44,6 @@ type DocKind = 'pdf' | 'image' | 'office' | 'other';
 const ITEMS_PER_PAGE = 6;
 const CHART_COLORS = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626'];
 
-// ------------------------------------------------------------------
-// Helpers (pure functions — safe to hoist outside the component)
-// ------------------------------------------------------------------
 function getFileKind(doc: AssureDocumentItem): DocKind {
   const mime = (doc.mimeType || '').toLowerCase();
   const name = (doc.originalName || doc.nom || '').toLowerCase();
@@ -68,13 +69,11 @@ export default function AssureDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  // ---- original state (unchanged) ----
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<AssureContact | null>(null);
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [newCode, setNewCode] = useState('');
 
-  // ---- new state: search / filters / pagination / document viewer ----
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [typeFilter, setTypeFilter] = useState<ContractTypeFilter>('ALL');
@@ -85,7 +84,6 @@ export default function AssureDetail() {
   const [currentPage, setCurrentPage] = useState(1);
   const [viewerDocument, setViewerDocument] = useState<AssureDocumentItem | null>(null);
 
-  // ---- original queries (unchanged) ----
   const { data: assure, isLoading } = useQuery<Assure>({
     queryKey: ['assures', id],
     queryFn: async () => {
@@ -104,13 +102,11 @@ export default function AssureDetail() {
     enabled: !!id,
   });
 
-  // Documents relation — optional on Assure; defaults to [] so the UI never breaks
   const documents: AssureDocumentItem[] = useMemo(
     () => (assure as any)?.documents ?? [],
     [assure]
   );
 
-  // ---- original label helpers (unchanged) ----
   const normalizeCategoryLabel = (value: string | undefined) => {
     if (!value) return '';
     const lower = value.toLowerCase();
@@ -160,7 +156,6 @@ export default function AssureDetail() {
     return parts.join(' • ');
   };
 
-  // ---- original mutations (unchanged) ----
   const deleteMutation = useMutation({
     mutationFn: () => assuresApi.delete(id!),
     onSuccess: () => {
@@ -185,8 +180,9 @@ export default function AssureDetail() {
     },
   });
 
-  const handleDelete = () => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce client ?')) {
+  // FIX: relabeled "Supprimer" -> "Désactiver", same rationale as Cedante/Reassureur.
+  const handleDeactivate = () => {
+    if (window.confirm('Désactiver ce client ? Il restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.')) {
       deleteMutation.mutate();
     }
   };
@@ -207,9 +203,6 @@ export default function AssureDetail() {
     }
   };
 
-  // ------------------------------------------------------------------
-  // New: derived data — filters, search, pagination, charts, export
-  // ------------------------------------------------------------------
   const cedanteOptions = useMemo(() => {
     const names = new Set<string>();
     contracts.forEach((c: any) => {
@@ -265,7 +258,6 @@ export default function AssureDetail() {
     });
   }, [contracts, searchTerm, typeFilter, reassuranceFilter, cedanteFilter, dateFrom, dateTo]);
 
-  // Reset to page 1 whenever the result set changes shape
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, typeFilter, reassuranceFilter, cedanteFilter, dateFrom, dateTo]);
@@ -293,7 +285,6 @@ export default function AssureDetail() {
     setDateTo('');
   };
 
-  // Chart data — computed off the FULL contract list (overview), not the filtered table
   const categoryChartData = useMemo(() => {
     let facultative = 0;
     let traite = 0;
@@ -322,7 +313,6 @@ export default function AssureDetail() {
       .map(([year, count]) => ({ year, contrats: count }));
   }, [contracts]);
 
-  // Excel export — real .xlsx via SheetJS, exports the currently filtered set
   const handleExportExcel = () => {
     if (!assure) return;
 
@@ -409,13 +399,15 @@ export default function AssureDetail() {
               Modifier le code
             </button>
           )}
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-          >
-            <Trash2 size={16} />
-            Supprimer
-          </button>
+          {assure.isActive !== false && (
+            <button
+              onClick={handleDeactivate}
+              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <Trash2 size={16} />
+              Désactiver
+            </button>
+          )}
         </div>
       </div>
 
@@ -582,10 +574,17 @@ export default function AssureDetail() {
                         {contact.email}
                       </p>
                     )}
-                    {contact.telephone && (
+                    {/* FIX: telephone -> telephoneFixe / telephoneMobile */}
+                    {contact.telephoneFixe && (
                       <p className="text-[12px] text-gray-600 flex items-center gap-1">
                         <Phone size={12} />
-                        {contact.telephone}
+                        {contact.telephoneFixe} <span className="text-gray-400">(fixe)</span>
+                      </p>
+                    )}
+                    {contact.telephoneMobile && (
+                      <p className="text-[12px] text-gray-600 flex items-center gap-1">
+                        <Phone size={12} />
+                        {contact.telephoneMobile} <span className="text-gray-400">(mobile)</span>
                       </p>
                     )}
                   </div>
@@ -934,7 +933,7 @@ export default function AssureDetail() {
         </div>
       )}
 
-      {/* Document viewer popup — supports PDF, images, Office docs, and fallback download */}
+      {/* Document viewer popup */}
       {viewerDocument && (
         <DocumentViewerModal document={viewerDocument} onClose={() => setViewerDocument(null)} />
       )}
@@ -942,9 +941,6 @@ export default function AssureDetail() {
   );
 }
 
-// ------------------------------------------------------------------
-// Sub-components
-// ------------------------------------------------------------------
 interface InfoFieldProps {
   label: string;
   value?: string;
@@ -984,18 +980,19 @@ function StatCard({ icon, label, value, bg }: StatCardProps) {
 }
 
 interface DocumentViewerModalProps {
-  document: AssureDocumentItem;
+  document: AssureDocumentItem | null;
   onClose: () => void;
 }
 
 function DocumentViewerModal({ document: doc, onClose }: DocumentViewerModalProps) {
+  if (!doc) return null;
+
   const kind = getFileKind(doc);
   const displayName = doc.originalName || doc.nom;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-100 shrink-0">
           <div className="min-w-0">
             <p className="text-[14px] font-semibold text-gray-900 truncate">{displayName}</p>
@@ -1032,7 +1029,6 @@ function DocumentViewerModal({ document: doc, onClose }: DocumentViewerModalProp
           </div>
         </div>
 
-        {/* Body — preview by kind */}
         <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center p-4">
           {kind === 'pdf' && (
             <iframe src={doc.filePath} title={displayName} className="w-full h-full rounded-lg border border-gray-200 bg-white" />

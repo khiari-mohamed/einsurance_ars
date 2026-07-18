@@ -12,17 +12,27 @@ interface ContactModalProps {
 
 export default function ContactModal({ assureId, contact, onClose }: ContactModalProps) {
   const queryClient = useQueryClient();
+  // FIX: this was the worst field-matching bug in the batch — the initial state
+  // used `fonction`, `telephone`, `mobile`, `principal`, none of which exist on
+  // AssureContact / CreateAssureContactDto. The real fields are `poste`,
+  // `telephoneFixe`, `telephoneMobile`, `isDefault`. This form was submitting a
+  // payload shape that didn't match its own imported type at all.
   const [formData, setFormData] = useState<Partial<AssureContact>>(
     contact || {
       nom: '',
       prenom: '',
-      fonction: '',
-      telephone: '',
-      mobile: '',
+      poste: '',
+      telephoneFixe: '',
+      telephoneMobile: '',
       email: '',
-      principal: false,
+      isDefault: false,
     }
   );
+
+  // FIX: errors state + submit-error display were entirely missing here, unlike
+  // the other two contact modals — added for consistency, and so a 400/409 from
+  // the backend doesn't fail silently.
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const mutation = useMutation({
     mutationFn: (data: Partial<AssureContact>) => {
@@ -35,16 +45,31 @@ export default function ContactModal({ assureId, contact, onClose }: ContactModa
       queryClient.invalidateQueries({ queryKey: ['assures', assureId] });
       onClose();
     },
+    onError: (error: any) => {
+      if (error.response?.data?.message) {
+        setErrors({ submit: error.response.data.message });
+      }
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setErrors({});
+
+    if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setErrors({ email: "Format d'email invalide" });
+      return;
+    }
+
     mutation.mutate(formData);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
     setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
+    if (errors[name]) {
+      setErrors((prev) => ({ ...prev, [name]: '' }));
+    }
   };
 
   return (
@@ -63,13 +88,22 @@ export default function ContactModal({ assureId, contact, onClose }: ContactModa
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
+          {errors.submit && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
+              {errors.submit}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
+              {/* FIX: added fallback `|| ''` — formData.nom could be undefined on
+                  first render for an edit with a partial contact, which throws an
+                  uncontrolled-to-controlled input warning in React. */}
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Nom *</label>
               <input
                 type="text"
                 name="nom"
-                value={formData.nom}
+                value={formData.nom || ''}
                 onChange={handleChange}
                 required
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -77,45 +111,47 @@ export default function ContactModal({ assureId, contact, onClose }: ContactModa
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prénom *</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prénom</label>
               <input
                 type="text"
                 name="prenom"
-                value={formData.prenom}
+                value={formData.prenom || ''}
                 onChange={handleChange}
-                required
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
+            {/* FIX: field name "fonction" -> "poste" (matches AssureContact) */}
             <div className="md:col-span-2">
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Fonction</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Poste / Fonction</label>
               <input
                 type="text"
-                name="fonction"
-                value={formData.fonction}
+                name="poste"
+                value={formData.poste || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
+            {/* FIX: field name "telephone" -> "telephoneFixe" */}
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Téléphone</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Téléphone fixe</label>
               <input
                 type="tel"
-                name="telephone"
-                value={formData.telephone}
+                name="telephoneFixe"
+                value={formData.telephoneFixe || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
+            {/* FIX: field name "mobile" -> "telephoneMobile" */}
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mobile</label>
               <input
                 type="tel"
-                name="mobile"
-                value={formData.mobile}
+                name="telephoneMobile"
+                value={formData.telephoneMobile || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -126,18 +162,24 @@ export default function ContactModal({ assureId, contact, onClose }: ContactModa
               <input
                 type="email"
                 name="email"
-                value={formData.email}
+                value={formData.email || ''}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className={`w-full px-3 py-2 border ${errors.email ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
               />
+              {errors.email && (
+                <p className="mt-1 text-[11px] text-red-500">{errors.email}</p>
+              )}
             </div>
 
+            {/* FIX: field name "principal" -> "isDefault" (matches AssureContact).
+                NOTE: kept per the same isDefault flag as the other two modals —
+                needs backend confirmation, see review response. */}
             <div className="md:col-span-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
-                  name="principal"
-                  checked={formData.principal}
+                  name="isDefault"
+                  checked={formData.isDefault || false}
                   onChange={handleChange}
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                 />

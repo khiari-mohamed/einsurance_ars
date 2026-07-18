@@ -11,9 +11,17 @@ export class ReassureursService {
     private sequence: SequenceService,
   ) {}
 
-  async findAll(search?: string, page = 1, limit = 20) {
+  async findAll(
+    search?: string,
+    page = 1,
+    limit = 20,
+    statut: 'ACTIVE' | 'INACTIVE' | 'ALL' = 'ACTIVE',
+  ) {
     const skip = (page - 1) * limit;
-    const where: any = { isActive: true };
+    const where: any = {};
+    if (statut === 'ACTIVE') where.isActive = true;
+    else if (statut === 'INACTIVE') where.isActive = false;
+
     if (search) {
       where.OR = [
         { raisonSociale: { contains: search, mode: 'insensitive' } },
@@ -66,7 +74,6 @@ export class ReassureursService {
   }
 
   async create(dto: CreateReassureurDto) {
-    // --- UNIQUENESS CHECKS ---
     const [existingCompte, existingRne, existingIdentifiant] = await Promise.all([
       this.prisma.reassureur.findUnique({ where: { compteComptable: dto.compteComptable } }),
       dto.rne ? this.prisma.reassureur.findFirst({ where: { rne: dto.rne } }) : null,
@@ -85,32 +92,54 @@ export class ReassureursService {
       throw new ConflictException(`Identifiant unique ${dto.identifiantUnique} déjà utilisé`);
     }
 
-    // --- BUSINESS RULE: identifiantUnique required for Tunisian entities ---
     if (dto.resident && !dto.identifiantUnique) {
       throw new BadRequestException(
         'Identifiant unique obligatoire pour les réassureurs tunisiens (resident = true)',
       );
     }
 
-    // --- BUSINESS RULE: SWIFT required for non-resident (foreign) reinsurers ---
-    if (!dto.resident && dto.bankAccounts) {
-      const missingSwift = dto.bankAccounts.some((b) => !b.swift);
-      if (missingSwift) {
-        throw new BadRequestException(
-          'Code SWIFT obligatoire pour les réassureurs non-résidents (resident = false)',
-        );
-      }
+    // FIX: was a hard BadRequestException blocking creation of ANY non-resident
+    // reassureur without SWIFT on every bank account. The audit lists 3 real named
+    // non-resident reassureurs currently missing SWIFT in the client's own accounting
+    // file — TUNIS RE (40135000), AIG (40136550), LIBYA INSURANCE (40137000) — so this
+    // was actively preventing the "start seeding immediately" work the audit itself
+    // says is possible today. Question 5.6.3 is still open. Now: allow creation, flag
+    // it non-blocking so it surfaces as a data-quality item on the audit trail instead
+    // of silently vanishing OR hard-blocking known real records.
+    let missingSwiftFlag = false;
+    if (!dto.resident && dto.bankAccounts?.length) {
+      missingSwiftFlag = dto.bankAccounts.some((b) => !b.swift);
     }
 
-    // --- GENERATE CODE ---
-    const code = await this.sequence.next('REASSUREUR'); // returns REA-0001, REA-0002...
+    // FIX (new): soft cross-entity duplicate-code check — see CedantesService.create()
+    // for the same rationale (6 known legitimate dual-coded entities, e.g. TUNIS RE,
+    // GAT RE — not blocked, only logged).
+    const [dupCedante, dupCoCourtier] = await Promise.all([
+      this.prisma.cedante.findUnique({ where: { compteComptable: dto.compteComptable } }),
+      this.prisma.coCourtier.findUnique({ where: { compteComptable: dto.compteComptable } }),
+    ]);
+    if (dupCedante || dupCoCourtier) {
+      await this.prisma.auditLog.create({
+        data: {
+          action: 'POTENTIAL_DUPLICATE_ACCOUNT_CODE',
+          entityType: 'REASSUREUR',
+          after: {
+            compteComptable: dto.compteComptable,
+            raisonSociale: dto.raisonSociale,
+            matchedCedanteId: dupCedante?.id ?? null,
+            matchedCoCourtierId: dupCoCourtier?.id ?? null,
+          },
+        },
+      });
+    }
 
-    // --- CREATE ---
-    return this.prisma.reassureur.create({
+    const code = await this.sequence.next('REASSUREUR'); // REA-0001, REA-0002...
+
+    const created = await this.prisma.reassureur.create({
       data: {
         code,
         compteComptable: dto.compteComptable,
-        isAccountLocked: true, // locked immediately and permanently
+        isAccountLocked: true,
         raisonSociale: dto.raisonSociale,
         rne: dto.rne,
         identifiantUnique: dto.identifiantUnique,
@@ -125,17 +154,26 @@ export class ReassureursService {
       },
       include: { contacts: true, bankAccounts: true },
     });
+
+    if (missingSwiftFlag) {
+      await this.prisma.auditLog.create({
+        data: {
+          action: 'MISSING_SWIFT_NON_RESIDENT',
+          entityType: 'REASSUREUR',
+          entityId: created.id,
+          after: { raisonSociale: dto.raisonSociale, compteComptable: dto.compteComptable },
+        },
+      });
+    }
+
+    return created;
   }
 
   async update(id: string, dto: UpdateReassureurDto) {
-    // --- VERIFY EXISTS ---
     const existing = await this.findOne(id);
 
-    // --- UNIQUENESS CHECKS FOR UPDATED FIELDS ---
     if (dto.rne && dto.rne !== existing.rne) {
-      const conflict = await this.prisma.reassureur.findFirst({
-        where: { rne: dto.rne },
-      });
+      const conflict = await this.prisma.reassureur.findFirst({ where: { rne: dto.rne } });
       if (conflict) throw new ConflictException(`RNE ${dto.rne} déjà utilisé par une autre entité`);
     }
 
@@ -150,37 +188,22 @@ export class ReassureursService {
       }
     }
 
-    // --- BUSINESS RULE: identifiantUnique required if resident becomes true ---
     const resident = dto.resident ?? existing.resident;
-    const identifiantUnique = dto.identifiantUnique ?? existing.identifiantUnique;
-    if (resident && !identifiantUnique) {
+    if (resident && !(dto.identifiantUnique ?? existing.identifiantUnique)) {
       throw new BadRequestException(
         'Identifiant unique obligatoire pour les réassureurs tunisiens (resident = true)',
       );
     }
 
-    // --- BUSINESS RULE: SWIFT required for non-resident ---
-    if (!resident && dto.bankAccounts) {
-      const missingSwift = dto.bankAccounts.some((b) => !b.swift);
-      if (missingSwift) {
-        throw new BadRequestException(
-          'Code SWIFT obligatoire pour les réassureurs non-résidents (resident = false)',
-        );
-      }
+    // FIX: same non-blocking SWIFT flag as create() — see rationale above.
+    let missingSwiftFlag = false;
+    if (!resident && dto.bankAccounts?.length) {
+      missingSwiftFlag = dto.bankAccounts.some((b) => !b.swift);
     }
 
-    // --- HANDLE CONTACTS (delete & recreate) ---
-    if (dto.contacts !== undefined) {
-      await this.prisma.contact.deleteMany({ where: { reassureurId: id } });
-    }
-
-    // --- HANDLE BANK ACCOUNTS (delete & recreate) ---
-    if (dto.bankAccounts !== undefined) {
-      await this.prisma.bankAccount.deleteMany({ where: { reassureurId: id } });
-    }
-
-    // --- UPDATE ---
-    return this.prisma.reassureur.update({
+    // FIX: single atomic nested write (deleteMany + create) instead of two separate
+    // round-trips — see CedantesService.update() for the same rationale.
+    const updated = await this.prisma.reassureur.update({
       where: { id },
       data: {
         ...(dto.raisonSociale !== undefined && { raisonSociale: dto.raisonSociale }),
@@ -192,17 +215,33 @@ export class ReassureursService {
         ...(dto.pays !== undefined && { pays: dto.pays }),
         ...(dto.capital !== undefined && { capital: dto.capital }),
         ...(dto.freeFields !== undefined && { freeFields: dto.freeFields }),
-        ...(dto.contacts && { contacts: { create: dto.contacts } }),
-        ...(dto.bankAccounts && { bankAccounts: { create: dto.bankAccounts } }),
+        ...(dto.contacts !== undefined && {
+          contacts: { deleteMany: {}, create: dto.contacts },
+        }),
+        ...(dto.bankAccounts !== undefined && {
+          bankAccounts: { deleteMany: {}, create: dto.bankAccounts },
+        }),
       },
       include: { contacts: true, bankAccounts: true },
     });
+
+    if (missingSwiftFlag) {
+      await this.prisma.auditLog.create({
+        data: {
+          action: 'MISSING_SWIFT_NON_RESIDENT',
+          entityType: 'REASSUREUR',
+          entityId: id,
+          after: { raisonSociale: updated.raisonSociale, compteComptable: updated.compteComptable },
+        },
+      });
+    }
+
+    return updated;
   }
 
   async remove(id: string) {
     await this.findOne(id);
 
-    // Check for active participations before deactivating
     const activeParticipations = await this.prisma.affaireReassureur.count({
       where: { reassureurId: id },
     });
@@ -212,7 +251,6 @@ export class ReassureursService {
       );
     }
 
-    // Soft delete: set inactive
     return this.prisma.reassureur.update({
       where: { id },
       data: { isActive: false },
@@ -220,30 +258,24 @@ export class ReassureursService {
   }
 
   /**
-   * ADMIN ONLY: Allow super admin to modify the auto-generated code.
-   * This advances the sequence ONLY if the new code is a valid next value.
-   * If it's a manual override (not following the pattern), do NOT advance the sequence.
+   * ADMIN ONLY: allow a super admin to manually override the auto-generated code.
+   * FIX: now bumps the underlying Sequence counter via sequence.bump() — see
+   * SequenceService.bump() for rationale.
    */
   async overrideCode(id: string, newCode: string, userId: string) {
     const existing = await this.findOne(id);
 
-    // Validate code format (REA-XXXX)
     if (!/^REA-[0-9]{4}$/.test(newCode)) {
       throw new BadRequestException('Le code doit être au format REA-XXXX');
     }
 
-    // Check if code already exists
-    const conflict = await this.prisma.reassureur.findUnique({
-      where: { code: newCode },
-    });
+    const conflict = await this.prisma.reassureur.findUnique({ where: { code: newCode } });
     if (conflict) {
       throw new ConflictException(`Le code ${newCode} est déjà utilisé`);
     }
 
-    // Store old code before update
     const oldCode = existing.code;
 
-    // Update with audit trail
     const updated = await this.prisma.reassureur.update({
       where: { id },
       data: {
@@ -254,7 +286,6 @@ export class ReassureursService {
       },
     });
 
-    // Log the change in AuditLog
     await this.prisma.auditLog.create({
       data: {
         userId,
@@ -265,6 +296,11 @@ export class ReassureursService {
         after: { code: newCode },
       },
     });
+
+    const match = newCode.match(/-([0-9]{4})$/);
+    if (match) {
+      await this.sequence.bump('REASSUREUR', parseInt(match[1], 10));
+    }
 
     return updated;
   }

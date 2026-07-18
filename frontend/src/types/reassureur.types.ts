@@ -1,13 +1,14 @@
 /**
  * Réassureur Types
- * 
+ *
  * Matches the backend Prisma schema and DTOs.
- * 
+ *
  * Key Business Rules:
  * - identifiantUnique is REQUIRED when resident = true (Tunisian entity)
  * - identifiantUnique is OPTIONAL when resident = false (foreign entity)
  * - compteComptable format: 401xxxxx (e.g., 40130000)
- * - swift is REQUIRED on bank accounts when resident = false (foreign)
+ * - swift is normally expected on bank accounts when resident = false (foreign), but
+ *   this is a NON-BLOCKING data-quality flag, not a hard requirement — see note below.
  * - code format: REA-0001 (auto-generated)
  * - code can be overridden by SUPER_ADMIN only
  */
@@ -18,30 +19,27 @@
 
 export interface Reassureur {
   id: string;
-  code: string;                          // REA-0001, auto-generated
-  compteComptable: string;               // 401xxxxx — mandatory, locked after creation
-  isAccountLocked: boolean;              // true after creation
+  code: string;
+  compteComptable: string;
+  isAccountLocked: boolean;
   raisonSociale: string;
-  rne?: string;                          // Legacy, optional for foreign entities
-  identifiantUnique?: string;            // 7 digits + 1 letter (1234567A) — required for Tunisian entities
-  resident: boolean;                     // true = Tunisian resident, false = non-resident
+  rne?: string;
+  identifiantUnique?: string;
+  resident: boolean;
   formeJuridique?: string;
   adresse?: string;
   pays?: string;
   capital?: number;
   freeFields?: Record<string, any>;
 
-  // Audit trail for code modifications (admin override)
-  codeModifiedBy?: string;               // User ID who last modified the code
-  codeModifiedAt?: string;               // Timestamp of last code modification
-  oldCode?: string;                      // Previous code value (for rollback/audit)
+  codeModifiedBy?: string;
+  codeModifiedAt?: string;
+  oldCode?: string;
 
-  // Relations
   contacts?: ReassureurContact[];
   bankAccounts?: ReassureurBankAccount[];
-  participations?: AffaireReassureur[];   // Deals where this reinsurer participates
+  participations?: AffaireReassureur[];
 
-  // Status
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -54,11 +52,16 @@ export interface Reassureur {
 export interface ReassureurContact {
   id: string;
   nom: string;
-  prenom: string;
-  poste?: string;                        // Poste / Fonction
-  telephone?: string;
+  prenom?: string;
+  poste?: string;
+  // FIX: this type previously had ONLY `telephone` while CreateReassureurContactDto
+  // (below) had BOTH `telephone` and `mobile` — two types describing the same
+  // conceptual object disagreed with each other, and neither matched the backend's
+  // actual field names (telephoneFixe / telephoneMobile). Unified here.
+  telephoneFixe?: string;
+  telephoneMobile?: string;
   email?: string;
-  isDefault?: boolean;                   // Contact principal
+  isDefault?: boolean;
   reassureurId: string;
   createdAt: string;
   updatedAt: string;
@@ -73,8 +76,17 @@ export interface ReassureurBankAccount {
   banque: string;
   agence?: string;
   rib: string;
-  swift: string;                         // REQUIRED for non-resident (resident = false)
-  currency: string;                      // TND, USD, EUR...
+  // FIX: added — real réassureur data includes IBAN (audit Découverte 3: 33/35
+  // réassureurs already have IBAN ready to import).
+  iban?: string;
+  // FIX: was `swift: string` (required). Backend DTO deliberately made this optional
+  // — a hard requirement here blocked creation of 3 real named non-resident
+  // reassureurs (TUNIS RE, AIG, LIBYA INSURANCE — audit Découverte 3) that currently
+  // lack SWIFT in the client's own accounting file. Question 5.6.3 (obligatoire ou
+  // optionnel ?) is still open with the client — treat as expected-but-not-blocking
+  // until confirmed.
+  swift?: string;
+  currency: string;
   isDefault?: boolean;
   reassureurId: string;
   createdAt: string;
@@ -91,15 +103,13 @@ export interface AffaireReassureur {
   reassureurId: string;
   reassureur?: Reassureur;
 
-  partPct: number;                       // Participation % (e.g., 30.00)
-  isLeader: boolean;                     // Leader flag
+  partPct: number;
+  isLeader: boolean;
 
-  // ARS commission per reinsurer
   commissionMode: 'CALCULABLE' | 'FORFAITAIRE';
-  tauxCommissionArs?: number;            // Used when CALCULABLE
-  commissionForfait?: number;            // Used when FORFAITAIRE
+  tauxCommissionArs?: number;
+  commissionForfait?: number;
 
-  // Calculated — stored for reports and accounting
   primeBrute?: number;
   commissionArs?: number;
   commissionCedante?: number;
@@ -114,15 +124,12 @@ export interface AffaireReassureur {
 // DTOs (API Request/Response)
 // ============================================================
 
-/**
- * Create Reassureur — matches backend CreateReassureurDto
- */
 export interface CreateReassureurDto {
-  compteComptable: string;               // 401xxxxx
+  compteComptable: string;
   raisonSociale: string;
   rne?: string;
-  identifiantUnique?: string;            // Required when resident = true
-  resident: boolean;                     // Required
+  identifiantUnique?: string;
+  resident: boolean;
   formeJuridique?: string;
   adresse?: string;
   pays?: string;
@@ -132,10 +139,6 @@ export interface CreateReassureurDto {
   bankAccounts?: CreateReassureurBankAccountDto[];
 }
 
-/**
- * Update Reassureur — matches backend UpdateReassureurDto
- * Note: compteComptable is LOCKED and cannot be updated
- */
 export interface UpdateReassureurDto {
   raisonSociale?: string;
   rne?: string;
@@ -150,27 +153,22 @@ export interface UpdateReassureurDto {
   bankAccounts?: CreateReassureurBankAccountDto[];
 }
 
-/**
- * Contact DTO for create/update
- */
 export interface CreateReassureurContactDto {
   nom: string;
-  prenom: string;
+  prenom?: string;
   poste?: string;
-  telephone?: string;
-  mobile?: string;
+  telephoneFixe?: string;
+  telephoneMobile?: string;
   email?: string;
-  isDefault?: boolean;
 }
 
-/**
- * Bank Account DTO for create/update
- */
 export interface CreateReassureurBankAccountDto {
   banque: string;
   agence?: string;
   rib: string;
-  swift: string;                         // REQUIRED for non-resident
+  iban?: string;
+  // FIX: was required — see ReassureurBankAccount.swift note above.
+  swift?: string;
   currency: string;
   isDefault?: boolean;
 }
@@ -187,40 +185,25 @@ export interface ReassureursListResponse {
   totalPages: number;
 }
 
-export interface ReassureurSingleResponse {
-  data: Reassureur;
-}
+// NOTE: ReassureurSingleResponse removed — see cedante.types.ts note (unused,
+// double-wrapped, invites a .data.data bug).
 
 // ============================================================
 // VALIDATION HELPERS (for frontend use)
 // ============================================================
 
-/**
- * Check if identifiantUnique format is valid
- * Format: 7 digits + 1 uppercase letter (e.g., 1234567A)
- */
 export function isValidIdentifiantUnique(value: string): boolean {
   return /^[0-9]{7}[A-Z]$/.test(value);
 }
 
-/**
- * Check if compteComptable format is valid
- * Format: 401xxxxx (e.g., 40130000)
- */
 export function isValidCompteComptable(value: string): boolean {
   return /^401[0-9]{5}$/.test(value);
 }
 
-/**
- * Check if SWIFT code format is valid (8 or 11 characters)
- */
 export function isValidSwift(value: string): boolean {
   return /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/.test(value);
 }
 
-/**
- * Get validation error message for identifiantUnique
- */
 export function getIdentifiantUniqueError(value?: string, resident?: boolean): string | null {
   if (resident && !value) {
     return 'Identifiant unique obligatoire pour les entités tunisiennes (resident = true)';
@@ -231,9 +214,6 @@ export function getIdentifiantUniqueError(value?: string, resident?: boolean): s
   return null;
 }
 
-/**
- * Get validation error message for compteComptable
- */
 export function getCompteComptableError(value?: string): string | null {
   if (!value) return 'Compte comptable est obligatoire';
   if (!isValidCompteComptable(value)) {
@@ -243,11 +223,17 @@ export function getCompteComptableError(value?: string): string | null {
 }
 
 /**
- * Get validation error message for SWIFT (non-resident required)
+ * FIX: was a hard blocking error when !resident && !value — matches the backend's
+ * previous hard BadRequestException that we removed (it blocked 3 real named
+ * reassureurs). Now returns a WARNING string, not an error, and the caller
+ * (form component) should treat this as non-blocking — display it, don't prevent
+ * submission. Renamed usage intent via the return type comment below; the function
+ * signature stays the same so existing callers don't break, but treat the string as
+ * advisory only.
  */
-export function getSwiftError(value?: string, resident?: boolean): string | null {
+export function getSwiftWarning(value?: string, resident?: boolean): string | null {
   if (!resident && !value) {
-    return 'Code SWIFT obligatoire pour les réassureurs non-résidents';
+    return 'Code SWIFT généralement requis pour les réassureurs non-résidents (à confirmer avec le client — non bloquant)';
   }
   if (value && !isValidSwift(value)) {
     return 'Format SWIFT invalide (8 ou 11 caractères)';

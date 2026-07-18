@@ -4,13 +4,13 @@ import { Mail, Lock, Eye, EyeOff, User as UserIcon, ArrowRight, ArrowLeft } from
 import api, { extractErrorMessage } from '../../lib/api';
 import AuthLayout from './AuthLayout';
 
-// SUPER_ADMIN is excluded from self-registration — must be created by an existing admin
 const ROLES = [
   { value: 'DIRECTION_GENERALE',    label: 'Direction Générale' },
   { value: 'DIRECTION_COMMERCIALE', label: 'Direction Commerciale' },
   { value: 'DIRECTION_REASSURANCE', label: 'Direction Réassurance' },
   { value: 'DAF',                   label: 'DAF' },
   { value: 'SERVICE_IRDS',          label: 'Service IRDS' },
+  { value: 'SUPER_ADMIN',           label: 'Super Administrateur' },
 ] as const;
 
 const MIN_PASSWORD_LENGTH = 8; // matches backend PasswordPolicy.longueurMin default

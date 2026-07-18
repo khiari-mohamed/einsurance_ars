@@ -11,9 +11,24 @@ export class AssuresService {
     private sequence: SequenceService,
   ) {}
 
-  async findAll(search?: string, page = 1, limit = 20) {
+  /**
+   * FIX: added `statut` param — findAll() previously hardcoded isActive: true, making
+   * it impossible to satisfy the confirmed spec (5.6.7 / audit D7 default): inactive
+   * partners must stay "visible dans l'historique, non sélectionnable dans les
+   * nouvelles affaires" — visible, just not selectable. Default stays 'ACTIVE' so
+   * existing callers keep the same behavior.
+   */
+  async findAll(
+    search?: string,
+    page = 1,
+    limit = 20,
+    statut: 'ACTIVE' | 'INACTIVE' | 'ALL' = 'ACTIVE',
+  ) {
     const skip = (page - 1) * limit;
-    const where: any = { isActive: true };
+    const where: any = {};
+    if (statut === 'ACTIVE') where.isActive = true;
+    else if (statut === 'INACTIVE') where.isActive = false;
+
     if (search) {
       where.OR = [
         { raisonSociale: { contains: search, mode: 'insensitive' } },
@@ -62,16 +77,12 @@ export class AssuresService {
   }
 
   async create(dto: CreateAssureDto) {
-    // Check RNE uniqueness if provided
     if (dto.rne) {
-      const existing = await this.prisma.assure.findUnique({
-        where: { rne: dto.rne },
-      });
+      const existing = await this.prisma.assure.findUnique({ where: { rne: dto.rne } });
       if (existing) throw new ConflictException('RNE déjà utilisé');
     }
 
-    // Generate code (ASSURE → CLI- prefix via SequenceService)
-    const code = await this.sequence.next('ASSURE'); // returns CLI-0001, CLI-0002...
+    const code = await this.sequence.next('ASSURE'); // CLI-0001, CLI-0002...
 
     return this.prisma.assure.create({
       data: {
@@ -90,22 +101,17 @@ export class AssuresService {
   }
 
   async update(id: string, dto: UpdateAssureDto) {
-    // Verify exists
     const existing = await this.findOne(id);
 
-    // Check RNE uniqueness if updated
     if (dto.rne && dto.rne !== existing.rne) {
-      const conflict = await this.prisma.assure.findUnique({
-        where: { rne: dto.rne },
-      });
+      const conflict = await this.prisma.assure.findUnique({ where: { rne: dto.rne } });
       if (conflict) throw new ConflictException(`RNE ${dto.rne} déjà utilisé par une autre entité`);
     }
 
-    // Handle contacts (delete & recreate)
-    if (dto.contacts !== undefined) {
-      await this.prisma.contact.deleteMany({ where: { assureId: id } });
-    }
-
+    // FIX: was two separate round-trips (deleteMany() then a later update()) — if the
+    // process died in between, contacts were deleted and never recreated (silent data
+    // loss). Now a single nested write (deleteMany + create on the relation) executed
+    // atomically inside one prisma.assure.update() call.
     return this.prisma.assure.update({
       where: { id },
       data: {
@@ -116,7 +122,9 @@ export class AssuresService {
         ...(dto.pays !== undefined && { pays: dto.pays }),
         ...(dto.capital !== undefined && { capital: dto.capital }),
         ...(dto.freeFields !== undefined && { freeFields: dto.freeFields }),
-        ...(dto.contacts && { contacts: { create: dto.contacts } }),
+        ...(dto.contacts !== undefined && {
+          contacts: { deleteMany: {}, create: dto.contacts },
+        }),
       },
       include: { contacts: true },
     });
@@ -125,12 +133,8 @@ export class AssuresService {
   async remove(id: string) {
     await this.findOne(id);
 
-    // Check for active facultatives before deactivating
     const activeFacultatives = await this.prisma.facultativeAffaire.count({
-      where: {
-        assureId: id,
-        affaire: { isActive: true },
-      },
+      where: { assureId: id, affaire: { isActive: true } },
     });
     if (activeFacultatives > 0) {
       throw new BadRequestException(
@@ -138,7 +142,6 @@ export class AssuresService {
       );
     }
 
-    // Soft delete: set inactive
     return this.prisma.assure.update({
       where: { id },
       data: { isActive: false },
@@ -146,28 +149,24 @@ export class AssuresService {
   }
 
   /**
-   * ADMIN ONLY: Allow super admin to modify the auto-generated code.
+   * ADMIN ONLY: allow a super admin to manually override the auto-generated code.
+   * FIX: now bumps the underlying Sequence counter via sequence.bump() — see
+   * SequenceService.bump() for rationale.
    */
   async overrideCode(id: string, newCode: string, userId: string) {
     const existing = await this.findOne(id);
 
-    // Validate code format (CLI-XXXX)
     if (!/^CLI-[0-9]{4}$/.test(newCode)) {
       throw new BadRequestException('Le code doit être au format CLI-XXXX');
     }
 
-    // Check if code already exists
-    const conflict = await this.prisma.assure.findUnique({
-      where: { code: newCode },
-    });
+    const conflict = await this.prisma.assure.findUnique({ where: { code: newCode } });
     if (conflict) {
       throw new ConflictException(`Le code ${newCode} est déjà utilisé`);
     }
 
-    // Store old code before update
     const oldCode = existing.code;
 
-    // Update with audit trail
     const updated = await this.prisma.assure.update({
       where: { id },
       data: {
@@ -178,7 +177,6 @@ export class AssuresService {
       },
     });
 
-    // Log the change in AuditLog
     await this.prisma.auditLog.create({
       data: {
         userId,
@@ -189,6 +187,11 @@ export class AssuresService {
         after: { code: newCode },
       },
     });
+
+    const match = newCode.match(/-([0-9]{4})$/);
+    if (match) {
+      await this.sequence.bump('ASSURE', parseInt(match[1], 10));
+    }
 
     return updated;
   }

@@ -1,12 +1,11 @@
-import {
-  Injectable,
-  ExecutionContext,
-  UnauthorizedException,
-} from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import { Injectable, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { AuthGuard } from '@nestjs/passport';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 
-export const IS_PUBLIC_KEY = 'isPublic';
+// Re-exported here for backward compatibility with existing imports
+// (auth.controller.ts previously imported IS_PUBLIC_KEY from this file).
+export { IS_PUBLIC_KEY };
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
@@ -21,12 +20,5 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     ]);
     if (isPublic) return true;
     return super.canActivate(context);
-  }
-
-  handleRequest(err: any, user: any) {
-    if (err || !user) {
-      throw err || new UnauthorizedException('Token invalide ou expiré');
-    }
-    return user;
   }
 }

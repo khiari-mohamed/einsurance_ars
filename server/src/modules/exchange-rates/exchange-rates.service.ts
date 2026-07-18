@@ -38,15 +38,14 @@ export class ExchangeRatesService {
   }
 
   async getLatestRate(currencyCode: string) {
-    if (currencyCode === 'TND') return { tauxRealisation: 1, tauxReglement: 1 };
+    if (currencyCode === 'TND') return { taux: 1 };
     const rate = await this.prisma.exchangeRate.findFirst({
       where: { currencyCode },
       orderBy: { dateEffet: 'desc' },
     });
     if (!rate) throw new NotFoundException(`Aucun cours trouvé pour ${currencyCode}`);
     return {
-      tauxRealisation: Number(rate.tauxRealisation),
-      tauxReglement: rate.tauxReglement ? Number(rate.tauxReglement) : null,
+      taux: Number(rate.taux),
       dateEffet: rate.dateEffet,
     };
   }
@@ -58,7 +57,7 @@ export class ExchangeRatesService {
       orderBy: { dateEffet: 'desc' },
     });
     if (!rate) throw new NotFoundException(`Aucun cours trouvé pour ${currencyCode} à la date ${date.toISOString()}`);
-    return Number(rate.tauxRealisation);
+    return Number(rate.taux);
   }
 
   async createRate(dto: CreateRateDto) {
@@ -78,15 +77,13 @@ export class ExchangeRatesService {
         },
       },
       update: {
-        tauxRealisation: dto.tauxRealisation,
-        ...(dto.tauxReglement !== undefined && { tauxReglement: dto.tauxReglement }),
+        taux: dto.taux,
         isMonthly: dto.isMonthly ?? false,
       },
       create: {
         currencyId: currency.id,
         currencyCode: dto.currencyCode,
-        tauxRealisation: dto.tauxRealisation,
-        tauxReglement: dto.tauxReglement,
+        taux: dto.taux,
         dateEffet,
         isMonthly: dto.isMonthly ?? false,
       },
@@ -94,10 +91,10 @@ export class ExchangeRatesService {
     });
   }
 
-  updateSettlementRate(id: string, tauxReglement: number) {
+  updateSettlementRate(id: string, taux: number) {
     return this.prisma.exchangeRate.update({
       where: { id },
-      data: { tauxReglement },
+      data: { taux },
     });
   }
 

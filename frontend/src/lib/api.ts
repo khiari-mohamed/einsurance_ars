@@ -75,6 +75,23 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 //
 // We transparently unwrap `data` so callers never see the envelope.
 
+// FIX (bug #2): these are public, unauthenticated auth endpoints. A 401
+// from any of them means "bad credentials" / "bad token", not "your
+// session expired" — they must NOT trigger the silent-refresh flow, or a
+// wrong password on the login form causes clearAuth() + a hard redirect
+// instead of letting the form show the real error message.
+const PUBLIC_AUTH_PATHS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+];
+
+function isPublicAuthRequest(url?: string): boolean {
+  if (!url) return false;
+  return PUBLIC_AUTH_PATHS.some((path) => url.includes(path));
+}
+
 let _refreshing = false;
 type QueueEntry = { resolve: (token: string) => void; reject: (err: unknown) => void };
 let _queue: QueueEntry[] = [];
@@ -105,8 +122,12 @@ api.interceptors.response.use(
       _retry?: boolean;
     };
 
-    // ── 401: attempt silent refresh ────────────────────────────────────────────
-    if (error.response?.status === 401 && !original?._retry) {
+    // ── 401: attempt silent refresh (but never for public auth routes) ────────
+    if (
+      error.response?.status === 401 &&
+      !original?._retry &&
+      !isPublicAuthRequest(original?.url)
+    ) {
       const { refreshToken } = readAuth();
 
       if (!refreshToken) {
@@ -129,8 +150,12 @@ api.interceptors.response.use(
       _refreshing = true;
 
       try {
+        // FIX (bug #3): BASE_URL already ends in '/v1' — no need to strip
+        // and re-append it. This also uses a raw axios.post (not the `api`
+        // instance) deliberately, so a 401 here can't recurse back into
+        // this same interceptor.
         const { data } = await axios.post(
-          `${BASE_URL.replace('/v1', '')}/v1/auth/refresh`,
+          `${BASE_URL}/auth/refresh`,
           { refreshToken },
           { timeout: 10_000 },
         );

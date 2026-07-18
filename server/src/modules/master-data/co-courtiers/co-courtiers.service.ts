@@ -11,9 +11,17 @@ export class CoCourtierService {
     private sequence: SequenceService,
   ) {}
 
-  async findAll(search?: string, page = 1, limit = 20) {
+  async findAll(
+    search?: string,
+    page = 1,
+    limit = 20,
+    statut: 'ACTIVE' | 'INACTIVE' | 'ALL' = 'ACTIVE',
+  ) {
     const skip = (page - 1) * limit;
-    const where: any = { isActive: true };
+    const where: any = {};
+    if (statut === 'ACTIVE') where.isActive = true;
+    else if (statut === 'INACTIVE') where.isActive = false;
+
     if (search) {
       where.OR = [
         { raisonSociale: { contains: search, mode: 'insensitive' } },
@@ -41,6 +49,9 @@ export class CoCourtierService {
       include: {
         contacts: true,
         bankAccounts: true,
+        // FIX: was 'CO_COURTIER' here but 'COCOURTIER' (no underscore) in
+        // overrideCode()'s AuditLog write below, in the SAME file. Normalized to
+        // 'CO_COURTIER' everywhere to match the DocumentEntityType enum convention.
         documents: {
           where: { entityType: 'CO_COURTIER' },
           include: { document: true },
@@ -52,7 +63,6 @@ export class CoCourtierService {
   }
 
   async create(dto: CreateCoCourtierDto) {
-    // Check if compte comptable already exists
     const existing = await this.prisma.coCourtier.findUnique({
       where: { compteComptable: dto.compteComptable },
     });
@@ -60,24 +70,59 @@ export class CoCourtierService {
       throw new ConflictException(`Compte comptable ${dto.compteComptable} déjà utilisé`);
     }
 
-    // Check RNE uniqueness if provided
     if (dto.rne) {
-      const existingRne = await this.prisma.coCourtier.findFirst({
-        where: { rne: dto.rne },
-      });
+      const existingRne = await this.prisma.coCourtier.findFirst({ where: { rne: dto.rne } });
       if (existingRne) throw new ConflictException(`RNE ${dto.rne} déjà utilisé`);
     }
 
-    // Generate code (COCOURTIER → CCO- prefix via SequenceService)
-    const code = await this.sequence.next('COCOURTIER'); // returns CCO-0001, CCO-0002...
+    // FIX (new): same identifiantUnique uniqueness + resident business rule now
+    // applied to CoCourtier, matching Cedante/Reassureur (see note in
+    // create-co-courtier.dto.ts re: schema assumption).
+    if (dto.identifiantUnique) {
+      const existingIdentifiant = await this.prisma.coCourtier.findUnique({
+        where: { identifiantUnique: dto.identifiantUnique },
+      });
+      if (existingIdentifiant) {
+        throw new ConflictException(`Identifiant unique ${dto.identifiantUnique} déjà utilisé`);
+      }
+    }
+    if (dto.resident && !dto.identifiantUnique) {
+      throw new BadRequestException(
+        'Identifiant unique obligatoire pour les courtiers tunisiens (resident = true)',
+      );
+    }
+
+    // FIX (new): soft cross-entity duplicate-code check — see CedantesService.create().
+    const [dupCedante, dupReassureur] = await Promise.all([
+      this.prisma.cedante.findUnique({ where: { compteComptable: dto.compteComptable } }),
+      this.prisma.reassureur.findUnique({ where: { compteComptable: dto.compteComptable } }),
+    ]);
+    if (dupCedante || dupReassureur) {
+      await this.prisma.auditLog.create({
+        data: {
+          action: 'POTENTIAL_DUPLICATE_ACCOUNT_CODE',
+          entityType: 'CO_COURTIER',
+          after: {
+            compteComptable: dto.compteComptable,
+            raisonSociale: dto.raisonSociale,
+            matchedCedanteId: dupCedante?.id ?? null,
+            matchedReassureurId: dupReassureur?.id ?? null,
+          },
+        },
+      });
+    }
+
+    const code = await this.sequence.next('COCOURTIER'); // CCO-0001, CCO-0002...
 
     return this.prisma.coCourtier.create({
       data: {
         code,
         compteComptable: dto.compteComptable,
-        isAccountLocked: true, // locked immediately and permanently
+        isAccountLocked: true,
         raisonSociale: dto.raisonSociale,
         rne: dto.rne,
+        identifiantUnique: dto.identifiantUnique,
+        resident: dto.resident,
         formeJuridique: dto.formeJuridique,
         adresse: dto.adresse,
         pays: dto.pays,
@@ -91,41 +136,50 @@ export class CoCourtierService {
   }
 
   async update(id: string, dto: UpdateCoCourtierDto) {
-    // Verify exists
     const existing = await this.findOne(id);
 
-    // Check RNE uniqueness if updated
     if (dto.rne && dto.rne !== existing.rne) {
-      const conflict = await this.prisma.coCourtier.findFirst({
-        where: { rne: dto.rne },
-      });
+      const conflict = await this.prisma.coCourtier.findFirst({ where: { rne: dto.rne } });
       if (conflict) {
         throw new ConflictException(`RNE ${dto.rne} déjà utilisé par une autre entité`);
       }
     }
 
-    // Handle contacts (delete & recreate)
-    if (dto.contacts !== undefined) {
-      await this.prisma.contact.deleteMany({ where: { coCourtId: id } });
+    if (dto.identifiantUnique && dto.identifiantUnique !== existing.identifiantUnique) {
+      const conflict = await this.prisma.coCourtier.findUnique({
+        where: { identifiantUnique: dto.identifiantUnique },
+      });
+      if (conflict) {
+        throw new ConflictException(`Identifiant unique ${dto.identifiantUnique} déjà utilisé par une autre entité`);
+      }
     }
 
-    // Handle bank accounts (delete & recreate)
-    if (dto.bankAccounts !== undefined) {
-      await this.prisma.bankAccount.deleteMany({ where: { coCourtId: id } });
+    const resident = dto.resident ?? existing.resident;
+    if (resident && !(dto.identifiantUnique ?? existing.identifiantUnique)) {
+      throw new BadRequestException(
+        'Identifiant unique obligatoire pour les courtiers tunisiens (resident = true)',
+      );
     }
 
+    // FIX: single atomic nested write instead of two separate round-trips.
     return this.prisma.coCourtier.update({
       where: { id },
       data: {
         ...(dto.raisonSociale !== undefined && { raisonSociale: dto.raisonSociale }),
         ...(dto.rne !== undefined && { rne: dto.rne }),
+        ...(dto.identifiantUnique !== undefined && { identifiantUnique: dto.identifiantUnique }),
+        ...(dto.resident !== undefined && { resident: dto.resident }),
         ...(dto.formeJuridique !== undefined && { formeJuridique: dto.formeJuridique }),
         ...(dto.adresse !== undefined && { adresse: dto.adresse }),
         ...(dto.pays !== undefined && { pays: dto.pays }),
         ...(dto.capital !== undefined && { capital: dto.capital }),
         ...(dto.freeFields !== undefined && { freeFields: dto.freeFields }),
-        ...(dto.contacts && { contacts: { create: dto.contacts } }),
-        ...(dto.bankAccounts && { bankAccounts: { create: dto.bankAccounts } }),
+        ...(dto.contacts !== undefined && {
+          contacts: { deleteMany: {}, create: dto.contacts },
+        }),
+        ...(dto.bankAccounts !== undefined && {
+          bankAccounts: { deleteMany: {}, create: dto.bankAccounts },
+        }),
       },
       include: { contacts: true, bankAccounts: true },
     });
@@ -134,12 +188,14 @@ export class CoCourtierService {
   async remove(id: string) {
     await this.findOne(id);
 
-    // Check if this co-courtier is referenced in any active deals
-    // Note: There is no direct relation yet — you'd need to check `AffaireReassureur` or similar
-    // For now, keep the simple deactivation.
-    // If you later add a relation, add the check here.
+    // UNRESOLVED (flagged in review, not fixed here — no schema to hook into yet):
+    // there is still no AffaireCoCourtier (or equivalent) relation, so unlike
+    // Cedantes/Reassureurs this method cannot check for active deal participation
+    // before deactivating. Section 5.7 says CoCourtier is structurally identical to
+    // Réassureur, whose Onglet 3 is a "liste dynamique des affaires" — the same
+    // relation is conceptually owed here. Add the join model + this guard together
+    // once confirmed; deactivating a co-broker mid-deal today goes unguarded.
 
-    // Soft delete: set inactive
     return this.prisma.coCourtier.update({
       where: { id },
       data: { isActive: false },
@@ -147,28 +203,24 @@ export class CoCourtierService {
   }
 
   /**
-   * ADMIN ONLY: Allow super admin to modify the auto-generated code.
+   * ADMIN ONLY: allow a super admin to manually override the auto-generated code.
+   * FIX: now bumps the underlying Sequence counter via sequence.bump() — see
+   * SequenceService.bump() for rationale.
    */
   async overrideCode(id: string, newCode: string, userId: string) {
     const existing = await this.findOne(id);
 
-    // Validate code format (CCO-XXXX)
     if (!/^CCO-[0-9]{4}$/.test(newCode)) {
       throw new BadRequestException('Le code doit être au format CCO-XXXX');
     }
 
-    // Check if code already exists
-    const conflict = await this.prisma.coCourtier.findUnique({
-      where: { code: newCode },
-    });
+    const conflict = await this.prisma.coCourtier.findUnique({ where: { code: newCode } });
     if (conflict) {
       throw new ConflictException(`Le code ${newCode} est déjà utilisé`);
     }
 
-    // Store old code before update
     const oldCode = existing.code;
 
-    // Update with audit trail
     const updated = await this.prisma.coCourtier.update({
       where: { id },
       data: {
@@ -179,17 +231,22 @@ export class CoCourtierService {
       },
     });
 
-    // Log the change in AuditLog
+    // FIX: normalized to 'CO_COURTIER' (was 'COCOURTIER', no underscore — see findOne() note above).
     await this.prisma.auditLog.create({
       data: {
         userId,
         action: 'CODE_OVERRIDE',
-        entityType: 'COCOURTIER',
+        entityType: 'CO_COURTIER',
         entityId: id,
         before: { code: oldCode },
         after: { code: newCode },
       },
     });
+
+    const match = newCode.match(/-([0-9]{4})$/);
+    if (match) {
+      await this.sequence.bump('COCOURTIER', parseInt(match[1], 10));
+    }
 
     return updated;
   }

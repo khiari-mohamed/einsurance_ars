@@ -2,7 +2,6 @@ import {
   Injectable,
   UnauthorizedException,
   BadRequestException,
-  NotFoundException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -28,6 +27,14 @@ export class AuthService {
     private email: EmailService,
   ) {}
 
+  // Kept in place even though the frontend dropdown no longer conditions on
+  // it — harmless, public, and may be useful for an ops/health dashboard
+  // later. No longer consulted by register() below.
+  async setupStatus() {
+    const userCount = await this.prisma.user.count();
+    return { needsBootstrap: userCount === 0 };
+  }
+
   async login(dto: LoginDto) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
@@ -43,7 +50,6 @@ export class AuthService {
           `Compte bloqué jusqu'à ${user.lockedUntil.toLocaleString('fr-TN')}`,
         );
       }
-      // Lockout expired — unlock
       await this.prisma.user.update({
         where: { id: user.id },
         data: { isLocked: false, failedAttempts: 0, lockedUntil: null },
@@ -85,14 +91,12 @@ export class AuthService {
       throw new UnauthorizedException('Email ou mot de passe incorrect');
     }
 
-    // Check password expiry
     if (user.passwordExpiresAt && user.passwordExpiresAt < new Date()) {
       throw new UnauthorizedException(
         'Mot de passe expiré. Veuillez le réinitialiser.',
       );
     }
 
-    // Reset failed attempts and update last login
     await this.prisma.user.update({
       where: { id: user.id },
       data: { failedAttempts: 0, lastLoginAt: new Date() },
@@ -101,6 +105,13 @@ export class AuthService {
     return this.generateTokens(user);
   }
 
+  // Public self-registration, all 6 roles freely selectable including
+  // SUPER_ADMIN — no restriction on how many SUPER_ADMIN accounts can
+  // exist or who can create them. This was an explicit choice (see chat):
+  // anyone who can reach this endpoint can mint a super-admin account at
+  // any time. If that ever needs tightening again, the guard that used to
+  // live here checked `await this.prisma.user.count()` and only allowed
+  // role === 'SUPER_ADMIN' when it was 0.
   async register(dto: RegisterDto) {
     await this.passwordPolicy.validate(dto.password);
 
@@ -156,19 +167,14 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email.toLowerCase() },
     });
-    if (!user) return; // Silent — don't reveal user existence
+    if (!user) return;
 
     const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 3600 * 1000); // 1 hour
-
-    // Store token hash (not plain) in a refresh token record for reuse
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    await this.prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        token: `RESET:${tokenHash}`,
-        expiresAt,
-      },
+    const expiresAt = new Date(Date.now() + 3600 * 1000);
+
+    await this.prisma.passwordResetToken.create({
+      data: { userId: user.id, tokenHash, expiresAt },
     });
 
     await this.email.sendPasswordReset(user.email, token);
@@ -180,11 +186,8 @@ export class AuthService {
       .update(dto.token)
       .digest('hex');
 
-    const record = await this.prisma.refreshToken.findFirst({
-      where: {
-        token: `RESET:${tokenHash}`,
-        revokedAt: null,
-      },
+    const record = await this.prisma.passwordResetToken.findFirst({
+      where: { tokenHash, usedAt: null },
     });
 
     if (!record || record.expiresAt < new Date()) {
@@ -207,8 +210,12 @@ export class AuthService {
           failedAttempts: 0,
         },
       }),
-      this.prisma.refreshToken.update({
+      this.prisma.passwordResetToken.update({
         where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId: record.userId, revokedAt: null },
         data: { revokedAt: new Date() },
       }),
     ]);
@@ -229,13 +236,19 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.newPassword, rounds);
     const policy = await this.passwordPolicy.getPolicy();
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        passwordHash,
-        passwordExpiresAt: this.passwordPolicy.computeExpiresAt(policy),
-      },
-    });
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          passwordHash,
+          passwordExpiresAt: this.passwordPolicy.computeExpiresAt(policy),
+        },
+      }),
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
   }
 
   async me(userId: string) {
@@ -258,10 +271,7 @@ export class AuthService {
   private async generateTokens(user: any) {
     const payload = { sub: user.id, email: user.email, role: user.role };
 
-    const accessToken = this.jwt.sign(payload, {
-      secret: this.config.get('app.jwtSecret'),
-      expiresIn: this.config.get('app.jwtExpiresIn'),
-    });
+    const accessToken = this.jwt.sign(payload);
 
     const refreshTokenValue = crypto.randomBytes(64).toString('hex');
     const expiresAt = new Date();

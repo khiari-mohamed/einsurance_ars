@@ -319,8 +319,7 @@ async function main() {
       create: {
         currencyId: currency.id,
         currencyCode: curr.code,
-        tauxRealisation: curr.rate,
-        tauxReglement: curr.rate * 1.01,
+        taux: curr.rate,
         dateEffet: today,
         source: 'BCT',
         isMonthly: false,

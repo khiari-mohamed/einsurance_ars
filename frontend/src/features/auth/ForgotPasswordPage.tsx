@@ -17,9 +17,13 @@ export default function ForgotPasswordPage() {
     setLoading(true);
 
     try {
-      // Interceptor unwraps envelope; backend returns { message: string }
-      const { data } = await api.post('/auth/request-password-reset', { email });
-      setMessage(data.message ?? 'Un e-mail vous a été envoyé si ce compte existe.');
+      // FIX (bug #1): backend route is /auth/forgot-password, not
+      // /auth/request-password-reset (auth.controller.ts). The backend
+      // resolves this to void — it deliberately doesn't return a message
+      // (silent on unknown emails, per AuthService.forgotPassword), so we
+      // always show a generic confirmation regardless of response body.
+      await api.post('/auth/forgot-password', { email });
+      setMessage('Si un compte existe avec cette adresse, un e-mail avec les instructions vous a été envoyé.');
     } catch (err: unknown) {
       setError(extractErrorMessage(err));
     } finally {

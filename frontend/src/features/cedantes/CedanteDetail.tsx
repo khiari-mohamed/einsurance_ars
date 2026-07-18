@@ -13,8 +13,6 @@ export default function CedanteDetail() {
   const queryClient = useQueryClient();
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<CedanteContact | null>(null);
-  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-  const [editingBank, setEditingBank] = useState<CedanteBankAccount | null>(null);
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [newCode, setNewCode] = useState('');
 
@@ -51,13 +49,6 @@ export default function CedanteDetail() {
     },
   });
 
-  const deleteBankMutation = useMutation({
-    mutationFn: (bankId: string) => cedantesApi.deleteBankAccount(id!, bankId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cedantes', id] });
-    },
-  });
-
   const overrideCodeMutation = useMutation({
     mutationFn: (code: string) => cedantesApi.overrideCode(id!, code),
     onSuccess: () => {
@@ -67,8 +58,11 @@ export default function CedanteDetail() {
     },
   });
 
-  const handleDelete = () => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer cette compagnie d\'assurances ?')) {
+  // FIX: relabeled "Supprimer" -> "Désactiver" — this is a soft deactivation
+  // (isActive: false, guarded by active-affaire checks server-side), same as the list
+  // page fix. Copy now matches what actually happens.
+  const handleDeactivate = () => {
+    if (window.confirm('Désactiver cette compagnie d\'assurances ? Elle restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.')) {
       deleteMutation.mutate();
     }
   };
@@ -76,12 +70,6 @@ export default function CedanteDetail() {
   const handleDeleteContact = (contactId: string) => {
     if (window.confirm('Êtes-vous sûr de vouloir supprimer ce contact ?')) {
       deleteContactMutation.mutate(contactId);
-    }
-  };
-
-  const handleDeleteBank = (bankId: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce compte bancaire ?')) {
-      deleteBankMutation.mutate(bankId);
     }
   };
 
@@ -111,7 +99,7 @@ export default function CedanteDetail() {
     );
   }
 
-  const isAdmin = true; // TODO: Get from user context
+  const isAdmin = true; // TODO: Get from user context — see usePermissions.ts review
 
   return (
     <div className="p-4 lg:p-6">
@@ -149,13 +137,15 @@ export default function CedanteDetail() {
               Modifier le code
             </button>
           )}
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-          >
-            <Trash2 size={16} />
-            Supprimer
-          </button>
+          {cedante.isActive !== false && (
+            <button
+              onClick={handleDeactivate}
+              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <Trash2 size={16} />
+              Désactiver
+            </button>
+          )}
         </div>
       </div>
 
@@ -174,9 +164,9 @@ export default function CedanteDetail() {
               <InfoField label="Compte Comptable" value={cedante.compteComptable} />
               <InfoField label="Forme Juridique" value={cedante.formeJuridique} />
               <InfoField label="Identifiant Unique" value={cedante.identifiantUnique || 'À renseigner'} />
-              <InfoField 
-                label="Résident" 
-                value={cedante.resident ? 'Oui (Tunisien)' : 'Non (Étranger)'} 
+              <InfoField
+                label="Résident"
+                value={cedante.resident ? 'Oui (Tunisien)' : 'Non (Étranger)'}
                 icon={cedante.resident ? <Shield size={14} /> : <Globe size={14} />}
               />
               <InfoField label="RNE (legacy)" value={cedante.rne || '-'} />
@@ -222,6 +212,8 @@ export default function CedanteDetail() {
                       <div>
                         <p className="text-[13px] font-medium text-gray-900">
                           {contact.prenom} {contact.nom}
+                          {/* NOTE: isDefault display kept — flagged in review, needs
+                              backend confirmation (see intro). Renders fine either way. */}
                           {contact.isDefault && (
                             <span className="ml-2 text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
                               Principal
@@ -256,10 +248,19 @@ export default function CedanteDetail() {
                         {contact.email}
                       </p>
                     )}
-                    {contact.telephone && (
+                    {/* FIX: was contact.telephone (field doesn't exist on the
+                        corrected CedanteContact type) — now telephoneFixe /
+                        telephoneMobile, matching the backend Contact model. */}
+                    {contact.telephoneFixe && (
                       <p className="text-[12px] text-gray-600 flex items-center gap-1">
                         <Phone size={12} />
-                        {contact.telephone}
+                        {contact.telephoneFixe} <span className="text-gray-400">(fixe)</span>
+                      </p>
+                    )}
+                    {contact.telephoneMobile && (
+                      <p className="text-[12px] text-gray-600 flex items-center gap-1">
+                        <Phone size={12} />
+                        {contact.telephoneMobile} <span className="text-gray-400">(mobile)</span>
                       </p>
                     )}
                   </div>
@@ -277,15 +278,18 @@ export default function CedanteDetail() {
                 <CreditCard size={18} />
                 Coordonnées bancaires
               </h2>
+              {/* FIX: this button previously set isBankModalOpen/editingBank state
+                  but no modal was ever rendered anywhere in the file — clicking it
+                  silently did nothing, which reads as broken rather than
+                  unimplemented. Disabled with an explicit label until the bank
+                  account modal component exists. */}
               <button
-                onClick={() => {
-                  setEditingBank(null);
-                  setIsBankModalOpen(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                disabled
+                title="Modal de compte bancaire pas encore disponible"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-gray-400 bg-gray-50 rounded-lg cursor-not-allowed"
               >
                 <Plus size={16} />
-                Ajouter
+                Ajouter (bientôt)
               </button>
             </div>
             {cedante.bankAccounts && cedante.bankAccounts.length > 0 ? (
@@ -305,23 +309,21 @@ export default function CedanteDetail() {
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
                           <p className="text-[12px] text-gray-600">RIB: {bank.rib}</p>
                           <p className="text-[12px] text-gray-600">Devise: {bank.currency}</p>
+                          {/* FIX: iban field existed on the type but was never
+                              rendered — real cédante/réassureur data increasingly
+                              includes IBAN separately from RIB (audit Découverte 3). */}
+                          {bank.iban && (
+                            <p className="text-[12px] text-gray-600 col-span-2">IBAN: {bank.iban}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => {
-                            setEditingBank(bank);
-                            setIsBankModalOpen(true);
-                          }}
-                          className="p-1 rounded hover:bg-blue-50 text-blue-600"
+                          disabled
+                          title="Modal de compte bancaire pas encore disponible"
+                          className="p-1 rounded text-gray-300 cursor-not-allowed"
                         >
                           <Edit2 size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteBank(bank.id)}
-                          className="p-1 rounded hover:bg-red-50 text-red-600"
-                        >
-                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
@@ -410,8 +412,6 @@ export default function CedanteDetail() {
           }}
         />
       )}
-
-      {/* Bank Account Modal — component not yet available, coming soon */}
 
       {/* Override Code Modal */}
       {isOverrideModalOpen && (

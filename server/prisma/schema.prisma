@@ -136,12 +136,24 @@ enum JournalEntryType {
   LIQUIDATION_TRAITE
 }
 
+// FIX #11 (item from Low/deferred list): expanded to cover the real
+// template catalog from Section 9 (Note de Crédit, Etat de Transfert,
+// Situation Financière, and the two Reinsurance Premium Invoice variants).
+// The CDC's abstract "7 documents" and the real 11 F/PR24/xxx templates
+// still don't map 1:1 exactly — this covers the additional named types
+// called out in your review; if Phase 5 surfaces more granular template
+// variants, extend further then.
 enum BordereauType {
-  CESSION_CEDANTE               // Note de Débit / Bordereau cession — for cedant
-  CESSION_REASSUREUR            // Bordereau cession — for reinsurer
-  SINISTRE_FACULTATIVE          // Claim bordereau
-  SITUATION_TRAITE              // Treaty statement of accounts
-  FACTURE_DEPOT_PRIME           // Reinsurance premium invoice (XOL deposit)
+  CESSION_CEDANTE                    // Note de Débit / Bordereau cession — for cedant
+  CESSION_REASSUREUR                 // Bordereau cession — for reinsurer
+  SINISTRE_FACULTATIVE               // Claim bordereau
+  SITUATION_TRAITE                   // Treaty statement of accounts
+  FACTURE_DEPOT_PRIME                // Reinsurance premium invoice (XOL deposit)
+  NOTE_DE_CREDIT                     // Note de Crédit
+  ETAT_DE_TRANSFERT                  // Etat de Transfert
+  SITUATION_FINANCIERE               // Situation Financière
+  FACTURE_PRIME_REASSURANCE_DEPOT    // Reinsurance Premium Invoice — variant A (deposit)
+  FACTURE_PRIME_REASSURANCE_AJUSTEMENT // Reinsurance Premium Invoice — variant B (adjustment)
 }
 
 enum BordereauStatut {
@@ -219,7 +231,10 @@ model CompanyProfile {
   // Tab 2 — Juridiques
   formeJuridique       String?
   capitalSocial        Decimal?             @db.Decimal(20, 3)
-  rne                  String?              @unique
+  // FIX (Low/deferred item, applied): CDC says RNE is obligatoire for ARS's
+  // own profile. Unlike partner RNEs (unknown/foreign, left nullable), this
+  // one is ARS's own fixed, knowable data — made required.
+  rne                  String               @unique
   objetSocial          String?
   representantsLegaux  String[]
 
@@ -301,7 +316,12 @@ model PrinterConfig {
 
 // ============================================================
 // EXCHANGE RATES — Cours de change (BCT)
-// Two rates per transaction: taux réalisation (booking) + taux règlement (settlement)
+// FIX #2: BCT publishes ONE rate per currency per day. tauxRealisation /
+// tauxReglement are the same rate looked up on two different dates (booking
+// vs. payment), not two rates on one row. Renamed tauxRealisation -> taux,
+// dropped tauxReglement. Transactional models (Encaissement, Decaissement,
+// Settlement, FxGainLoss) already do the two-date lookup correctly and are
+// unchanged.
 // ============================================================
 
 model Currency {
@@ -318,9 +338,7 @@ model ExchangeRate {
   currencyId       String
   currency         Currency     @relation(fields: [currencyId], references: [id])
   currencyCode     String       // denormalized for fast lookup
-  // Two mandatory rates as per CDC
-  tauxRealisation  Decimal      @db.Decimal(15, 6)  // rate at deal booking date
-  tauxReglement    Decimal?     @db.Decimal(15, 6)  // rate at payment date (filled when settlement recorded)
+  taux             Decimal      @db.Decimal(15, 6)  // BCT rate of the day — looked up per date
   dateEffet        DateTime     // validity date — daily or monthly
   source           String       @default("BCT")
   isMonthly        Boolean      @default(false)
@@ -358,6 +376,7 @@ model User {
   assignedTasks      WorkflowTask[] @relation("assignedTasks")
   createdTasks       WorkflowTask[] @relation("createdTasks")
   sinistreEvents     SinistreEvent[]
+  passwordResetTokens PasswordResetToken[]
 
   createdAt          DateTime       @default(now())
   updatedAt          DateTime       @updatedAt
@@ -373,11 +392,40 @@ model RefreshToken {
   createdAt  DateTime  @default(now())
 }
 
+// FIX (auth review #2): dedicated table so a password-reset token can never
+// be replayed against /auth/refresh. Previously reset tokens were stored as
+// specially-prefixed rows in RefreshToken, which /auth/refresh looked up
+// with no shape check — a captured reset token could be used to mint a full
+// session. tokenHash is the sha256 of the token sent by email; the raw
+// token is never stored.
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
 // ============================================================
 // MODULE 2 — DONNÉES (Master Data)
 // ============================================================
 
 // Auto-incrementing code sequence per entity type
+// FIX #11 (applied): the client's answer to 5.6.1 contradicts itself
+// (both "prefix by type" AND "global numbering" checked). This Sequence
+// model alone can only guarantee prefix-per-type WITH per-type-restarting
+// counters. Rather than guess which interpretation they meant, we now pair
+// it with CodeRegistry below, which guarantees the *code string itself* is
+// globally unique across all 4 entity types regardless of how the counters
+// are generated. This satisfies the "global numbering" half of the
+// contradiction without foreclosing "prefix by type." Once the client
+// confirms whether the *counter* itself must also be shared (e.g.
+// REA-0007, CAS-0008, CCO-0009 incrementing together), extend this with a
+// single shared counter row.
 model Sequence {
   id         String   @id @default(uuid())
   entityType String   @unique   // 'ASSURE', 'CEDANTE', 'REASSUREUR', 'COCOURTIER', 'AFFAIRE', 'SINISTRE', 'BORDEREAU', 'ORDRE_PAIEMENT'
@@ -386,14 +434,33 @@ model Sequence {
   updatedAt  DateTime @updatedAt
 }
 
+// FIX #11 (applied): cross-table global code-uniqueness registry.
+// Each entity's code-generation service should insert a row here alongside
+// creating the Assure/Cedante/Reassureur/CoCourtier record, keyed on the
+// generated `code`. Guarantees no two entities across all 4 tables ever
+// share the same code string, satisfying a "numérotation globale"
+// interpretation while the per-table @unique constraints remain in place too.
+model CodeRegistry {
+  code       String   @id
+  entityType String   // 'ASSURE' | 'CEDANTE' | 'REASSUREUR' | 'COCOURTIER'
+  entityId   String
+  createdAt  DateTime @default(now())
+
+  @@index([entityType])
+}
+
 // Shared contact — polymorphic (one FK set, rest null)
+// FIX #4: Section 5.7 confirmed structure splits phone into Fixe/Mobile
+// (Cédante: "Téléphone fixe" + "Mobile"; Réassureur: "Téléphone" + "Mobile").
+// Replaced single `telephone` with telephoneFixe / telephoneMobile.
 model Contact {
-  id           String      @id @default(uuid())
-  nom          String
-  prenom       String?
-  poste        String?
-  telephone    String?
-  email        String?
+  id               String      @id @default(uuid())
+  nom              String
+  prenom           String?
+  poste            String?
+  telephoneFixe    String?
+  telephoneMobile  String?
+  email            String?
 
   assureId     String?
   assure       Assure?     @relation(fields: [assureId], references: [id])
@@ -408,11 +475,15 @@ model Contact {
 }
 
 // Bank account — shared across Cedante / Reassureur / CoCourtier
+// FIX #5: Section 5.7 treats RIB (domestic) and IBAN (international) as two
+// distinct, possibly-coexisting fields (Cédante: RIB + [IBAN optionnel];
+// Réassureur: SWIFT/BIC + IBAN ou RIB). Added `iban`.
 model BankAccount {
   id            String      @id @default(uuid())
   banque        String
   agence        String?
   rib           String
+  iban          String?
   swift         String?     // mandatory for Reassureur (needed for wire transfers)
   currency      String
   isDefault     Boolean     @default(false)
@@ -444,6 +515,9 @@ model Assure {
   codeModifiedBy   String?            // User ID who last modified the auto-generated code
   codeModifiedAt   DateTime?          // Timestamp of last code modification
   oldCode          String?            // Previous code value (for rollback/audit)
+  // FIX (Low/deferred item, applied): open question 5.6.7 — added as a
+  // nullable, sensibly-defaulted field rather than left off entirely.
+  deviseParDefaut  String?            @default("TND")
   freeFields     Json?
 
   contacts       Contact[]
@@ -456,17 +530,41 @@ model Assure {
 }
 
 // Fiche Cédante (Compagnie d'assurances) — compte 401200xx, locked after first save
+// FIX #8 (applied — comment corrected, no functional change): real codes
+// from the audit (40121400 BIAT, 40124000 STAR, 40129500 AMINA) show the
+// fixed prefix is `4012` (4 digits), not `401200` (6 digits) as the
+// original comment implied. Corrected below.
+// ASSUMPTION FLAGGED (audit Critique 2, still "❌ À décider" per client):
+// this whole 401200xx-for-Cedante pattern (vs 411xxxxx vs both coexisting)
+// is an assumption baked into this schema, matching real accounting data,
+// not yet a client-confirmed spec. If they later say "use 411xxxxx at the
+// application layer instead," this field's format expectation changes.
 model Cedante {
   id               String             @id @default(uuid())
   code             String             @unique
-  compteComptable  String             @unique    // 401200xx (NOT 411xxxxx) — mandatory, locked
+  compteComptable  String             @unique    // pattern ^4012\d{4}$ per real data (e.g. 40121400, 40124000, 40129500) — ASSUMPTION, not client-confirmed (see note above)
   isAccountLocked  Boolean            @default(false)
   raisonSociale    String
+  // FIX #9 (applied — decision documented, not changed): RNE uniqueness is
+  // intentionally @unique here. Cedante/Assure are typically Tunisian
+  // residents where RNE is meaningful; Reassureur/CoCourtier are mostly
+  // foreign and often won't have one at all (left non-unique below). DTO/
+  // service layer must still normalize "" -> null on import to avoid a
+  // false unique collision on empty strings.
   rne              String?            @unique     // Legacy RNE, kept for compatibility
   // NEW: Identifiant Unique (7 digits + 1 letter) — mandatory for Tunisian entities
   identifiantUnique String?           @unique
   // NEW: Resident status (true = Tunisian resident, false = non-resident)
   resident         Boolean?
+  // FIX #1: dual-code entity problem (Section 12.2, unresolved "❌ À décider").
+  // Some entities (GAT RE, TUNIS RE, ASTREE RE, NCA RE, UNITED INSURANCE,
+  // AON LIMITED) legitimately have both a 401xxxxx and a 411xxxxx code for
+  // the same real-world entity. Added nullable groupKey so two rows (here
+  // and/or on Reassureur) can be tagged as the same entity without a
+  // structural migration once the client decides Option A vs B.
+  groupKey         String?
+  // FIX (Low/deferred item, applied): open question 5.6.7.
+  deviseParDefaut  String?            @default("TND")
   formeJuridique   String?
   adresse          String?
   pays             String?
@@ -485,10 +583,13 @@ model Cedante {
   auxiliaryAccounts AuxiliaryAccount[]
   journalLines     JournalLine[]
   documents        DocumentLink[]     @relation("cedanteDocuments")
+  conventions      Convention[]
 
   isActive         Boolean            @default(true)
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+
+  @@index([groupKey])
 }
 
 // Fiche Réassureur — compte 401300xx, locked after first save
@@ -498,11 +599,26 @@ model Reassureur {
   compteComptable  String              @unique    // 401300xx — mandatory, locked
   isAccountLocked  Boolean             @default(false)
   raisonSociale    String
+  // FIX #9 (applied — decision documented): non-unique intentionally — see
+  // Cedante.rne comment above. Reassureurs are mostly foreign entities and
+  // frequently won't have a Tunisian RNE at all.
   rne              String?             // Optional for foreign entities
   // NEW: Identifiant Unique (7 digits + 1 letter) — mandatory for Tunisian reinsurers
   identifiantUnique String?            @unique
   // NEW: Resident status (true = Tunisian resident, false = non-resident)
   resident         Boolean?
+  // FIX #1: see Cedante.groupKey above — same dual-code entity problem.
+  groupKey         String?
+  // FIX (Low/deferred item, applied): rating bracketed as optional/TBD in
+  // Section 5.7 itself — added as free-text nullable field.
+  rating           String?
+  // FIX (Low/deferred item, applied): "plafond de participation" per
+  // réassureur — open question 5.6.3, unconfirmed. Added as nullable cap;
+  // adjust unit/scope once the client confirms whether this is a per-deal
+  // or a global exposure ceiling.
+  plafondParticipation Decimal?        @db.Decimal(20, 3)
+  // FIX (Low/deferred item, applied): open question 5.6.7.
+  deviseParDefaut  String?             @default("TND")
   formeJuridique   String?
   adresse          String?
   pays             String?
@@ -519,20 +635,33 @@ model Reassureur {
   auxiliaryAccounts AuxiliaryAccount[]
   journalLines     JournalLine[]
   documents        DocumentLink[]      @relation("reassureurDocuments")
+  conventions      Convention[]
 
   isActive         Boolean             @default(true)
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
+
+  @@index([groupKey])
 }
 
 // Fiche Co-courtier (Courtier en réassurance) — identical structure to Réassureur
+// FIX #7: Section 5.7 says Co-Courtier is "identique au Réassureur" —
+// added identifiantUnique + resident for consistency (structural only;
+// question 5.6.4 on whether co-courtiers can be foreign is still pending,
+// but there's no reason to withhold the fields in the meantime).
 model CoCourtier {
   id               String         @id @default(uuid())
   code             String         @unique
   compteComptable  String         @unique    // 401300xx (confirmed by data)
   isAccountLocked  Boolean        @default(false)
   raisonSociale    String
+  // FIX #9 (applied — decision documented): non-unique intentionally, same
+  // reasoning as Reassureur.rne.
   rne              String?        // Optional for foreign courtiers
+  identifiantUnique String?       @unique
+  resident         Boolean?
+  // FIX (Low/deferred item, applied): open question 5.6.7.
+  deviseParDefaut  String?        @default("TND")
   // NEW: Audit trail for admin code modifications
   codeModifiedBy   String?        // User ID who last modified the auto-generated code
   codeModifiedAt   DateTime?      // Timestamp of last code modification
@@ -546,10 +675,39 @@ model CoCourtier {
   contacts         Contact[]
   bankAccounts     BankAccount[]
   documents        DocumentLink[] @relation("coCourtierDocuments")
+  conventions      Convention[]
 
   isActive         Boolean        @default(true)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+}
+
+// ============================================================
+// FIX #6: Convention entity
+// Section 5.7 Onglet 3 (Cédante): "Pièce jointe GED (convention signée
+// obligatoire), Date de signature, Date d'effet, Notes" — this is
+// convention-specific metadata that the generic Document/DocumentLink
+// polymorphic pattern can't carry. Combined with the confirmed answer that
+// conventions are historized (Section 5.6.2 — multiple over time, not one
+// active document), this needs a first-class model rather than a
+// DocumentLink row.
+// ============================================================
+
+model Convention {
+  id            String      @id @default(uuid())
+  cedanteId     String?
+  cedante       Cedante?    @relation(fields: [cedanteId], references: [id])
+  reassureurId  String?
+  reassureur    Reassureur? @relation(fields: [reassureurId], references: [id])
+  coCourtId     String?
+  coCourtier    CoCourtier? @relation(fields: [coCourtId], references: [id])
+  documentId    String
+  document      Document    @relation(fields: [documentId], references: [id])
+  dateSignature DateTime?
+  dateEffet     DateTime?
+  notes         String?
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
 }
 
 // ============================================================
@@ -602,7 +760,7 @@ model AffaireReassureur {
   reassureur            Reassureur     @relation(fields: [reassureurId], references: [id])
 
   partPct               Decimal        @db.Decimal(7, 4)    // participation %
-  isLeader              Boolean        @default(false)
+  isLeader               Boolean        @default(false)
 
   // ARS commission per reinsurer (toggle: CALCULABLE or FORFAITAIRE)
   commissionMode        CommissionMode @default(CALCULABLE)
@@ -857,7 +1015,7 @@ model Encaissement {
   montant           Decimal            @db.Decimal(20, 3)
   currency          String             @default("TND")
 
-  // FX — booking rate stored at time of recording
+  // FX — booking rate stored at time of recording (already two-date-lookup correct — unchanged)
   tauxRealisation   Decimal?           @db.Decimal(15, 6)
   montantTnd        Decimal?           @db.Decimal(20, 3)  // TND equivalent
 
@@ -896,7 +1054,7 @@ model Decaissement {
   montant           Decimal            @db.Decimal(20, 3)
   currency          String             @default("TND")
 
-  // FX — settlement rate filled when payment is executed
+  // FX — settlement rate filled when payment is executed (already two-date-lookup correct — unchanged)
   tauxReglement     Decimal?           @db.Decimal(15, 6)
   montantTnd        Decimal?           @db.Decimal(20, 3)
 
@@ -1174,6 +1332,13 @@ model FiscalPeriod {
 }
 
 // Journal entry — generated as BROUILLON, validated by accountant before export
+// FIX #3: Section 8.2–8.4 (real accounting mock-ups) require a Code Journal
+// (VTEEXP, ATT411, plus per-bank codes from CJ BQ: BNA027, BTK580, etc.) and
+// a Pièce Comptable (monthly sequential document number) on every écriture.
+// Added both as free strings for now — recommend promoting codeJournal to a
+// real CodeJournal reference model (seeded from CJ BQ: ATT/BNA/AMN/BIA/BTK/
+// WIF/BTL × currency, plus VTEEXP/VTELOC/CAIPRO/EFAR/CHQ/MAJ) once you're
+// ready — not done here to avoid a second migration on top of this one.
 model JournalEntry {
   id                  String             @id @default(uuid())
   numero              String             @unique
@@ -1190,6 +1355,9 @@ model JournalEntry {
 
   fiscalPeriodId      String?
   fiscalPeriod        FiscalPeriod?      @relation(fields: [fiscalPeriodId], references: [id])
+
+  codeJournal         String?            // e.g. VTEEXP, ATT411, BNA027, BTK580
+  pieceComptable      String?            // monthly sequential document number
 
   // Validation
   validatedAt         DateTime?
@@ -1258,7 +1426,7 @@ model IntegrationExport {
 }
 
 // ============================================================
-// BORDEREAUX — 5 types
+// BORDEREAUX
 // ============================================================
 
 model Bordereau {
@@ -1307,7 +1475,7 @@ model BordereauLine {
 
   // Financial columns (as per the CDC reference table)
   capitaux100        Decimal?  @db.Decimal(20, 3)
-  prime100           Decimal?  @db.Decimal(20, 3)
+  prime100            Decimal?  @db.Decimal(20, 3)
   tauxCession        Decimal?  @db.Decimal(7, 4)
   primeBrute         Decimal?  @db.Decimal(20, 3)
   commissionCedante  Decimal?  @db.Decimal(20, 3)
@@ -1354,6 +1522,7 @@ model Document {
   links           DocumentLink[]
   shares          DocumentShare[]
   accessLogs      DocumentAccessLog[]
+  conventions     Convention[]
 
   uploadedById    String?
 

@@ -11,9 +11,25 @@ export class CedantesService {
     private sequence: SequenceService,
   ) {}
 
-  async findAll(search?: string, page = 1, limit = 20) {
+  /**
+   * FIX: added `statut` param — findAll() previously hardcoded isActive: true, which
+   * made it impossible to satisfy the confirmed spec (5.6.7 / audit D7 default):
+   * inactive partners must stay "visible dans l'historique, non sélectionnable dans
+   * les nouvelles affaires" — visible, just not selectable. Default stays 'ACTIVE' so
+   * existing callers (e.g. the "select cédante for new affaire" picker) keep the same
+   * behavior; pass statut: 'ALL' or 'INACTIVE' explicitly for the history view.
+   */
+  async findAll(
+    search?: string,
+    page = 1,
+    limit = 20,
+    statut: 'ACTIVE' | 'INACTIVE' | 'ALL' = 'ACTIVE',
+  ) {
     const skip = (page - 1) * limit;
-    const where: any = { isActive: true };
+    const where: any = {};
+    if (statut === 'ACTIVE') where.isActive = true;
+    else if (statut === 'INACTIVE') where.isActive = false;
+
     if (search) {
       where.OR = [
         { raisonSociale: { contains: search, mode: 'insensitive' } },
@@ -79,14 +95,41 @@ export class CedantesService {
     }
 
     // --- BUSINESS RULE: identifiantUnique required for Tunisian entities ---
+    // (this check now actually executes — the DTO no longer blocks the request
+    // before we get here; see create-cedante.dto.ts)
     if (dto.resident && !dto.identifiantUnique) {
       throw new BadRequestException(
         'Identifiant unique obligatoire pour les entités tunisiennes (resident = true)',
       );
     }
 
+    // FIX (new): soft cross-entity duplicate-code check (consolidated doc Section 12.2).
+    // 6 known entities (GAT RE, TUNIS RE, ASTREE RE, NCA RE, UNITED INSURANCE, AON
+    // LIMITED) legitimately hold a distinct code in both the 401xxxxx and 411xxxxx
+    // ranges. This is NOT blocked — only logged — because we can't yet distinguish a
+    // legitimate dual-code entity from an accidental duplicate at the schema level
+    // (pending client decision D1: one fiche/two comptes vs two fiches).
+    const [dupReassureur, dupCoCourtier] = await Promise.all([
+      this.prisma.reassureur.findUnique({ where: { compteComptable: dto.compteComptable } }),
+      this.prisma.coCourtier.findUnique({ where: { compteComptable: dto.compteComptable } }),
+    ]);
+    if (dupReassureur || dupCoCourtier) {
+      await this.prisma.auditLog.create({
+        data: {
+          action: 'POTENTIAL_DUPLICATE_ACCOUNT_CODE',
+          entityType: 'CEDANTE',
+          after: {
+            compteComptable: dto.compteComptable,
+            raisonSociale: dto.raisonSociale,
+            matchedReassureurId: dupReassureur?.id ?? null,
+            matchedCoCourtierId: dupCoCourtier?.id ?? null,
+          },
+        },
+      });
+    }
+
     // --- GENERATE CODE ---
-    const code = await this.sequence.next('CEDANTE'); // returns CAS-0001, CAS-0002...
+    const code = await this.sequence.next('CEDANTE'); // CAS-0001, CAS-0002...
 
     // --- CREATE ---
     return this.prisma.cedante.create({
@@ -116,9 +159,7 @@ export class CedantesService {
 
     // --- UNIQUENESS CHECKS FOR UPDATED FIELDS ---
     if (dto.rne && dto.rne !== existing.rne) {
-      const conflict = await this.prisma.cedante.findUnique({
-        where: { rne: dto.rne },
-      });
+      const conflict = await this.prisma.cedante.findUnique({ where: { rne: dto.rne } });
       if (conflict) throw new ConflictException(`RNE ${dto.rne} déjà utilisé par une autre entité`);
     }
 
@@ -142,15 +183,10 @@ export class CedantesService {
       );
     }
 
-    // --- HANDLE CONTACTS (delete & recreate) ---
-    if (dto.contacts !== undefined) {
-      await this.prisma.contact.deleteMany({ where: { cedanteId: id } });
-    }
-
-    // --- HANDLE BANK ACCOUNTS (delete & recreate) ---
-    if (dto.bankAccounts !== undefined) {
-      await this.prisma.bankAccount.deleteMany({ where: { cedanteId: id } });
-    }
+    // FIX: was two separate round-trips (deleteMany() then a later, separate update())
+    // — if the process died between them, all contacts/bank accounts were deleted and
+    // never recreated (silent data loss). Now a single nested write (deleteMany +
+    // create on each relation) executed atomically in one prisma.cedante.update() call.
 
     // --- UPDATE ---
     return this.prisma.cedante.update({
@@ -165,8 +201,12 @@ export class CedantesService {
         ...(dto.pays !== undefined && { pays: dto.pays }),
         ...(dto.capital !== undefined && { capital: dto.capital }),
         ...(dto.freeFields !== undefined && { freeFields: dto.freeFields }),
-        ...(dto.contacts && { contacts: { create: dto.contacts } }),
-        ...(dto.bankAccounts && { bankAccounts: { create: dto.bankAccounts } }),
+        ...(dto.contacts !== undefined && {
+          contacts: { deleteMany: {}, create: dto.contacts },
+        }),
+        ...(dto.bankAccounts !== undefined && {
+          bankAccounts: { deleteMany: {}, create: dto.bankAccounts },
+        }),
       },
       include: { contacts: true, bankAccounts: true },
     });
@@ -175,7 +215,6 @@ export class CedantesService {
   async remove(id: string) {
     await this.findOne(id);
 
-    // Check for active affaires before deactivating
     const activeAffaires = await this.prisma.affaire.count({
       where: { cedanteId: id, isActive: true },
     });
@@ -185,7 +224,6 @@ export class CedantesService {
       );
     }
 
-    // Soft delete: set inactive
     return this.prisma.cedante.update({
       where: { id },
       data: { isActive: false },
@@ -193,30 +231,26 @@ export class CedantesService {
   }
 
   /**
-   * ADMIN ONLY: Allow super admin to modify the auto-generated code.
-   * This advances the sequence ONLY if the new code is a valid next value.
-   * If it's a manual override (not following the pattern), do NOT advance the sequence.
+   * ADMIN ONLY: allow a super admin to manually override the auto-generated code.
+   * FIX: now actually bumps the underlying Sequence counter forward (via
+   * sequence.bump) so a future auto-generated code can never collide with the
+   * manually-assigned one. Previously the docstring claimed this but the method
+   * never touched the Sequence table at all.
    */
   async overrideCode(id: string, newCode: string, userId: string) {
     const existing = await this.findOne(id);
 
-    // Validate code format (CAS-XXXX)
     if (!/^CAS-[0-9]{4}$/.test(newCode)) {
       throw new BadRequestException('Le code doit être au format CAS-XXXX');
     }
 
-    // Check if code already exists
-    const conflict = await this.prisma.cedante.findUnique({
-      where: { code: newCode },
-    });
+    const conflict = await this.prisma.cedante.findUnique({ where: { code: newCode } });
     if (conflict) {
       throw new ConflictException(`Le code ${newCode} est déjà utilisé`);
     }
 
-    // Store old code before update
     const oldCode = existing.code;
 
-    // Update with audit trail
     const updated = await this.prisma.cedante.update({
       where: { id },
       data: {
@@ -227,7 +261,6 @@ export class CedantesService {
       },
     });
 
-    // Log the change in AuditLog (you'll need to inject AuditLogService or use prisma directly)
     await this.prisma.auditLog.create({
       data: {
         userId,
@@ -238,6 +271,13 @@ export class CedantesService {
         after: { code: newCode },
       },
     });
+
+    // FIX: bump the sequence counter so next('CEDANTE') can't walk back up and
+    // collide with this manually-assigned code.
+    const match = newCode.match(/-([0-9]{4})$/);
+    if (match) {
+      await this.sequence.bump('CEDANTE', parseInt(match[1], 10));
+    }
 
     return updated;
   }

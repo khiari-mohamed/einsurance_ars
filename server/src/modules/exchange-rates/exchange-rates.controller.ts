@@ -49,7 +49,7 @@ export class ExchangeRatesController {
 
   @Put(':id/settlement-rate')
   @RequirePermissions(Permission.DONNEES_UPDATE)
-  updateSettlement(@Param('id') id: string, @Body('tauxReglement') taux: number) {
+  updateSettlement(@Param('id') id: string, @Body('taux') taux: number) {
     return this.exchangeRates.updateSettlementRate(id, taux);
   }
 

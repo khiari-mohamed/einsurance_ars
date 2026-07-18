@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, HttpCode, HttpStatus, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiQuery, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ReassureursService } from './reassureurs.service';
 import { CreateReassureurDto } from './dto/create-reassureur.dto';
 import { UpdateReassureurDto } from './dto/update-reassureur.dto';
+import { OverrideReassureurCodeDto } from './dto/override-code.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
@@ -22,12 +23,14 @@ export class ReassureursController {
   @ApiQuery({ name: 'search', required: false })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'statut', required: false, enum: ['ACTIVE', 'INACTIVE', 'ALL'] })
   findAll(
     @Query('search') search?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
+    @Query('statut') statut?: 'ACTIVE' | 'INACTIVE' | 'ALL',
   ) {
-    return this.service.findAll(search, page, limit);
+    return this.service.findAll(search, page, limit, statut);
   }
 
   @Get(':id')
@@ -71,7 +74,7 @@ export class ReassureursController {
   @ApiResponse({ status: 409, description: 'Code already in use' })
   async overrideCode(
     @Param('id') id: string,
-    @Body() body: { code: string },
+    @Body() body: OverrideReassureurCodeDto,
     @CurrentUser() user: any,
   ) {
     return this.service.overrideCode(id, body.code, user.id);

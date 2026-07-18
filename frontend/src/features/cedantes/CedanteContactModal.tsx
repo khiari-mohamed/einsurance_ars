@@ -10,23 +10,46 @@ interface CedanteContactModalProps {
   onClose: () => void;
 }
 
+interface CedanteContactFormData {
+  nom: string;
+  prenom: string;
+  poste: string;
+  telephoneFixe: string;
+  telephoneMobile: string;
+  email: string;
+  isDefault: boolean;
+}
+
 export default function CedanteContactModal({ cedanteId, contact, onClose }: CedanteContactModalProps) {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<Partial<CedanteContact>>(
-    contact || {
+  const [formData, setFormData] = useState<CedanteContactFormData>(() => {
+    if (contact) {
+      return {
+        nom: contact.nom || '',
+        prenom: contact.prenom || '',
+        poste: contact.poste || '',
+        telephoneFixe: contact.telephoneFixe || '',
+        telephoneMobile: contact.telephoneMobile || '',
+        email: contact.email || '',
+        isDefault: contact.isDefault || false,
+      };
+    }
+
+    return {
       nom: '',
       prenom: '',
-      poste: '',           // CHANGED: fonction → poste
-      telephone: '',
+      poste: '',
+      telephoneFixe: '',
+      telephoneMobile: '',
       email: '',
-      isDefault: false,    // CHANGED: principal → isDefault
-    }
-  );
+      isDefault: false,
+    };
+  });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const mutation = useMutation({
-    mutationFn: (data: Partial<CedanteContact>) => {
+    mutationFn: (data: Partial<CedanteContact> & { isDefault?: boolean }) => {
       if (contact) {
         return cedantesApi.updateContact(cedanteId, contact.id, data);
       }
@@ -47,7 +70,6 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
     e.preventDefault();
     setErrors({});
 
-    // Validate email format if provided
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       setErrors({ email: 'Format d\'email invalide' });
       return;
@@ -58,8 +80,7 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
-    setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
-    // Clear error for this field
+    setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value } as CedanteContactFormData);
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
@@ -103,15 +124,12 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                Prénom <span className="text-red-500">*</span>
-              </label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prénom</label>
               <input
                 type="text"
                 name="prenom"
                 value={formData.prenom || ''}
                 onChange={handleChange}
-                required
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -127,12 +145,24 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
               />
             </div>
 
+            {/* FIX: split into two fields matching telephoneFixe / telephoneMobile */}
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Téléphone</label>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Téléphone fixe</label>
               <input
                 type="tel"
-                name="telephone"
-                value={formData.telephone || ''}
+                name="telephoneFixe"
+                value={formData.telephoneFixe || ''}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mobile</label>
+              <input
+                type="tel"
+                name="telephoneMobile"
+                value={formData.telephoneMobile || ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -152,6 +182,8 @@ export default function CedanteContactModal({ cedanteId, contact, onClose }: Ced
               )}
             </div>
 
+            {/* NOTE: isDefault checkbox kept — needs backend confirmation, see
+                CedanteDetail.tsx / review response. */}
             <div className="md:col-span-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input

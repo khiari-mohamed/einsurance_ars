@@ -12,6 +12,22 @@ export class CreateCoCourtierDto {
 
   @ApiProperty() @IsString() raisonSociale: string;
   @ApiPropertyOptional() @IsOptional() @IsString() rne?: string;
+
+  // FIX (ASSUMES SCHEMA ADDITION — CONFIRM): Section 5.7 says Co-Courtier is
+  // "identique au Réassureur" structurally. Cedante/Reassureur both carry
+  // identifiantUnique + resident; CoCourtier was inconsistent (missing both) even
+  // though co-brokers can equally be Tunisian or foreign (open question 5.6.4).
+  // *** Assumes your corrected schema added `identifiantUnique` and `resident`
+  // columns to the CoCourtier model. If it didn't, strip these two fields + the
+  // matching service logic before compiling. ***
+  @ApiPropertyOptional({ description: 'Identifiant unique (7 chiffres + 1 lettre) — obligatoire pour les entités tunisiennes' })
+  @IsOptional()
+  @Matches(/^[0-9]{7}[A-Z]$/, { message: "Identifiant Unique doit être 7 chiffres suivis d'une lettre majuscule (ex: 1234567A)" })
+  identifiantUnique?: string;
+
+  @ApiPropertyOptional({ description: 'Résident (true = Tunisien, false = non-résident)' })
+  @IsOptional() @IsBoolean() resident?: boolean;
+
   @ApiPropertyOptional() @IsOptional() @IsString() formeJuridique?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() adresse?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() pays?: string;

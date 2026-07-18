@@ -8,7 +8,6 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { SetMetadata } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -17,19 +16,26 @@ import {
   ForgotPasswordDto,
   ResetPasswordDto,
 } from './dto/reset-password.dto';
-import { JwtAuthGuard, IS_PUBLIC_KEY } from '../../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
-import { RequirePermissions } from '../../common/decorators/permissions.decorator';
-import { Permission } from '../../config/permissions.config';
-
-const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
+import { Public } from '../../common/decorators/public.decorator';
+import { CurrentUser, CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Auth')
 @Controller('auth')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class AuthController {
   constructor(private authService: AuthService) {}
+
+  // NEW: lets the frontend know whether to offer SUPER_ADMIN as a
+  // selectable role on the public registration form. Safe to expose
+  // pre-auth — reveals only a boolean, nothing about existing accounts.
+  @Public()
+  @Get('setup-status')
+  @ApiOperation({ summary: "Indique si le système nécessite un compte SUPER_ADMIN initial" })
+  setupStatus() {
+    return this.authService.setupStatus();
+  }
 
   @Public()
   @Post('login')
@@ -41,7 +47,7 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @ApiOperation({ summary: 'Créer un utilisateur' })
+  @ApiOperation({ summary: 'Inscription utilisateur' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
@@ -55,7 +61,8 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  logout(@CurrentUser() user: any) {
+  @ApiBearerAuth()
+  logout(@CurrentUser() user: CurrentUserPayload) {
     return this.authService.logout(user.id);
   }
 
@@ -76,13 +83,13 @@ export class AuthController {
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  changePassword(@CurrentUser() user: any, @Body() dto: ChangePasswordDto) {
+  changePassword(@CurrentUser() user: CurrentUserPayload, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(user.id, dto);
   }
 
   @Get('me')
   @ApiBearerAuth()
-  me(@CurrentUser() user: any) {
+  me(@CurrentUser() user: CurrentUserPayload) {
     return this.authService.me(user.id);
   }
 }

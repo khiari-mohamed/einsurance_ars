@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit2, Trash2, Plus, Mail, Phone, Building2, CreditCard, FileText, FileCheck, Shield, Globe } from 'lucide-react';
+import { ArrowLeft, Edit2, Trash2, Plus, Mail, Phone, Building2, CreditCard, FileText, FileCheck, Shield, Globe, X } from 'lucide-react';
 import { reassureursApi } from '../../api/master-data.api';
-import { affairesApi } from '../../api/affaires.api';
 import { Reassureur, ReassureurContact, ReassureurBankAccount } from '../../types/reassureur.types';
 
 export default function ReassureurDetail() {
@@ -57,8 +56,9 @@ export default function ReassureurDetail() {
     },
   });
 
-  const handleDelete = () => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce réassureur ?')) {
+  // FIX: relabeled "Supprimer" -> "Désactiver" — same rationale as CedanteDetail.
+  const handleDeactivate = () => {
+    if (window.confirm('Désactiver ce réassureur ? Il restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.')) {
       deleteMutation.mutate();
     }
   };
@@ -95,7 +95,7 @@ export default function ReassureurDetail() {
     );
   }
 
-  const isAdmin = true;
+  const isAdmin = true; // TODO: Get from user context
 
   return (
     <div className="p-4 lg:p-6">
@@ -133,13 +133,15 @@ export default function ReassureurDetail() {
               Modifier le code
             </button>
           )}
-          <button
-            onClick={handleDelete}
-            className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-          >
-            <Trash2 size={16} />
-            Supprimer
-          </button>
+          {reassureur.isActive !== false && (
+            <button
+              onClick={handleDeactivate}
+              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <Trash2 size={16} />
+              Désactiver
+            </button>
+          )}
         </div>
       </div>
 
@@ -158,9 +160,9 @@ export default function ReassureurDetail() {
               <InfoField label="Compte Comptable" value={reassureur.compteComptable} />
               <InfoField label="Forme Juridique" value={reassureur.formeJuridique} />
               <InfoField label="Identifiant Unique" value={reassureur.identifiantUnique || 'À renseigner'} />
-              <InfoField 
-                label="Résident" 
-                value={reassureur.resident ? 'Oui (Tunisien)' : 'Non (Étranger)'} 
+              <InfoField
+                label="Résident"
+                value={reassureur.resident ? 'Oui (Tunisien)' : 'Non (Étranger)'}
                 icon={reassureur.resident ? <Shield size={14} /> : <Globe size={14} />}
               />
               <InfoField label="RNE (legacy)" value={reassureur.rne || '-'} />
@@ -240,10 +242,17 @@ export default function ReassureurDetail() {
                         {contact.email}
                       </p>
                     )}
-                    {contact.telephone && (
+                    {/* FIX: telephone -> telephoneFixe / telephoneMobile */}
+                    {contact.telephoneFixe && (
                       <p className="text-[12px] text-gray-600 flex items-center gap-1">
                         <Phone size={12} />
-                        {contact.telephone}
+                        {contact.telephoneFixe} <span className="text-gray-400">(fixe)</span>
+                      </p>
+                    )}
+                    {contact.telephoneMobile && (
+                      <p className="text-[12px] text-gray-600 flex items-center gap-1">
+                        <Phone size={12} />
+                        {contact.telephoneMobile} <span className="text-gray-400">(mobile)</span>
                       </p>
                     )}
                   </div>
@@ -282,7 +291,16 @@ export default function ReassureurDetail() {
                           {bank.swift && (
                             <p className="text-[12px] text-gray-600">SWIFT: {bank.swift}</p>
                           )}
+                          {/* FIX: iban was on the type but never rendered */}
+                          {bank.iban && (
+                            <p className="text-[12px] text-gray-600">IBAN: {bank.iban}</p>
+                          )}
                         </div>
+                        {/* NOTE: no SWIFT shown here for a non-resident account is
+                            EXPECTED now, not an error — SWIFT is a non-blocking
+                            data-quality flag per the backend fix, not mandatory.
+                            Consider a subtle "SWIFT manquant" badge here if you want
+                            it surfaced visually, rather than silent absence. */}
                       </div>
                     </div>
                   </div>
@@ -427,10 +445,6 @@ export default function ReassureurDetail() {
   );
 }
 
-// ------------------------------------------------------------------
-// Sub-components
-// ------------------------------------------------------------------
-
 interface InfoFieldProps {
   label: string;
   value?: string;
@@ -450,10 +464,6 @@ function InfoField({ label, value, icon, className = '' }: InfoFieldProps) {
   );
 }
 
-// ------------------------------------------------------------------
-// Contact Modal (inline, no separate file dependency)
-// ------------------------------------------------------------------
-
 interface ReassureurContactModalProps {
   reassureurId: string;
   contact: ReassureurContact | null;
@@ -467,7 +477,9 @@ function ReassureurContactModal({ reassureurId, contact, onClose }: ReassureurCo
       nom: '',
       prenom: '',
       poste: '',
-      telephone: '',
+      // FIX: same split as CedanteContactModal.
+      telephoneFixe: '',
+      telephoneMobile: '',
       email: '',
       isDefault: false,
     }
@@ -515,8 +527,10 @@ function ReassureurContactModal({ reassureurId, contact, onClose }: ReassureurCo
           <h2 className="text-[18px] font-semibold text-gray-900">
             {contact ? 'Modifier le contact' : 'Nouveau contact'}
           </h2>
+          {/* FIX (consistency): now uses the shared lucide-react X import instead
+              of a hand-rolled inline <svg>. */}
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <X size={20} />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
@@ -529,16 +543,21 @@ function ReassureurContactModal({ reassureurId, contact, onClose }: ReassureurCo
               <input type="text" name="nom" value={formData.nom || ''} onChange={handleChange} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prénom <span className="text-red-500">*</span></label>
-              <input type="text" name="prenom" value={formData.prenom || ''} onChange={handleChange} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prénom</label>
+              <input type="text" name="prenom" value={formData.prenom || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Poste / Fonction</label>
               <input type="text" name="poste" value={formData.poste || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
+            {/* FIX: split telephone into telephoneFixe / telephoneMobile */}
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Téléphone</label>
-              <input type="tel" name="telephone" value={formData.telephone || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <input type="tel" name="telephoneFixe" value={formData.telephoneFixe || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mobile</label>
+              <input type="tel" name="telephoneMobile" value={formData.telephoneMobile || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div className="md:col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Email</label>

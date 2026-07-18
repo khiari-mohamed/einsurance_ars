@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, HttpCode, HttpStatus, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiQuery, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AssuresService } from './assures.service';
 import { CreateAssureDto } from './dto/create-assure.dto';
 import { UpdateAssureDto } from './dto/update-assure.dto';
+import { OverrideAssureCodeDto } from './dto/override-code.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
@@ -16,20 +17,42 @@ import { Permission } from '../../../config/permissions.config';
 export class AssuresController {
   constructor(private service: AssuresService) {}
 
-  @Get() @RequirePermissions(Permission.DONNEES_READ)
-  @ApiQuery({ name: 'search', required: false }) @ApiQuery({ name: 'page', required: false }) @ApiQuery({ name: 'limit', required: false })
-  findAll(@Query('search') search?: string, @Query('page') page?: number, @Query('limit') limit?: number) {
-    return this.service.findAll(search, page, limit);
+  @Get()
+  @RequirePermissions(Permission.DONNEES_READ)
+  @ApiOperation({ summary: 'List all assurés (clients finaux)' })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiQuery({ name: 'statut', required: false, enum: ['ACTIVE', 'INACTIVE', 'ALL'] })
+  findAll(
+    @Query('search') search?: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
+    @Query('statut') statut?: 'ACTIVE' | 'INACTIVE' | 'ALL',
+  ) {
+    return this.service.findAll(search, page, limit, statut);
   }
 
-  @Get(':id') @RequirePermissions(Permission.DONNEES_READ)
-  findOne(@Param('id') id: string) { return this.service.findOne(id); }
+  @Get(':id')
+  @RequirePermissions(Permission.DONNEES_READ)
+  @ApiOperation({ summary: 'Get an assuré by ID' })
+  findOne(@Param('id') id: string) {
+    return this.service.findOne(id);
+  }
 
-  @Post() @RequirePermissions(Permission.DONNEES_CREATE)
-  create(@Body() dto: CreateAssureDto) { return this.service.create(dto); }
+  @Post()
+  @RequirePermissions(Permission.DONNEES_CREATE)
+  @ApiOperation({ summary: 'Create a new assuré' })
+  create(@Body() dto: CreateAssureDto) {
+    return this.service.create(dto);
+  }
 
-  @Put(':id') @RequirePermissions(Permission.DONNEES_UPDATE)
-  update(@Param('id') id: string, @Body() dto: UpdateAssureDto) { return this.service.update(id, dto); }
+  @Put(':id')
+  @RequirePermissions(Permission.DONNEES_UPDATE)
+  @ApiOperation({ summary: 'Update an assuré' })
+  update(@Param('id') id: string, @Body() dto: UpdateAssureDto) {
+    return this.service.update(id, dto);
+  }
 
   @Post(':id/override-code')
   @RequirePermissions(Permission.SUPER_ADMIN)
@@ -40,12 +63,16 @@ export class AssuresController {
   @ApiResponse({ status: 409, description: 'Code already in use' })
   async overrideCode(
     @Param('id') id: string,
-    @Body() body: { code: string },
+    @Body() body: OverrideAssureCodeDto,
     @CurrentUser() user: any,
   ) {
     return this.service.overrideCode(id, body.code, user.id);
   }
 
-  @Delete(':id') @RequirePermissions(Permission.DONNEES_DELETE)
-  remove(@Param('id') id: string) { return this.service.remove(id); }
+  @Delete(':id')
+  @RequirePermissions(Permission.DONNEES_DELETE)
+  @ApiOperation({ summary: 'Soft-delete an assuré (set inactive)' })
+  remove(@Param('id') id: string) {
+    return this.service.remove(id);
+  }
 }
