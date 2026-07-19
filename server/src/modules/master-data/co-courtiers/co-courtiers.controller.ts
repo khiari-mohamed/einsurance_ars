@@ -3,6 +3,9 @@ import { ApiTags, ApiBearerAuth, ApiQuery, ApiOperation, ApiResponse } from '@ne
 import { CoCourtierService } from './co-courtiers.service';
 import { CreateCoCourtierDto } from './dto/create-co-courtier.dto';
 import { UpdateCoCourtierDto } from './dto/update-co-courtier.dto';
+import { BulkImportCoCourtiersDto } from './dto/bulk-import-co-courtiers.dto';
+import { BulkUpdateCoCourtiersDto } from './dto/bulk-update-co-courtiers.dto';
+import { BulkDeleteCoCourtiersDto } from './dto/bulk-delete-co-courtiers.dto';
 import { OverrideCoCourtierCodeDto } from './dto/override-code.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
@@ -45,6 +48,31 @@ export class CoCourtierController {
   @ApiOperation({ summary: 'Create a new co-courtier' })
   create(@Body() dto: CreateCoCourtierDto) {
     return this.service.create(dto);
+  }
+
+  @Post('bulk-import')
+  @RequirePermissions(Permission.DONNEES_CREATE)
+  @ApiOperation({ summary: 'Bulk import co-courtiers from parsed Excel/CSV rows (partial success allowed)' })
+  @ApiResponse({ status: 201, description: 'Per-row created/failed report' })
+  bulkImport(@Body() dto: BulkImportCoCourtiersDto) {
+    return this.service.bulkImport(dto.items);
+  }
+
+  // NOTE: registered BEFORE @Put(':id') / @Post(':id/...') — same routing-order
+  // reason as the other 3 submodules.
+  @Put('bulk-update')
+  @RequirePermissions(Permission.DONNEES_UPDATE)
+  @ApiOperation({ summary: 'Bulk update shared fields (pays, formeJuridique, isActive) across multiple co-courtiers' })
+  bulkUpdate(@Body() dto: BulkUpdateCoCourtiersDto) {
+    return this.service.bulkUpdate(dto.ids, dto.data);
+  }
+
+  @Post('bulk-delete')
+  @RequirePermissions(Permission.DONNEES_DELETE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk soft-delete (deactivate) multiple co-courtiers' })
+  bulkDelete(@Body() dto: BulkDeleteCoCourtiersDto) {
+    return this.service.bulkDelete(dto.ids);
   }
 
   @Put(':id')

@@ -4,6 +4,9 @@ import { AssuresService } from './assures.service';
 import { CreateAssureDto } from './dto/create-assure.dto';
 import { UpdateAssureDto } from './dto/update-assure.dto';
 import { OverrideAssureCodeDto } from './dto/override-code.dto';
+import { BulkImportAssuresDto } from './dto/bulk-import-assures.dto';
+import { BulkUpdateAssuresDto } from './dto/bulk-update-assures.dto';
+import { BulkDeleteAssuresDto } from './dto/bulk-delete-assures.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
@@ -47,6 +50,25 @@ export class AssuresController {
     return this.service.create(dto);
   }
 
+  @Post('bulk-import')
+  @RequirePermissions(Permission.DONNEES_CREATE)
+  @ApiOperation({ summary: 'Bulk import clients from parsed Excel/CSV rows (partial success allowed)' })
+  @ApiResponse({ status: 201, description: 'Per-row created/failed report' })
+  bulkImport(@Body() dto: BulkImportAssuresDto) {
+    return this.service.bulkImport(dto.items);
+  }
+
+  // NOTE: registered BEFORE @Put(':id') — Nest matches routes in declaration
+  // order, so a static segment like 'bulk-update' must come before a dynamic
+  // ':id' segment on the same HTTP verb, or PUT /assures/bulk-update would be
+  // swallowed by update() with id='bulk-update'.
+  @Put('bulk-update')
+  @RequirePermissions(Permission.DONNEES_UPDATE)
+  @ApiOperation({ summary: 'Bulk update shared fields (pays, formeJuridique, isActive) across multiple clients' })
+  bulkUpdate(@Body() dto: BulkUpdateAssuresDto) {
+    return this.service.bulkUpdate(dto.ids, dto.data);
+  }
+
   @Put(':id')
   @RequirePermissions(Permission.DONNEES_UPDATE)
   @ApiOperation({ summary: 'Update an assuré' })
@@ -67,6 +89,14 @@ export class AssuresController {
     @CurrentUser() user: any,
   ) {
     return this.service.overrideCode(id, body.code, user.id);
+  }
+
+  @Post('bulk-delete')
+  @RequirePermissions(Permission.DONNEES_DELETE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk soft-delete (deactivate) multiple clients; skips ones with active affaires' })
+  bulkDelete(@Body() dto: BulkDeleteAssuresDto) {
+    return this.service.bulkDelete(dto.ids);
   }
 
   @Delete(':id')

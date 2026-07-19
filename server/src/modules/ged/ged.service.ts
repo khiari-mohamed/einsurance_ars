@@ -4,6 +4,7 @@ import {
 import { DocumentEntityType, DocumentStatut } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { StorageService } from '../../shared/services/storage.service';
+import { UploadsService } from '../upload/uploads.service';
 import { DocumentChecklistService } from './document-checklist.service';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { SearchDocumentDto } from './dto/search-document.dto';
@@ -22,81 +23,92 @@ interface MulterFile {
   path?: string;
 }
 
-const ALLOWED_MIME_TYPES = [
-  'application/pdf',
-  'image/jpeg', 'image/png', 'image/tiff',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-];
-const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
-
 @Injectable()
 export class GedService {
   constructor(
     private prisma: PrismaService,
     private storage: StorageService,
     private checklist: DocumentChecklistService,
+    private uploads: UploadsService, // FIX: delegate storage/validation/versioning here instead of duplicating it
   ) {}
 
+  /**
+   * FIX (duplicate pipeline bug): this method used to run its own
+   * ALLOWED_MIME_TYPES list and its own hardcoded 50MB limit — a second
+   * source of truth alongside upload.config.ts / app.config.ts. It also
+   * created the Document row directly, with NO matching DocumentVersion
+   * row, unlike UploadsService.uploadSingle() which creates version 1
+   * properly. That meant every document uploaded through GED silently had
+   * an empty version history. Now delegates to UploadsService (single
+   * source of truth for limits/types + correct versioning), then re-fetches
+   * with `links` included so the return shape is identical to before for
+   * any caller reading `.links` off the result.
+   */
   async upload(
     file: MulterFile,
     dto: UploadDocumentDto,
     userId: string,
   ) {
-    // Validate file
-    if (!ALLOWED_MIME_TYPES.includes(file.mimetype)) {
-      throw new BadRequestException(`Type de fichier non autorisé: ${file.mimetype}`);
-    }
-    if (file.size > MAX_SIZE_BYTES) {
-      throw new BadRequestException(`Fichier trop volumineux (max 50MB)`);
-    }
+    const { entityType, entityId } = this.resolveEntityRef(dto);
 
-    // Determine sub-directory
-    const subDir = dto.affaireId ?? dto.sinistreId ?? dto.cedanteId ?? 'general';
-    const { filePath, fileName } = await this.storage.saveFile(file.buffer, file.originalname, subDir);
+    const created = await this.uploads.uploadSingle(
+      file as any,
+      { entityType, entityId, documentType: dto.documentType } as any,
+      userId,
+    );
 
-    const document = await this.prisma.document.create({
-      data: {
-        nom: fileName,
-        originalName: file.originalname,
-        mimeType: file.mimetype,
-        sizeBytes: file.size,
-        filePath,
-        documentType: dto.documentType,
-        statut: DocumentStatut.RECU,
-        uploadedById: userId,
-        links: {
-          create: {
-            entityType: dto.entityType ?? DocumentEntityType.AFFAIRE,
-            assureId: dto.assureId,
-            cedanteId: dto.cedanteId,
-            reassureurId: dto.reassureurId,
-            coCourtId: dto.coCourtId,
-            affaireId: dto.affaireId,
-            sinistreId: dto.sinistreId,
-            encaissementId: dto.encaissementId,
-            decaissementId: dto.decaissementId,
-            ordrePaiementId: dto.ordrePaiementId,
-            bordereauId: dto.bordereauId,
-          },
-        },
-      },
+    const document = await this.prisma.document.findUnique({
+      where: { id: created.id },
       include: { links: true },
     });
 
-    // Log access
-    await this.prisma.documentAccessLog.create({
-      data: { documentId: document.id, userId, action: 'UPLOAD', ipAddress: null },
-    });
-
-    // Update checklist if document type matches a checklist item
     if (dto.affaireId && dto.documentType) {
-      await this.updateChecklist(dto.affaireId, dto.documentType, document.id);
+      await this.updateChecklist(dto.affaireId, dto.documentType, created.id);
     }
 
     return document;
+  }
+
+  /**
+   * FIX: UploadDocumentDto carries one optional FK per possible target
+   * (assureId, cedanteId, reassureurId...) rather than a single
+   * (entityType, entityId) pair. The old code did
+   * `dto.entityType ?? DocumentEntityType.AFFAIRE` — so a caller that set
+   * only `cedanteId` and forgot the explicit `entityType` flag got the
+   * document silently filed as an AFFAIRE document. This resolves the type
+   * from whichever FK is actually set, and throws instead of guessing if an
+   * explicit entityType contradicts it.
+   */
+  private resolveEntityRef(dto: UploadDocumentDto): { entityType: DocumentEntityType; entityId: string } {
+    const candidates: [DocumentEntityType, string | undefined][] = [
+      ['ASSURE', dto.assureId],
+      ['CEDANTE', dto.cedanteId],
+      ['REASSUREUR', dto.reassureurId],
+      ['CO_COURTIER', dto.coCourtId],
+      ['AFFAIRE', dto.affaireId],
+      ['SINISTRE', dto.sinistreId],
+      ['ENCAISSEMENT', dto.encaissementId],
+      ['DECAISSEMENT', dto.decaissementId],
+      ['ORDRE_PAIEMENT', dto.ordrePaiementId],
+      ['BORDEREAU', dto.bordereauId],
+    ];
+
+    const match = candidates.find(([, id]) => !!id);
+    if (!match) {
+      throw new BadRequestException(
+        "Aucune entité cible spécifiée pour l'upload (assureId, cedanteId, reassureurId, etc.).",
+      );
+    }
+
+    const [resolvedType, entityId] = match;
+
+    if (dto.entityType && dto.entityType !== resolvedType) {
+      throw new BadRequestException(
+        `entityType (${dto.entityType}) ne correspond pas au champ FK fourni (résolu: ${resolvedType}).`,
+      );
+    }
+
+    return { entityType: resolvedType, entityId: entityId as string };
   }
 
   async search(dto: SearchDocumentDto, page = 1, limit = 20) {
@@ -143,7 +155,6 @@ export class GedService {
     const existing = await this.prisma.document.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Document introuvable');
 
-    // Archive current version
     await this.prisma.documentVersion.create({
       data: {
         documentId: id,
@@ -196,7 +207,6 @@ export class GedService {
       data: { documentId: id, userId, action: 'DELETE' },
     });
 
-    // Soft-delete: mark as REJETE and keep the file for audit trail
     return this.prisma.document.update({
       where: { id },
       data: { statut: DocumentStatut.REJETE },

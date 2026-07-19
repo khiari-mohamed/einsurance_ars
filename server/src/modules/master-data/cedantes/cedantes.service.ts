@@ -3,6 +3,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { SequenceService } from '../../../shared/services/sequence.service';
 import { CreateCedanteDto } from './dto/create-cedante.dto';
 import { UpdateCedanteDto } from './dto/update-cedante.dto';
+import { BulkImportCedanteItemDto } from './dto/bulk-import-cedantes.dto';
+import { BulkUpdateCedantesDataDto } from './dto/bulk-update-cedantes.dto';
 
 @Injectable()
 export class CedantesService {
@@ -153,6 +155,116 @@ export class CedantesService {
     });
   }
 
+  /**
+   * Bulk import from a parsed Excel/CSV file. Rows are processed one at a time
+   * (not wrapped in a single transaction) so a bad row never rolls back the
+   * good ones — the caller gets a per-row success/failure report instead.
+   * Re-applies the exact same rules as create() per row: compteComptable
+   * uniqueness, identifiantUnique uniqueness, rne uniqueness, and the
+   * resident-requires-identifiantUnique business rule — plus in-file
+   * duplicate detection (two rows in the same import can't reuse the same
+   * compteComptable/identifiantUnique either, even before either hits the DB).
+   */
+  async bulkImport(items: BulkImportCedanteItemDto[]) {
+    const results: {
+      row: number;
+      success: boolean;
+      code?: string;
+      raisonSociale?: string;
+      error?: string;
+    }[] = [];
+    const seenComptes = new Set<string>();
+    const seenIdentifiants = new Set<string>();
+    const seenRnes = new Set<string>();
+
+    for (let i = 0; i < items.length; i++) {
+      const dto = items[i];
+      const rowNum = i + 1;
+      try {
+        if (!dto.raisonSociale || !dto.raisonSociale.trim()) {
+          throw new BadRequestException('Raison sociale manquante');
+        }
+
+        if (!dto.compteComptable) {
+          throw new BadRequestException('Compte comptable manquant');
+        }
+        if (seenComptes.has(dto.compteComptable)) {
+          throw new ConflictException(`Compte comptable ${dto.compteComptable} en doublon dans le fichier importé`);
+        }
+        const existingAccount = await this.prisma.cedante.findUnique({
+          where: { compteComptable: dto.compteComptable },
+        });
+        if (existingAccount) {
+          throw new ConflictException(`Compte comptable ${dto.compteComptable} déjà utilisé`);
+        }
+
+        if (dto.identifiantUnique) {
+          if (seenIdentifiants.has(dto.identifiantUnique)) {
+            throw new ConflictException(`Identifiant unique ${dto.identifiantUnique} en doublon dans le fichier importé`);
+          }
+          const existingIdentifiant = await this.prisma.cedante.findUnique({
+            where: { identifiantUnique: dto.identifiantUnique },
+          });
+          if (existingIdentifiant) {
+            throw new ConflictException(`Identifiant unique ${dto.identifiantUnique} déjà utilisé`);
+          }
+        }
+
+        if (dto.rne) {
+          if (seenRnes.has(dto.rne)) {
+            throw new ConflictException(`RNE ${dto.rne} en doublon dans le fichier importé`);
+          }
+          const existingRne = await this.prisma.cedante.findUnique({ where: { rne: dto.rne } });
+          if (existingRne) throw new ConflictException(`RNE ${dto.rne} déjà utilisé`);
+        }
+
+        if (dto.resident && !dto.identifiantUnique) {
+          throw new BadRequestException(
+            'Identifiant unique obligatoire pour les entités tunisiennes (resident = true)',
+          );
+        }
+
+        const code = await this.sequence.next('CEDANTE');
+        const created = await this.prisma.cedante.create({
+          data: {
+            code,
+            compteComptable: dto.compteComptable,
+            isAccountLocked: true,
+            raisonSociale: dto.raisonSociale.trim(),
+            rne: dto.rne || undefined,
+            identifiantUnique: dto.identifiantUnique || undefined,
+            resident: dto.resident,
+            formeJuridique: dto.formeJuridique,
+            adresse: dto.adresse,
+            pays: dto.pays,
+            capital: dto.capital,
+            freeFields: {},
+          },
+        });
+
+        seenComptes.add(dto.compteComptable);
+        if (dto.identifiantUnique) seenIdentifiants.add(dto.identifiantUnique);
+        if (dto.rne) seenRnes.add(dto.rne);
+
+        results.push({ row: rowNum, success: true, code: created.code, raisonSociale: created.raisonSociale });
+      } catch (err: any) {
+        results.push({
+          row: rowNum,
+          success: false,
+          raisonSociale: dto?.raisonSociale,
+          error: err?.message || 'Erreur inconnue',
+        });
+      }
+    }
+
+    return {
+      total: items.length,
+      created: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
+  }
+
   async update(id: string, dto: UpdateCedanteDto) {
     // --- VERIFY EXISTS ---
     const existing = await this.findOne(id);
@@ -212,6 +324,38 @@ export class CedantesService {
     });
   }
 
+  /**
+   * Bulk edit — applies a small, intentionally-limited set of shared fields
+   * (pays, formeJuridique, isActive) identically across every id given. Uses
+   * updateMany since these fields carry no per-row conflict risk. Deliberately
+   * excludes compteComptable (permanently locked post-creation), and
+   * identifiantUnique/resident/rne (per-row uniqueness + the resident ↔
+   * identifiantUnique cross-field rule can't safely be blanket-applied across
+   * an arbitrary multi-select without risking BadRequestException mid-batch
+   * for rows that don't share the same starting state).
+   */
+  async bulkUpdate(ids: string[], dto: BulkUpdateCedantesDataDto) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('Aucune compagnie sélectionnée');
+    }
+
+    const data: any = {};
+    if (dto.pays !== undefined) data.pays = dto.pays;
+    if (dto.formeJuridique !== undefined) data.formeJuridique = dto.formeJuridique;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Aucune modification fournie');
+    }
+
+    const result = await this.prisma.cedante.updateMany({
+      where: { id: { in: ids } },
+      data,
+    });
+
+    return { updated: result.count };
+  }
+
   async remove(id: string) {
     await this.findOne(id);
 
@@ -228,6 +372,48 @@ export class CedantesService {
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  /**
+   * Bulk deactivate — reuses remove()'s exact rule (block if active affaires
+   * exist) but processed per-id so one blocked cédante doesn't prevent
+   * deactivating the rest of the selection. Returns which ids were skipped
+   * and why.
+   */
+  async bulkDelete(ids: string[]) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('Aucune compagnie sélectionnée');
+    }
+
+    const results: { id: string; success: boolean; error?: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        const exists = await this.prisma.cedante.findUnique({ where: { id } });
+        if (!exists) throw new NotFoundException('Compagnie introuvable');
+
+        const activeAffaires = await this.prisma.affaire.count({
+          where: { cedanteId: id, isActive: true },
+        });
+        if (activeAffaires > 0) {
+          throw new BadRequestException(
+            `${activeAffaires} affaire(s) active(s) empêchent la désactivation`,
+          );
+        }
+
+        await this.prisma.cedante.update({ where: { id }, data: { isActive: false } });
+        results.push({ id, success: true });
+      } catch (err: any) {
+        results.push({ id, success: false, error: err?.message || 'Erreur inconnue' });
+      }
+    }
+
+    return {
+      total: ids.length,
+      deactivated: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
   }
 
   /**

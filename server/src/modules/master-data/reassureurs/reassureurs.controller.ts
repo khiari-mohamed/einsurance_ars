@@ -3,6 +3,9 @@ import { ApiTags, ApiBearerAuth, ApiQuery, ApiOperation, ApiResponse } from '@ne
 import { ReassureursService } from './reassureurs.service';
 import { CreateReassureurDto } from './dto/create-reassureur.dto';
 import { UpdateReassureurDto } from './dto/update-reassureur.dto';
+import { BulkImportReassureursDto } from './dto/bulk-import-reassureurs.dto';
+import { BulkUpdateReassureursDto } from './dto/bulk-update-reassureurs.dto';
+import { BulkDeleteReassureursDto } from './dto/bulk-delete-reassureurs.dto';
 import { OverrideReassureurCodeDto } from './dto/override-code.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
@@ -45,6 +48,33 @@ export class ReassureursController {
   @ApiOperation({ summary: 'Create a new reassureur' })
   create(@Body() dto: CreateReassureurDto) {
     return this.service.create(dto);
+  }
+
+  @Post('bulk-import')
+  @RequirePermissions(Permission.DONNEES_CREATE)
+  @ApiOperation({ summary: 'Bulk import réassureurs from parsed Excel/CSV rows (partial success allowed)' })
+  @ApiResponse({ status: 201, description: 'Per-row created/failed report' })
+  bulkImport(@Body() dto: BulkImportReassureursDto) {
+    return this.service.bulkImport(dto.items);
+  }
+
+  // NOTE: registered BEFORE @Put(':id') / @Post(':id/...') — same routing-order
+  // reason as Cedantes/Assurés: a static segment must precede a dynamic ':id'
+  // segment on the same verb, or e.g. PUT /reassureurs/bulk-update would be
+  // swallowed by update() with id='bulk-update'.
+  @Put('bulk-update')
+  @RequirePermissions(Permission.DONNEES_UPDATE)
+  @ApiOperation({ summary: 'Bulk update shared fields (pays, formeJuridique, isActive) across multiple réassureurs' })
+  bulkUpdate(@Body() dto: BulkUpdateReassureursDto) {
+    return this.service.bulkUpdate(dto.ids, dto.data);
+  }
+
+  @Post('bulk-delete')
+  @RequirePermissions(Permission.DONNEES_DELETE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk soft-delete (deactivate) multiple réassureurs; skips ones with active participations' })
+  bulkDelete(@Body() dto: BulkDeleteReassureursDto) {
+    return this.service.bulkDelete(dto.ids);
   }
 
   @Put(':id')

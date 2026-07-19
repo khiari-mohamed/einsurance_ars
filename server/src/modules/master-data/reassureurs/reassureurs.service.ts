@@ -3,6 +3,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { SequenceService } from '../../../shared/services/sequence.service';
 import { CreateReassureurDto } from './dto/create-reassureur.dto';
 import { UpdateReassureurDto } from './dto/update-reassureur.dto';
+import { BulkImportReassureurItemDto } from './dto/bulk-import-reassureurs.dto';
+import { BulkUpdateReassureursDataDto } from './dto/bulk-update-reassureurs.dto';
 
 @Injectable()
 export class ReassureursService {
@@ -167,6 +169,186 @@ export class ReassureursService {
     }
 
     return created;
+  }
+
+  /**
+   * Bulk import from a parsed Excel/CSV file — mirrors CedantesService.bulkImport()
+   * exactly: rows processed one at a time (no wrapping transaction) so one bad row
+   * never rolls back the good ones; per-row success/failure report returned.
+   * Re-applies create()'s uniqueness rules (compteComptable, identifiantUnique, rne)
+   * plus the resident-requires-identifiantUnique rule, plus in-file duplicate
+   * detection. Deliberately excludes bankAccounts (same as Cedante's bulkImport),
+   * so the non-resident-missing-SWIFT flag from create() does not apply here —
+   * bulk-imported reassureurs without bank data yet can have accounts added via
+   * update() afterward, same as Cedante's contacts/bankAccounts.
+   */
+  async bulkImport(items: BulkImportReassureurItemDto[]) {
+    const results: {
+      row: number;
+      success: boolean;
+      code?: string;
+      raisonSociale?: string;
+      error?: string;
+    }[] = [];
+    const seenComptes = new Set<string>();
+    const seenIdentifiants = new Set<string>();
+    const seenRnes = new Set<string>();
+
+    for (let i = 0; i < items.length; i++) {
+      const dto = items[i];
+      const rowNum = i + 1;
+      try {
+        if (!dto.raisonSociale || !dto.raisonSociale.trim()) {
+          throw new BadRequestException('Raison sociale manquante');
+        }
+
+        if (!dto.compteComptable) {
+          throw new BadRequestException('Compte comptable manquant');
+        }
+        if (seenComptes.has(dto.compteComptable)) {
+          throw new ConflictException(`Compte comptable ${dto.compteComptable} en doublon dans le fichier importé`);
+        }
+        const existingCompte = await this.prisma.reassureur.findUnique({
+          where: { compteComptable: dto.compteComptable },
+        });
+        if (existingCompte) {
+          throw new ConflictException(`Compte comptable ${dto.compteComptable} déjà utilisé`);
+        }
+
+        if (dto.identifiantUnique) {
+          if (seenIdentifiants.has(dto.identifiantUnique)) {
+            throw new ConflictException(`Identifiant unique ${dto.identifiantUnique} en doublon dans le fichier importé`);
+          }
+          const existingIdentifiant = await this.prisma.reassureur.findUnique({
+            where: { identifiantUnique: dto.identifiantUnique },
+          });
+          if (existingIdentifiant) {
+            throw new ConflictException(`Identifiant unique ${dto.identifiantUnique} déjà utilisé`);
+          }
+        }
+
+        // FIX: rne is non-unique on Reassureur (mostly-foreign entities — see
+        // create()'s comment), so this is in-file dedup only, not a DB uniqueness
+        // check. Mirrors create()'s use of findFirst instead of findUnique.
+        if (dto.rne) {
+          if (seenRnes.has(dto.rne)) {
+            throw new ConflictException(`RNE ${dto.rne} en doublon dans le fichier importé`);
+          }
+          seenRnes.add(dto.rne);
+        }
+
+        if (dto.resident && !dto.identifiantUnique) {
+          throw new BadRequestException(
+            'Identifiant unique obligatoire pour les réassureurs tunisiens (resident = true)',
+          );
+        }
+
+        const code = await this.sequence.next('REASSUREUR');
+        const created = await this.prisma.reassureur.create({
+          data: {
+            code,
+            compteComptable: dto.compteComptable,
+            isAccountLocked: true,
+            raisonSociale: dto.raisonSociale.trim(),
+            rne: dto.rne || undefined,
+            identifiantUnique: dto.identifiantUnique || undefined,
+            resident: dto.resident,
+            formeJuridique: dto.formeJuridique,
+            adresse: dto.adresse,
+            pays: dto.pays,
+            capital: dto.capital,
+            freeFields: {},
+          },
+        });
+
+        seenComptes.add(dto.compteComptable);
+
+        results.push({ row: rowNum, success: true, code: created.code, raisonSociale: created.raisonSociale });
+      } catch (err: any) {
+        results.push({
+          row: rowNum,
+          success: false,
+          raisonSociale: dto?.raisonSociale,
+          error: err?.message || 'Erreur inconnue',
+        });
+      }
+    }
+
+    return {
+      total: items.length,
+      created: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
+  }
+
+  /**
+   * Bulk edit — mirrors CedantesService.bulkUpdate() exactly. Same limited,
+   * conflict-free field set (pays, formeJuridique, isActive); compteComptable stays
+   * permanently locked, and identifiantUnique/resident/rne stay excluded for the
+   * same cross-field-rule reason documented in Cedante's version.
+   */
+  async bulkUpdate(ids: string[], dto: BulkUpdateReassureursDataDto) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('Aucun réassureur sélectionné');
+    }
+
+    const data: any = {};
+    if (dto.pays !== undefined) data.pays = dto.pays;
+    if (dto.formeJuridique !== undefined) data.formeJuridique = dto.formeJuridique;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Aucune modification fournie');
+    }
+
+    const result = await this.prisma.reassureur.updateMany({
+      where: { id: { in: ids } },
+      data,
+    });
+
+    return { updated: result.count };
+  }
+
+  /**
+   * Bulk deactivate — reuses remove()'s exact rule (block if active
+   * AffaireReassureur participations exist) but processed per-id so one blocked
+   * reassureur doesn't prevent deactivating the rest of the selection.
+   */
+  async bulkDelete(ids: string[]) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('Aucun réassureur sélectionné');
+    }
+
+    const results: { id: string; success: boolean; error?: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        const exists = await this.prisma.reassureur.findUnique({ where: { id } });
+        if (!exists) throw new NotFoundException('Réassureur introuvable');
+
+        const activeParticipations = await this.prisma.affaireReassureur.count({
+          where: { reassureurId: id },
+        });
+        if (activeParticipations > 0) {
+          throw new BadRequestException(
+            `${activeParticipations} participation(s) active(s) empêchent la désactivation`,
+          );
+        }
+
+        await this.prisma.reassureur.update({ where: { id }, data: { isActive: false } });
+        results.push({ id, success: true });
+      } catch (err: any) {
+        results.push({ id, success: false, error: err?.message || 'Erreur inconnue' });
+      }
+    }
+
+    return {
+      total: ids.length,
+      deactivated: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
   }
 
   async update(id: string, dto: UpdateReassureurDto) {

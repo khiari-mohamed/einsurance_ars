@@ -46,6 +46,10 @@ export class StorageService {
     return fs.readFileSync(filePath);
   }
 
+  getReadStream(filePath: string): fs.ReadStream {
+    return fs.createReadStream(filePath);
+  }
+
   fileExists(filePath: string): boolean {
     return fs.existsSync(filePath);
   }

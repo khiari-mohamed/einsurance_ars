@@ -3,6 +3,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { SequenceService } from '../../../shared/services/sequence.service';
 import { CreateAssureDto } from './dto/create-assure.dto';
 import { UpdateAssureDto } from './dto/update-assure.dto';
+import { BulkImportAssureItemDto } from './dto/bulk-import-assures.dto';
+import { BulkUpdateAssuresDataDto } from './dto/bulk-update-assures.dto';
 
 @Injectable()
 export class AssuresService {
@@ -100,6 +102,73 @@ export class AssuresService {
     });
   }
 
+  /**
+   * Bulk import from a parsed Excel/CSV file. Rows are processed one at a time
+   * (not wrapped in a single transaction) so a bad row never rolls back the
+   * good ones — the caller gets a per-row success/failure report instead.
+   * Also guards against duplicate RNEs *within the same file*, not just
+   * against what's already in the DB.
+   */
+  async bulkImport(items: BulkImportAssureItemDto[]) {
+    const results: {
+      row: number;
+      success: boolean;
+      code?: string;
+      raisonSociale?: string;
+      error?: string;
+    }[] = [];
+    const seenRnes = new Set<string>();
+
+    for (let i = 0; i < items.length; i++) {
+      const dto = items[i];
+      const rowNum = i + 1;
+      try {
+        if (!dto.raisonSociale || !dto.raisonSociale.trim()) {
+          throw new BadRequestException('Raison sociale manquante');
+        }
+
+        if (dto.rne) {
+          if (seenRnes.has(dto.rne)) {
+            throw new ConflictException(`RNE ${dto.rne} en doublon dans le fichier importé`);
+          }
+          const existing = await this.prisma.assure.findUnique({ where: { rne: dto.rne } });
+          if (existing) throw new ConflictException(`RNE ${dto.rne} déjà utilisé`);
+          seenRnes.add(dto.rne);
+        }
+
+        const code = await this.sequence.next('ASSURE');
+        const created = await this.prisma.assure.create({
+          data: {
+            code,
+            raisonSociale: dto.raisonSociale.trim(),
+            rne: dto.rne || undefined,
+            formeJuridique: dto.formeJuridique,
+            adresse: dto.adresse,
+            pays: dto.pays,
+            capital: dto.capital,
+            freeFields: {},
+          },
+        });
+
+        results.push({ row: rowNum, success: true, code: created.code, raisonSociale: created.raisonSociale });
+      } catch (err: any) {
+        results.push({
+          row: rowNum,
+          success: false,
+          raisonSociale: dto?.raisonSociale,
+          error: err?.message || 'Erreur inconnue',
+        });
+      }
+    }
+
+    return {
+      total: items.length,
+      created: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
+  }
+
   async update(id: string, dto: UpdateAssureDto) {
     const existing = await this.findOne(id);
 
@@ -130,6 +199,34 @@ export class AssuresService {
     });
   }
 
+  /**
+   * Bulk edit — applies a small, intentionally-limited set of shared fields
+   * (pays, formeJuridique, isActive) identically across every id given. Uses
+   * updateMany since these fields carry no per-row conflict risk (unlike rne,
+   * which stays unique-checked and out of scope here).
+   */
+  async bulkUpdate(ids: string[], dto: BulkUpdateAssuresDataDto) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('Aucun client sélectionné');
+    }
+
+    const data: any = {};
+    if (dto.pays !== undefined) data.pays = dto.pays;
+    if (dto.formeJuridique !== undefined) data.formeJuridique = dto.formeJuridique;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+
+    if (Object.keys(data).length === 0) {
+      throw new BadRequestException('Aucune modification fournie');
+    }
+
+    const result = await this.prisma.assure.updateMany({
+      where: { id: { in: ids } },
+      data,
+    });
+
+    return { updated: result.count };
+  }
+
   async remove(id: string) {
     await this.findOne(id);
 
@@ -146,6 +243,48 @@ export class AssuresService {
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  /**
+   * Bulk deactivate — reuses remove()'s exact rule (block if active
+   * facultatives exist) but processed per-id so one blocked client doesn't
+   * prevent deactivating the rest of the selection. Returns which ids were
+   * skipped and why.
+   */
+  async bulkDelete(ids: string[]) {
+    if (!ids || ids.length === 0) {
+      throw new BadRequestException('Aucun client sélectionné');
+    }
+
+    const results: { id: string; success: boolean; error?: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        const exists = await this.prisma.assure.findUnique({ where: { id } });
+        if (!exists) throw new NotFoundException('Client introuvable');
+
+        const activeFacultatives = await this.prisma.facultativeAffaire.count({
+          where: { assureId: id, affaire: { isActive: true } },
+        });
+        if (activeFacultatives > 0) {
+          throw new BadRequestException(
+            `${activeFacultatives} affaire(s) active(s) empêchent la désactivation`,
+          );
+        }
+
+        await this.prisma.assure.update({ where: { id }, data: { isActive: false } });
+        results.push({ id, success: true });
+      } catch (err: any) {
+        results.push({ id, success: false, error: err?.message || 'Erreur inconnue' });
+      }
+    }
+
+    return {
+      total: ids.length,
+      deactivated: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
+    };
   }
 
   /**

@@ -4,6 +4,9 @@ import { CedantesService } from './cedantes.service';
 import { CreateCedanteDto } from './dto/create-cedante.dto';
 import { UpdateCedanteDto } from './dto/update-cedante.dto';
 import { OverrideCedanteCodeDto } from './dto/override-code.dto';
+import { BulkImportCedantesDto } from './dto/bulk-import-cedantes.dto';
+import { BulkUpdateCedantesDto } from './dto/bulk-update-cedantes.dto';
+import { BulkDeleteCedantesDto } from './dto/bulk-delete-cedantes.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
@@ -55,11 +58,38 @@ export class CedantesController {
     return this.service.create(dto);
   }
 
+  @Post('bulk-import')
+  @RequirePermissions(Permission.DONNEES_CREATE)
+  @ApiOperation({ summary: 'Bulk import cédantes from parsed Excel/CSV rows (partial success allowed)' })
+  @ApiResponse({ status: 201, description: 'Per-row created/failed report' })
+  bulkImport(@Body() dto: BulkImportCedantesDto) {
+    return this.service.bulkImport(dto.items);
+  }
+
+  // NOTE: registered BEFORE @Put(':id') for the same reason as assures —
+  // Nest matches static path segments in declaration order against dynamic
+  // ':id' segments on the same verb, so 'bulk-update' must come first or
+  // PUT /cedantes/bulk-update gets swallowed by update() with id='bulk-update'.
+  @Put('bulk-update')
+  @RequirePermissions(Permission.DONNEES_UPDATE)
+  @ApiOperation({ summary: 'Bulk update shared fields (pays, formeJuridique, isActive) across multiple cédantes' })
+  bulkUpdate(@Body() dto: BulkUpdateCedantesDto) {
+    return this.service.bulkUpdate(dto.ids, dto.data);
+  }
+
   @Put(':id')
   @RequirePermissions(Permission.DONNEES_UPDATE)
   @ApiOperation({ summary: 'Update a cedante' })
   update(@Param('id') id: string, @Body() dto: UpdateCedanteDto) {
     return this.service.update(id, dto);
+  }
+
+  @Post('bulk-delete')
+  @RequirePermissions(Permission.DONNEES_DELETE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Bulk soft-delete (deactivate) multiple cédantes; skips ones with active affaires' })
+  bulkDelete(@Body() dto: BulkDeleteCedantesDto) {
+    return this.service.bulkDelete(dto.ids);
   }
 
   @Delete(':id')

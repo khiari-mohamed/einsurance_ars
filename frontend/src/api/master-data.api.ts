@@ -36,6 +36,94 @@ interface ListParams {
   statut?: 'ACTIVE' | 'INACTIVE' | 'ALL';
 }
 
+// Bulk import item — subset of CreateAssureDto fields sourced from a parsed
+// Excel/CSV row. Only raisonSociale is required.
+interface BulkImportAssureItem {
+  raisonSociale: string;
+  rne?: string;
+  formeJuridique?: string;
+  adresse?: string;
+  pays?: string;
+  capital?: number;
+}
+
+// Bulk edit — only the subset of fields it makes sense to apply across many
+// clients at once.
+interface BulkUpdateAssureData {
+  pays?: string;
+  formeJuridique?: string;
+  isActive?: boolean;
+}
+
+// Bulk import item for cédantes — mirrors CreateCedanteDto's required fields
+// (compteComptable, resident) minus contacts/bankAccounts, which aren't
+// sourced from a flat spreadsheet row.
+interface BulkImportCedanteItem {
+  raisonSociale: string;
+  compteComptable: string;
+  identifiantUnique?: string;
+  resident: boolean;
+  formeJuridique?: string;
+  adresse?: string;
+  pays?: string;
+  capital?: number;
+  rne?: string;
+}
+
+// Bulk edit for cédantes — deliberately excludes compteComptable (locked),
+// identifiantUnique/resident/rne (per-row uniqueness + cross-field rules).
+interface BulkUpdateCedanteData {
+  pays?: string;
+  formeJuridique?: string;
+  isActive?: boolean;
+}
+
+// Bulk import item for réassureurs — mirrors CreateReassureurDto's required
+// fields (compteComptable) minus contacts/bankAccounts, which aren't sourced
+// from a flat spreadsheet row. Unlike Cedante, `resident` is optional here —
+// ReassureursService.bulkImport() only requires it when identifiantUnique
+// enforcement kicks in (resident === true), not unconditionally.
+interface BulkImportReassureurItem {
+  raisonSociale: string;
+  compteComptable: string;
+  identifiantUnique?: string;
+  resident?: boolean;
+  formeJuridique?: string;
+  adresse?: string;
+  pays?: string;
+  capital?: number;
+  rne?: string;
+}
+
+// Bulk edit for réassureurs — same exclusions as Cedante (compteComptable
+// locked; identifiantUnique/resident/rne excluded for per-row uniqueness +
+// cross-field rule reasons).
+interface BulkUpdateReassureurData {
+  pays?: string;
+  formeJuridique?: string;
+  isActive?: boolean;
+}
+
+// Bulk import item for co-courtiers — identical shape to Réassureur's, per
+// CDC §5.7 ("identique au Réassureur").
+interface BulkImportCoCourtierItem {
+  raisonSociale: string;
+  compteComptable: string;
+  identifiantUnique?: string;
+  resident?: boolean;
+  formeJuridique?: string;
+  adresse?: string;
+  pays?: string;
+  capital?: number;
+  rne?: string;
+}
+
+interface BulkUpdateCoCourtierData {
+  pays?: string;
+  formeJuridique?: string;
+  isActive?: boolean;
+}
+
 // ============================================================
 // ASSURES (Clients)
 // ============================================================
@@ -58,6 +146,27 @@ export const assuresApi = {
 
   overrideCode: (id: string, code: string) =>
     api.post<Assure>(`/master-data/assures/${id}/override-code`, { code }),
+
+  // Bulk Excel/CSV import — items are already parsed & validated client-side.
+  // Returns a per-row success/failure report so a partially-bad file doesn't
+  // block the good rows.
+  bulkImport: (items: BulkImportAssureItem[]) =>
+    api.post<{ total: number; created: number; failed: number; results: any[] }>(
+      '/master-data/assures/bulk-import',
+      { items },
+    ),
+
+  // Bulk edit — applies only the fields present in `data` to every id in `ids`.
+  bulkUpdate: (ids: string[], data: BulkUpdateAssureData) =>
+    api.put<{ updated: number }>('/master-data/assures/bulk-update', { ids, data }),
+
+  // Bulk deactivate — mirrors the single delete()'s soft-delete + active-affaire
+  // guard, per id, and reports which ones were skipped and why.
+  bulkDelete: (ids: string[]) =>
+    api.post<{ total: number; deactivated: number; failed: number; results: any[] }>(
+      '/master-data/assures/bulk-delete',
+      { ids },
+    ),
 
   // NOTE: kept as requested. No matching NestJS route was present in the 4 Référentiel
   // controllers reviewed (only GET/, GET/:id, POST/, PUT/:id, DELETE/:id, POST/:id/
@@ -101,6 +210,27 @@ export const cedantesApi = {
 
   overrideCode: (id: string, code: string) =>
     api.post<Cedante>(`/master-data/cedantes/${id}/override-code`, { code }),
+
+  // Bulk Excel/CSV import — items are already parsed & validated client-side
+  // against the same compteComptable/identifiantUnique rules the manual-entry
+  // form uses. Returns a per-row success/failure report.
+  bulkImport: (items: BulkImportCedanteItem[]) =>
+    api.post<{ total: number; created: number; failed: number; results: any[] }>(
+      '/master-data/cedantes/bulk-import',
+      { items },
+    ),
+
+  // Bulk edit — applies only the fields present in `data` to every id in `ids`.
+  bulkUpdate: (ids: string[], data: BulkUpdateCedanteData) =>
+    api.put<{ updated: number }>('/master-data/cedantes/bulk-update', { ids, data }),
+
+  // Bulk deactivate — mirrors the single delete()'s soft-delete + active-affaire
+  // guard, per id, and reports which ones were skipped and why.
+  bulkDelete: (ids: string[]) =>
+    api.post<{ total: number; deactivated: number; failed: number; results: any[] }>(
+      '/master-data/cedantes/bulk-delete',
+      { ids },
+    ),
 
   // NOTE: see assuresApi note above — kept as-is, route existence unverified.
   getContacts: (id: string) =>
@@ -150,6 +280,25 @@ export const reassureursApi = {
 
   overrideCode: (id: string, code: string) =>
     api.post<Reassureur>(`/master-data/reassureurs/${id}/override-code`, { code }),
+
+  // Bulk Excel/CSV import — mirrors cedantesApi.bulkImport() exactly.
+  bulkImport: (items: BulkImportReassureurItem[]) =>
+    api.post<{ total: number; created: number; failed: number; results: any[] }>(
+      '/master-data/reassureurs/bulk-import',
+      { items },
+    ),
+
+  // Bulk edit — applies only the fields present in `data` to every id in `ids`.
+  bulkUpdate: (ids: string[], data: BulkUpdateReassureurData) =>
+    api.put<{ updated: number }>('/master-data/reassureurs/bulk-update', { ids, data }),
+
+  // Bulk deactivate — mirrors the single delete()'s soft-delete + active-participation
+  // guard, per id, and reports which ones were skipped and why.
+  bulkDelete: (ids: string[]) =>
+    api.post<{ total: number; deactivated: number; failed: number; results: any[] }>(
+      '/master-data/reassureurs/bulk-delete',
+      { ids },
+    ),
 
   // NOTE: see assuresApi note above — kept as-is, route existence unverified.
   getContacts: (id: string) =>
@@ -205,6 +354,27 @@ export const coCourtiersApi = {
 
   overrideCode: (id: string, code: string) =>
     api.post<CoCourtier>(`/master-data/co-courtiers/${id}/override-code`, { code }),
+
+  // Bulk Excel/CSV import — mirrors cedantesApi.bulkImport() exactly.
+  bulkImport: (items: BulkImportCoCourtierItem[]) =>
+    api.post<{ total: number; created: number; failed: number; results: any[] }>(
+      '/master-data/co-courtiers/bulk-import',
+      { items },
+    ),
+
+  // Bulk edit — applies only the fields present in `data` to every id in `ids`.
+  bulkUpdate: (ids: string[], data: BulkUpdateCoCourtierData) =>
+    api.put<{ updated: number }>('/master-data/co-courtiers/bulk-update', { ids, data }),
+
+  // Bulk deactivate — NOTE: unlike Assure/Cedante/Reassureur, CoCourtierService.remove()
+  // has no active-participation guard yet (no AffaireCoCourtier relation exists — see
+  // the TODO in co-courtiers.service.ts). bulkDelete() inherits that same gap; it will
+  // deactivate every valid id unconditionally rather than skipping ones in active deals.
+  bulkDelete: (ids: string[]) =>
+    api.post<{ total: number; deactivated: number; failed: number; results: any[] }>(
+      '/master-data/co-courtiers/bulk-delete',
+      { ids },
+    ),
 
   // NOTE: see assuresApi note above — kept as-is, route existence unverified.
   getContacts: (id: string) =>

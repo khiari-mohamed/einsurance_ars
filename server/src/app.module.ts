@@ -22,6 +22,7 @@ import { BordereauxModule } from './modules/bordereaux/bordereaux.module';
 import { GedModule } from './modules/ged/ged.module';
 import { ReportingModule } from './modules/reporting/reporting.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
+import { UploadsModule } from './modules/upload/uploads.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { WorkflowModule } from './modules/workflow/workflow.module';
     GedModule,
     ReportingModule,
     WorkflowModule,
+    UploadsModule,
   ],
 })
 export class AppModule {}
