@@ -12,6 +12,7 @@ import {
   getCompteComptableError,
   getIdentifiantUniqueError,
 } from '../../types/reassureur.types';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 type Statut = 'ACTIVE' | 'INACTIVE' | 'ALL';
 const LIMIT = 20;
@@ -26,6 +27,7 @@ export default function ReassureursList() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isBulkEditModalOpen, setIsBulkEditModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmState, setConfirmState] = useState<{ type: 'single' | 'bulk' | null; onConfirm?: () => void; message?: string }>({ type: null });
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -89,17 +91,27 @@ export default function ReassureursList() {
   });
 
   const handleDeactivate = (id: string) => {
-    if (window.confirm('Désactiver ce réassureur ? Il restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.')) {
-      deleteMutation.mutate(id);
-    }
+    setConfirmState({
+      type: 'single',
+      message: 'Désactiver ce réassureur ? Il restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.',
+      onConfirm: () => {
+        deleteMutation.mutate(id);
+        setConfirmState({ type: null });
+      },
+    });
   };
 
   const handleBulkDeactivate = () => {
     const ids = Array.from(selectedIds);
     if (ids.length === 0) return;
-    if (window.confirm(`Désactiver ${ids.length} réassureur(s) sélectionné(s) ? Ils resteront visibles dans l'historique mais ne seront plus sélectionnables pour de nouvelles affaires.`)) {
-      bulkDeleteMutation.mutate(ids);
-    }
+    setConfirmState({
+      type: 'bulk',
+      message: `Désactiver ${ids.length} réassureur(s) sélectionné(s) ? Ils resteront visibles dans l'historique mais ne seront plus sélectionnables pour de nouvelles affaires.`,
+      onConfirm: () => {
+        bulkDeleteMutation.mutate(ids);
+        setConfirmState({ type: null });
+      },
+    });
   };
 
   const handleEdit = (reassureur: Reassureur) => {
@@ -138,6 +150,15 @@ export default function ReassureursList() {
 
   return (
     <div className="p-4 lg:p-6">
+      <ConfirmDialog
+        open={confirmState.type !== null}
+        title="Désactivation"
+        message={confirmState.message || ''}
+        confirmLabel="Confirmer"
+        confirmVariant="danger"
+        onConfirm={() => confirmState.onConfirm?.()}
+        onCancel={() => setConfirmState({ type: null })}
+      />
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-[24px] font-semibold text-gray-900">Réassureurs</h1>

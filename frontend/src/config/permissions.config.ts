@@ -28,6 +28,10 @@ const ROUTE_ACCESS: Record<string, UserRole[]> = {
     'DIRECTION_COMMERCIALE', 'DIRECTION_REASSURANCE',
     'DIRECTION_GENERALE', 'DAF', 'SERVICE_IRDS', 'SUPER_ADMIN',
   ],
+  '/referentiel': [
+    'DIRECTION_COMMERCIALE', 'DIRECTION_REASSURANCE',
+    'DIRECTION_GENERALE', 'DAF', 'SERVICE_IRDS', 'SUPER_ADMIN',
+  ],
 
   // ── Affaires ─────────────────────────────────────────────────────────────────
   '/affaires': [

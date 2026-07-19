@@ -88,15 +88,15 @@ export class CedantesController {
   @RequirePermissions(Permission.DONNEES_DELETE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Bulk soft-delete (deactivate) multiple cédantes; skips ones with active affaires' })
-  bulkDelete(@Body() dto: BulkDeleteCedantesDto) {
-    return this.service.bulkDelete(dto.ids);
+  bulkDelete(@Body() dto: BulkDeleteCedantesDto, @CurrentUser() user: any) {
+    return this.service.bulkDelete(dto.ids, user?.id);
   }
 
   @Delete(':id')
   @RequirePermissions(Permission.DONNEES_DELETE)
   @ApiOperation({ summary: 'Soft-delete a cedante (set inactive)' })
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.remove(id, user?.id);
   }
 
   /**

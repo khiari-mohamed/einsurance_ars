@@ -271,7 +271,7 @@ export class CoCourtierService {
    * deactivating, same limitation as the single-record remove(). Processed
    * per-id so one NotFoundException doesn't block the rest of the selection.
    */
-  async bulkDelete(ids: string[]) {
+  async bulkDelete(ids: string[], userId?: string) {
     if (!ids || ids.length === 0) {
       throw new BadRequestException('Aucun courtier sélectionné');
     }
@@ -284,6 +284,18 @@ export class CoCourtierService {
         if (!exists) throw new NotFoundException('Courtier introuvable');
 
         await this.prisma.coCourtier.update({ where: { id }, data: { isActive: false } });
+        if (userId) {
+          await this.prisma.auditLog.create({
+            data: {
+              userId,
+              action: 'BULK_DEACTIVATE',
+              entityType: 'CO_COURTIER',
+              entityId: id,
+              before: { isActive: exists.isActive, raisonSociale: exists.raisonSociale, code: exists.code },
+              after: { isActive: false, raisonSociale: exists.raisonSociale, code: exists.code },
+            },
+          });
+        }
         results.push({ id, success: true });
       } catch (err: any) {
         results.push({ id, success: false, error: err?.message || 'Erreur inconnue' });
@@ -348,8 +360,8 @@ export class CoCourtierService {
     });
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, userId?: string) {
+    const existing = await this.findOne(id);
 
     // UNRESOLVED (flagged in review, not fixed here — no schema to hook into yet):
     // there is still no AffaireCoCourtier (or equivalent) relation, so unlike
@@ -359,10 +371,25 @@ export class CoCourtierService {
     // relation is conceptually owed here. Add the join model + this guard together
     // once confirmed; deactivating a co-broker mid-deal today goes unguarded.
 
-    return this.prisma.coCourtier.update({
+    const updated = await this.prisma.coCourtier.update({
       where: { id },
       data: { isActive: false },
     });
+
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'DEACTIVATE',
+          entityType: 'CO_COURTIER',
+          entityId: id,
+          before: { isActive: existing.isActive, raisonSociale: existing.raisonSociale, code: existing.code },
+          after: { isActive: false, raisonSociale: existing.raisonSociale, code: existing.code },
+        },
+      });
+    }
+
+    return updated;
   }
 
   /**

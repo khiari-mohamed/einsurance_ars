@@ -58,15 +58,25 @@ export default function ReassureurDetail() {
 
   // FIX: relabeled "Supprimer" -> "Désactiver" — same rationale as CedanteDetail.
   const handleDeactivate = () => {
-    if (window.confirm('Désactiver ce réassureur ? Il restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.')) {
-      deleteMutation.mutate();
-    }
+    setConfirmState({
+      type: 'deactivate',
+      message: 'Désactiver ce réassureur ? Il restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.',
+      onConfirm: () => {
+        deleteMutation.mutate();
+        setConfirmState({ type: null });
+      },
+    });
   };
 
   const handleDeleteContact = (contactId: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce contact ?')) {
-      deleteContactMutation.mutate(contactId);
-    }
+    setConfirmState({
+      type: 'delete-contact',
+      message: 'Êtes-vous sûr de vouloir supprimer ce contact ?',
+      onConfirm: () => {
+        deleteContactMutation.mutate(contactId);
+        setConfirmState({ type: null });
+      },
+    });
   };
 
   const handleOverrideCode = () => {
@@ -74,9 +84,14 @@ export default function ReassureurDetail() {
       alert('Le code doit être au format REA-XXXX (ex: REA-0042)');
       return;
     }
-    if (window.confirm(`Confirmer le changement de code vers ${newCode} ?`)) {
-      overrideCodeMutation.mutate(newCode);
-    }
+    setConfirmState({
+      type: 'override-code',
+      message: `Confirmer le changement de code vers ${newCode} ?`,
+      onConfirm: () => {
+        overrideCodeMutation.mutate(newCode);
+        setConfirmState({ type: null });
+      },
+    });
   };
 
   if (isLoading) {
@@ -386,6 +401,16 @@ export default function ReassureurDetail() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmState.type !== null}
+        title={confirmState.type === 'deactivate' ? 'Désactivation' : confirmState.type === 'delete-contact' ? 'Suppression' : 'Confirmation'}
+        message={confirmState.message || ''}
+        confirmLabel="Confirmer"
+        confirmVariant="danger"
+        onConfirm={() => confirmState.onConfirm?.()}
+        onCancel={() => setConfirmState({ type: null })}
+      />
 
       {/* Contact Modal */}
       {isContactModalOpen && (

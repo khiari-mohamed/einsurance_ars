@@ -356,8 +356,8 @@ export class CedantesService {
     return { updated: result.count };
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, userId?: string) {
+    const existing = await this.findOne(id);
 
     const activeAffaires = await this.prisma.affaire.count({
       where: { cedanteId: id, isActive: true },
@@ -368,10 +368,25 @@ export class CedantesService {
       );
     }
 
-    return this.prisma.cedante.update({
+    const updated = await this.prisma.cedante.update({
       where: { id },
       data: { isActive: false },
     });
+
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'DEACTIVATE',
+          entityType: 'CEDANTE',
+          entityId: id,
+          before: { isActive: existing.isActive, raisonSociale: existing.raisonSociale, code: existing.code },
+          after: { isActive: false, raisonSociale: existing.raisonSociale, code: existing.code },
+        },
+      });
+    }
+
+    return updated;
   }
 
   /**
@@ -380,7 +395,7 @@ export class CedantesService {
    * deactivating the rest of the selection. Returns which ids were skipped
    * and why.
    */
-  async bulkDelete(ids: string[]) {
+  async bulkDelete(ids: string[], userId?: string) {
     if (!ids || ids.length === 0) {
       throw new BadRequestException('Aucune compagnie sélectionnée');
     }
@@ -402,6 +417,18 @@ export class CedantesService {
         }
 
         await this.prisma.cedante.update({ where: { id }, data: { isActive: false } });
+        if (userId) {
+          await this.prisma.auditLog.create({
+            data: {
+              userId,
+              action: 'BULK_DEACTIVATE',
+              entityType: 'CEDANTE',
+              entityId: id,
+              before: { isActive: exists.isActive, raisonSociale: exists.raisonSociale, code: exists.code },
+              after: { isActive: false, raisonSociale: exists.raisonSociale, code: exists.code },
+            },
+          });
+        }
         results.push({ id, success: true });
       } catch (err: any) {
         results.push({ id, success: false, error: err?.message || 'Erreur inconnue' });

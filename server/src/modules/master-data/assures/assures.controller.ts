@@ -95,14 +95,14 @@ export class AssuresController {
   @RequirePermissions(Permission.DONNEES_DELETE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Bulk soft-delete (deactivate) multiple clients; skips ones with active affaires' })
-  bulkDelete(@Body() dto: BulkDeleteAssuresDto) {
-    return this.service.bulkDelete(dto.ids);
+  bulkDelete(@Body() dto: BulkDeleteAssuresDto, @CurrentUser() user: any) {
+    return this.service.bulkDelete(dto.ids, user?.id);
   }
 
   @Delete(':id')
   @RequirePermissions(Permission.DONNEES_DELETE)
   @ApiOperation({ summary: 'Soft-delete an assuré (set inactive)' })
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.remove(id, user?.id);
   }
 }

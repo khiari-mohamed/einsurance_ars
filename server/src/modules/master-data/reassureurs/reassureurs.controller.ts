@@ -73,8 +73,8 @@ export class ReassureursController {
   @RequirePermissions(Permission.DONNEES_DELETE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Bulk soft-delete (deactivate) multiple réassureurs; skips ones with active participations' })
-  bulkDelete(@Body() dto: BulkDeleteReassureursDto) {
-    return this.service.bulkDelete(dto.ids);
+  bulkDelete(@Body() dto: BulkDeleteReassureursDto, @CurrentUser() user: any) {
+    return this.service.bulkDelete(dto.ids, user?.id);
   }
 
   @Put(':id')
@@ -87,8 +87,8 @@ export class ReassureursController {
   @Delete(':id')
   @RequirePermissions(Permission.DONNEES_DELETE)
   @ApiOperation({ summary: 'Soft-delete a reassureur (set inactive)' })
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.remove(id, user?.id);
   }
 
   /**

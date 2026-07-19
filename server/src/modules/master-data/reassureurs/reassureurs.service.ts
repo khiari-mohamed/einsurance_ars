@@ -315,7 +315,7 @@ export class ReassureursService {
    * AffaireReassureur participations exist) but processed per-id so one blocked
    * reassureur doesn't prevent deactivating the rest of the selection.
    */
-  async bulkDelete(ids: string[]) {
+  async bulkDelete(ids: string[], userId?: string) {
     if (!ids || ids.length === 0) {
       throw new BadRequestException('Aucun réassureur sélectionné');
     }
@@ -337,6 +337,18 @@ export class ReassureursService {
         }
 
         await this.prisma.reassureur.update({ where: { id }, data: { isActive: false } });
+        if (userId) {
+          await this.prisma.auditLog.create({
+            data: {
+              userId,
+              action: 'BULK_DEACTIVATE',
+              entityType: 'REASSUREUR',
+              entityId: id,
+              before: { isActive: exists.isActive, raisonSociale: exists.raisonSociale, code: exists.code },
+              after: { isActive: false, raisonSociale: exists.raisonSociale, code: exists.code },
+            },
+          });
+        }
         results.push({ id, success: true });
       } catch (err: any) {
         results.push({ id, success: false, error: err?.message || 'Erreur inconnue' });
@@ -421,8 +433,8 @@ export class ReassureursService {
     return updated;
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
+  async remove(id: string, userId?: string) {
+    const existing = await this.findOne(id);
 
     const activeParticipations = await this.prisma.affaireReassureur.count({
       where: { reassureurId: id },
@@ -433,10 +445,25 @@ export class ReassureursService {
       );
     }
 
-    return this.prisma.reassureur.update({
+    const updated = await this.prisma.reassureur.update({
       where: { id },
       data: { isActive: false },
     });
+
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'DEACTIVATE',
+          entityType: 'REASSUREUR',
+          entityId: id,
+          before: { isActive: existing.isActive, raisonSociale: existing.raisonSociale, code: existing.code },
+          after: { isActive: false, raisonSociale: existing.raisonSociale, code: existing.code },
+        },
+      });
+    }
+
+    return updated;
   }
 
   /**

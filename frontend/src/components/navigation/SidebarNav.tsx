@@ -54,6 +54,7 @@ const navigation: NavigationItem[] = [
       { name: 'Compagnies d\'assurances',    href: '/cedantes' },        // WAS: 'Cédantes'
       { name: 'Réassureurs',                 href: '/reassureurs' },     // UNCHANGED
       { name: 'Courtiers en réassurance',    href: '/co-courtiers' },   // WAS: 'Co-Courtiers'
+      { name: 'Historique des désactivations', href: '/referentiel/history' }, // NEW
     ],
   },
 

@@ -403,6 +403,15 @@ export const coCourtiersApi = {
 };
 
 // ============================================================
+// AUDIT & HISTORY
+// ============================================================
+
+export const auditApi = {
+  getReferentielHistory: (params?: any) =>
+    api.get('/master-data/audit/referentiel-history', { params }),
+};
+
+// ============================================================
 // EXPORT: All master data APIs together
 // ============================================================
 
@@ -411,6 +420,7 @@ export const masterDataApi = {
   cedantes: cedantesApi,
   reassureurs: reassureursApi,
   coCourtiers: coCourtiersApi,
+  audit: auditApi,
 };
 
 export default masterDataApi;

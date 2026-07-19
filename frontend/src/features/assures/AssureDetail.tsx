@@ -17,6 +17,7 @@ import { assuresApi } from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
 import { Assure, AssureContact } from '../../types/assure.types';
 import ContactModal from './ContactModal';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 // ------------------------------------------------------------------
 // Local types
@@ -83,6 +84,7 @@ export default function AssureDetail() {
   const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [viewerDocument, setViewerDocument] = useState<AssureDocumentItem | null>(null);
+  const [confirmState, setConfirmState] = useState<{ type: 'deactivate' | 'delete-contact' | 'override-code' | null; message?: string; onConfirm?: () => void }>({ type: null });
 
   const { data: assure, isLoading } = useQuery<Assure>({
     queryKey: ['assures', id],
@@ -102,10 +104,23 @@ export default function AssureDetail() {
     enabled: !!id,
   });
 
-  const documents: AssureDocumentItem[] = useMemo(
-    () => (assure as any)?.documents ?? [],
-    [assure]
-  );
+  const documents: AssureDocumentItem[] = useMemo(() => {
+    const rawDocuments = (assure as any)?.documents ?? [];
+
+    return rawDocuments.map((entry: any) => {
+      const document = entry?.document ?? entry;
+      return {
+        id: document?.id ?? entry?.id,
+        nom: document?.nom ?? entry?.nom,
+        originalName: document?.originalName ?? entry?.originalName,
+        mimeType: document?.mimeType ?? entry?.mimeType,
+        filePath: document?.filePath ?? entry?.filePath,
+        documentType: document?.documentType ?? entry?.documentType,
+        statut: document?.statut ?? entry?.statut,
+        createdAt: document?.createdAt ?? entry?.createdAt ?? new Date().toISOString(),
+      } satisfies AssureDocumentItem;
+    });
+  }, [assure]);
 
   const normalizeCategoryLabel = (value: string | undefined) => {
     if (!value) return '';
@@ -182,15 +197,25 @@ export default function AssureDetail() {
 
   // FIX: relabeled "Supprimer" -> "Désactiver", same rationale as Cedante/Reassureur.
   const handleDeactivate = () => {
-    if (window.confirm('Désactiver ce client ? Il restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.')) {
-      deleteMutation.mutate();
-    }
+    setConfirmState({
+      type: 'deactivate',
+      message: 'Désactiver ce client ? Il restera visible dans l\'historique mais ne sera plus sélectionnable pour de nouvelles affaires.',
+      onConfirm: () => {
+        deleteMutation.mutate();
+        setConfirmState({ type: null });
+      },
+    });
   };
 
   const handleDeleteContact = (contactId: string) => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer ce contact ?')) {
-      deleteContactMutation.mutate(contactId);
-    }
+    setConfirmState({
+      type: 'delete-contact',
+      message: 'Êtes-vous sûr de vouloir supprimer ce contact ?',
+      onConfirm: () => {
+        deleteContactMutation.mutate(contactId);
+        setConfirmState({ type: null });
+      },
+    });
   };
 
   const handleOverrideCode = () => {
@@ -198,9 +223,14 @@ export default function AssureDetail() {
       alert('Le code doit être au format CLI-XXXX (ex: CLI-0042)');
       return;
     }
-    if (window.confirm(`Confirmer le changement de code vers ${newCode} ?`)) {
-      overrideCodeMutation.mutate(newCode);
-    }
+    setConfirmState({
+      type: 'override-code',
+      message: `Confirmer le changement de code vers ${newCode} ?`,
+      onConfirm: () => {
+        overrideCodeMutation.mutate(newCode);
+        setConfirmState({ type: null });
+      },
+    });
   };
 
   const cedanteOptions = useMemo(() => {
@@ -932,6 +962,16 @@ export default function AssureDetail() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmState.type !== null}
+        title={confirmState.type === 'deactivate' ? 'Désactivation' : confirmState.type === 'delete-contact' ? 'Suppression' : 'Confirmation'}
+        message={confirmState.message || ''}
+        confirmLabel="Confirmer"
+        confirmVariant="danger"
+        onConfirm={() => confirmState.onConfirm?.()}
+        onCancel={() => setConfirmState({ type: null })}
+      />
 
       {/* Document viewer popup */}
       {viewerDocument && (

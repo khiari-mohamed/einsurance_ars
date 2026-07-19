@@ -71,8 +71,8 @@ export class CoCourtierController {
   @RequirePermissions(Permission.DONNEES_DELETE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Bulk soft-delete (deactivate) multiple co-courtiers' })
-  bulkDelete(@Body() dto: BulkDeleteCoCourtiersDto) {
-    return this.service.bulkDelete(dto.ids);
+  bulkDelete(@Body() dto: BulkDeleteCoCourtiersDto, @CurrentUser() user: any) {
+    return this.service.bulkDelete(dto.ids, user?.id);
   }
 
   @Put(':id')
@@ -100,7 +100,7 @@ export class CoCourtierController {
   @Delete(':id')
   @RequirePermissions(Permission.DONNEES_DELETE)
   @ApiOperation({ summary: 'Soft-delete a co-courtier (set inactive)' })
-  remove(@Param('id') id: string) {
-    return this.service.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.remove(id, user?.id);
   }
 }
