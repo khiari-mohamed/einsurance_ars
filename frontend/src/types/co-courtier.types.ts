@@ -3,16 +3,18 @@
  *
  * Confirmed structure:
  * - Structure IDENTICAL to Reassureur, INCLUDING identifiantUnique and resident
- *   (confirmed — this file previously said the opposite; corrected here)
  * - 5 tabs (Informations, Contacts, Conventions/Affaires, Bank Accounts, Complémentaires)
  * - Compte comptable format: 401xxxxx (same as Reassureur)
  * - Code format: CCO-0001 (auto-generated)
  * - SWIFT expected but non-blocking for international courtiers (same treatment as
  *   Réassureur — see reassureur.types.ts)
  * - Audit trail for code modifications (admin override)
+ * - FIX (Co-Courtier pass): added deviseParDefaut + groupKey (schema parity with
+ *   Cedante/Reassureur) and a Convention[] relation type used by the new Detail page.
  */
 
 import { Document } from './ged.types';
+import { Convention } from './convention.types';
 
 // ============================================================
 // MAIN ENTITY
@@ -25,11 +27,13 @@ export interface CoCourtier {
   isAccountLocked: boolean;
   raisonSociale: string;
   rne?: string;
-  // FIX: this file's docstring previously said "NO identifiantUnique, NO resident" —
-  // confirmed incorrect. CoCourtier is structurally identical to Reassureur,
-  // including these two fields.
   identifiantUnique?: string;
   resident?: boolean;
+  // FIX (new): admin/dedup-script field only — see schema comment. Not
+  // exposed in the day-to-day create/edit forms.
+  groupKey?: string;
+  // FIX (new): was on the schema, missing from this type entirely.
+  deviseParDefaut?: string;
   formeJuridique?: string;
   adresse?: string;
   pays?: string;
@@ -43,6 +47,9 @@ export interface CoCourtier {
   contacts?: CoCourtierContact[];
   bankAccounts?: CoCourtierBankAccount[];
   documents?: Document[];
+  // FIX (new): relation existed on the backend (Convention model has
+  // coCourtId) but had no frontend type — needed for the new Detail page.
+  conventions?: Convention[];
 
   isActive: boolean;
   createdAt: string;
@@ -58,7 +65,6 @@ export interface CoCourtierContact {
   nom: string;
   prenom?: string;
   poste?: string;
-  // FIX: matches Cedante/Reassureur — telephoneFixe / telephoneMobile.
   telephoneFixe?: string;
   telephoneMobile?: string;
   email?: string;
@@ -77,7 +83,6 @@ export interface CoCourtierBankAccount {
   banque: string;
   agence?: string;
   rib: string;
-  // FIX: added, same rationale as Cedante/Reassureur.
   iban?: string;
   swift?: string;
   currency: string;
@@ -95,14 +100,15 @@ export interface CreateCoCourtierDto {
   compteComptable: string;
   raisonSociale: string;
   rne?: string;
-  // FIX: added — confirmed CoCourtier does carry these, matching the backend DTO
-  // built last round.
   identifiantUnique?: string;
   resident?: boolean;
   formeJuridique?: string;
   adresse?: string;
   pays?: string;
   capital?: number;
+  // FIX (new): parity with backend DTO.
+  deviseParDefaut?: string;
+  groupKey?: string;
   freeFields?: Record<string, any>;
   contacts?: CreateCoCourtierContactDto[];
   bankAccounts?: CreateCoCourtierBankAccountDto[];
@@ -117,6 +123,8 @@ export interface UpdateCoCourtierDto {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
+  groupKey?: string;
   freeFields?: Record<string, any>;
   contacts?: CreateCoCourtierContactDto[];
   bankAccounts?: CreateCoCourtierBankAccountDto[];
@@ -153,8 +161,6 @@ export interface CoCourtiersListResponse {
   totalPages: number;
 }
 
-// NOTE: CoCourtierSingleResponse removed — see cedante.types.ts note.
-
 // ============================================================
 // VALIDATION HELPERS (for frontend use)
 // ============================================================
@@ -175,8 +181,6 @@ export function getCoCourtierCompteComptableError(value?: string): string | null
   return null;
 }
 
-// FIX (new): identifiantUnique validation helper — was entirely absent since the
-// field didn't exist on this type before. Mirrors Cedante/Reassureur.
 export function isValidCoCourtierIdentifiantUnique(value: string): boolean {
   return /^[0-9]{7}[A-Z]$/.test(value);
 }
@@ -187,6 +191,23 @@ export function getCoCourtierIdentifiantUniqueError(value?: string, resident?: b
   }
   if (value && !isValidCoCourtierIdentifiantUnique(value)) {
     return 'Format: 7 chiffres + 1 lettre majuscule (ex: 1234567A)';
+  }
+  return null;
+}
+
+// FIX (new, Co-Courtier pass): CDC §5.7 — "identique au Réassureur" —
+// SWIFT/BIC is obligatoire pour internationaux. There was previously no bank
+// account form for CoCourtier at all, so this rule had nowhere to live.
+export function isSwiftRequiredForCoCourtier(resident?: boolean): boolean {
+  return resident === false;
+}
+
+export function getCoCourtierSwiftError(value?: string, resident?: boolean): string | null {
+  if (resident === false && !value) {
+    return 'SWIFT/BIC obligatoire pour une entité non-résidente';
+  }
+  if (value && !isValidCoCourtierSwift(value)) {
+    return 'Format SWIFT invalide (ex: BNPAFRPPXXX)';
   }
   return null;
 }

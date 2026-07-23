@@ -23,6 +23,7 @@ import {
   UpdateCoCourtierDto,
   CoCourtiersListResponse,
 } from '../types/co-courtier.types';
+import { Convention, ConventionPartnerType } from '../types/convention.types';
 
 // Shared list-query params — FIX (new): `statut` was previously unreachable from the
 // API layer even though the backend controllers/services already support
@@ -106,6 +107,7 @@ interface BulkUpdateReassureurData {
 
 // Bulk import item for co-courtiers — identical shape to Réassureur's, per
 // CDC §5.7 ("identique au Réassureur").
+// FIX (Co-Courtier pass): added deviseParDefaut — parity with backend DTO.
 interface BulkImportCoCourtierItem {
   raisonSociale: string;
   compteComptable: string;
@@ -116,17 +118,23 @@ interface BulkImportCoCourtierItem {
   pays?: string;
   capital?: number;
   rne?: string;
+  deviseParDefaut?: string;
 }
 
+// FIX (Co-Courtier pass): added deviseParDefaut — parity with backend DTO.
 interface BulkUpdateCoCourtierData {
   pays?: string;
   formeJuridique?: string;
+  deviseParDefaut?: string;
   isActive?: boolean;
 }
 
 // ============================================================
 // ASSURES (Clients)
 // ============================================================
+// NOTE: left untouched — still out of scope. Same getContacts/addContact/... 404-risk
+// noted below for Cedantes/Reassureurs likely applies here too (no contacts.controller
+// was seen in the 4 Référentiel controllers reviewed so far) — flag for a future pass.
 
 export const assuresApi = {
   getAll: (params?: ListParams) =>
@@ -191,6 +199,15 @@ export const assuresApi = {
 // ============================================================
 // CEDANTES (Compagnies d'assurances)
 // ============================================================
+// FIX: this block had REGRESSED back to the broken getContacts/addContact/
+// updateContact/deleteContact/getBankAccounts/addBankAccount/updateBankAccount/
+// deleteBankAccount methods pointing at routes that don't exist on
+// CedantesController (verified — it only exposes GET/, GET/:id, POST/,
+// POST/bulk-import, PUT/bulk-update, PUT/:id, POST/bulk-delete, DELETE/:id,
+// POST/:id/override-code). Re-removing them here. The real path is
+// CedantesService.update() — a full deleteMany+create replace on both relations
+// in one atomic PUT /cedantes/:id call. CedanteContactModal / CedanteBankAccountModal
+// already build the full array client-side and submit via `update()` below.
 
 export const cedantesApi = {
   getAll: (params?: ListParams) =>
@@ -231,36 +248,26 @@ export const cedantesApi = {
       '/master-data/cedantes/bulk-delete',
       { ids },
     ),
-
-  // NOTE: see assuresApi note above — kept as-is, route existence unverified.
-  getContacts: (id: string) =>
-    api.get(`/master-data/cedantes/${id}/contacts`),
-
-  addContact: (id: string, data: any) =>
-    api.post(`/master-data/cedantes/${id}/contacts`, data),
-
-  updateContact: (cedanteId: string, contactId: string, data: any) =>
-    api.put(`/master-data/cedantes/${cedanteId}/contacts/${contactId}`, data),
-
-  deleteContact: (cedanteId: string, contactId: string) =>
-    api.delete(`/master-data/cedantes/${cedanteId}/contacts/${contactId}`),
-
-  getBankAccounts: (id: string) =>
-    api.get(`/master-data/cedantes/${id}/bank-accounts`),
-
-  addBankAccount: (id: string, data: any) =>
-    api.post(`/master-data/cedantes/${id}/bank-accounts`, data),
-
-  updateBankAccount: (cedanteId: string, bankId: string, data: any) =>
-    api.put(`/master-data/cedantes/${cedanteId}/bank-accounts/${bankId}`, data),
-
-  deleteBankAccount: (cedanteId: string, bankId: string) =>
-    api.delete(`/master-data/cedantes/${cedanteId}/bank-accounts/${bankId}`),
 };
 
 // ============================================================
 // REASSUREURS
 // ============================================================
+// FIX (new): getContacts/addContact/updateContact/deleteContact/getBankAccounts/
+// addBankAccount/updateBankAccount/deleteBankAccount/getParticipations all pointed
+// at routes that DO NOT EXIST on ReassureursController — verified against the actual
+// NestJS controller, which only exposes GET/, GET/:id, POST/, POST/bulk-import,
+// PUT/bulk-update, POST/bulk-delete, PUT/:id, DELETE/:id, POST/:id/override-code.
+// Every call to these methods was a guaranteed 404.
+//
+// getParticipations() in particular was redundant even if it had existed:
+// ReassureursService.findOne() already includes `participations` (with nested
+// `affaire.cedante` and `affaire.facultativeData.assure`) directly in the GET
+// /reassureurs/:id response — ReassureurDetail now reads `reassureur.participations`
+// straight from that, no separate call needed.
+//
+// contacts/bankAccounts follow the same update()-based full-replace pattern as
+// Cedantes — see ReassureurContactModal / ReassureurBankAccountModal.
 
 export const reassureursApi = {
   getAll: (params?: ListParams) =>
@@ -299,42 +306,20 @@ export const reassureursApi = {
       '/master-data/reassureurs/bulk-delete',
       { ids },
     ),
-
-  // NOTE: see assuresApi note above — kept as-is, route existence unverified.
-  getContacts: (id: string) =>
-    api.get(`/master-data/reassureurs/${id}/contacts`),
-
-  addContact: (id: string, data: any) =>
-    api.post(`/master-data/reassureurs/${id}/contacts`, data),
-
-  updateContact: (reassureurId: string, contactId: string, data: any) =>
-    api.put(`/master-data/reassureurs/${reassureurId}/contacts/${contactId}`, data),
-
-  deleteContact: (reassureurId: string, contactId: string) =>
-    api.delete(`/master-data/reassureurs/${reassureurId}/contacts/${contactId}`),
-
-  getBankAccounts: (id: string) =>
-    api.get(`/master-data/reassureurs/${id}/bank-accounts`),
-
-  addBankAccount: (id: string, data: any) =>
-    api.post(`/master-data/reassureurs/${id}/bank-accounts`, data),
-
-  updateBankAccount: (reassureurId: string, bankId: string, data: any) =>
-    api.put(`/master-data/reassureurs/${reassureurId}/bank-accounts/${bankId}`, data),
-
-  deleteBankAccount: (reassureurId: string, bankId: string) =>
-    api.delete(`/master-data/reassureurs/${reassureurId}/bank-accounts/${bankId}`),
-
-  // NOTE: no matching controller route seen either — findOne() already includes
-  // `participations` in its response, so this may simply be redundant rather than
-  // broken. Kept as-is.
-  getParticipations: (id: string) =>
-    api.get(`/master-data/reassureurs/${id}/participations`),
 };
 
 // ============================================================
 // CO-COURTIERS (Courtiers en réassurance)
 // ============================================================
+// FIX (Co-Courtier pass): getContacts/addContact/updateContact/deleteContact/
+// getBankAccounts/addBankAccount/updateBankAccount/deleteBankAccount REMOVED.
+// Verified against the actual CoCourtierController — it only exposes GET/,
+// GET/:id, POST/, POST/bulk-import, PUT/bulk-update, POST/bulk-delete,
+// PUT/:id, POST/:id/override-code, DELETE/:id. Every one of the removed
+// calls was a guaranteed 404. Contacts/bankAccounts now follow the same
+// full-array-replace pattern as Cedante/Reassureur — see CoCourtierDetail.tsx,
+// which assembles the complete array client-side and submits it via
+// update() below (backend does deleteMany + create atomically).
 
 export const coCourtiersApi = {
   getAll: (params?: ListParams) =>
@@ -375,31 +360,39 @@ export const coCourtiersApi = {
       '/master-data/co-courtiers/bulk-delete',
       { ids },
     ),
+};
 
-  // NOTE: see assuresApi note above — kept as-is, route existence unverified.
-  getContacts: (id: string) =>
-    api.get(`/master-data/co-courtiers/${id}/contacts`),
+// ============================================================
+// CONVENTIONS (polymorphic — Cédante / Réassureur / Co-Courtier)
+// ============================================================
+// Matches ConventionsController exactly:
+//   POST   /master-data/conventions            (multipart: file + partnerType +
+//                                                partnerId + dateSignature? +
+//                                                dateEffet? + notes?)
+//   GET    /master-data/conventions?partnerType=&partnerId=
+//   DELETE /master-data/conventions/:id         (soft — sets isActive: false)
+//
+// attach() takes a FormData built by the caller (see CedanteConventionModal /
+// ReassureurConventionModal) since the payload is multipart (contains a file).
 
-  addContact: (id: string, data: any) =>
-    api.post(`/master-data/co-courtiers/${id}/contacts`, data),
+export const conventionsApi = {
+  listForPartner: (partnerType: ConventionPartnerType, partnerId: string) =>
+    api.get<Convention[]>('/master-data/conventions', {
+      params: { partnerType, partnerId },
+    }),
 
-  updateContact: (coCourtId: string, contactId: string, data: any) =>
-    api.put(`/master-data/co-courtiers/${coCourtId}/contacts/${contactId}`, data),
+  // FIX: `Content-Type: undefined` deliberately overrides the axios instance's
+  // default `application/json` header (see lib/api.ts) for this one request —
+  // when the browser/axios sees a FormData body with no Content-Type forced on
+  // it, it sets `multipart/form-data; boundary=...` itself. Forcing
+  // 'multipart/form-data' without a boundary here would break the upload.
+  attach: (formData: FormData) =>
+    api.post<Convention>('/master-data/conventions', formData, {
+      headers: { 'Content-Type': undefined },
+    }),
 
-  deleteContact: (coCourtId: string, contactId: string) =>
-    api.delete(`/master-data/co-courtiers/${coCourtId}/contacts/${contactId}`),
-
-  getBankAccounts: (id: string) =>
-    api.get(`/master-data/co-courtiers/${id}/bank-accounts`),
-
-  addBankAccount: (id: string, data: any) =>
-    api.post(`/master-data/co-courtiers/${id}/bank-accounts`, data),
-
-  updateBankAccount: (coCourtId: string, bankId: string, data: any) =>
-    api.put(`/master-data/co-courtiers/${coCourtId}/bank-accounts/${bankId}`, data),
-
-  deleteBankAccount: (coCourtId: string, bankId: string) =>
-    api.delete(`/master-data/co-courtiers/${coCourtId}/bank-accounts/${bankId}`),
+  deactivate: (id: string) =>
+    api.delete<Convention>(`/master-data/conventions/${id}`),
 };
 
 // ============================================================
@@ -420,6 +413,7 @@ export const masterDataApi = {
   cedantes: cedantesApi,
   reassureurs: reassureursApi,
   coCourtiers: coCourtiersApi,
+  conventions: conventionsApi,
   audit: auditApi,
 };
 

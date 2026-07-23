@@ -29,6 +29,9 @@ export class CoCourtierService {
         { raisonSociale: { contains: search, mode: 'insensitive' } },
         { code: { contains: search, mode: 'insensitive' } },
         { compteComptable: { contains: search } },
+        // FIX (new, Co-Courtier pass): identifiantUnique is a prominent
+        // column in the list UI but wasn't searchable — added.
+        { identifiantUnique: { contains: search, mode: 'insensitive' } },
         { pays: { contains: search, mode: 'insensitive' } },
       ];
     }
@@ -51,9 +54,6 @@ export class CoCourtierService {
       include: {
         contacts: true,
         bankAccounts: true,
-        // FIX: was 'CO_COURTIER' here but 'COCOURTIER' (no underscore) in
-        // overrideCode()'s AuditLog write below, in the SAME file. Normalized to
-        // 'CO_COURTIER' everywhere to match the DocumentEntityType enum convention.
         documents: {
           where: { entityType: 'CO_COURTIER' },
           include: { document: true },
@@ -77,9 +77,6 @@ export class CoCourtierService {
       if (existingRne) throw new ConflictException(`RNE ${dto.rne} déjà utilisé`);
     }
 
-    // FIX (new): same identifiantUnique uniqueness + resident business rule now
-    // applied to CoCourtier, matching Cedante/Reassureur (see note in
-    // create-co-courtier.dto.ts re: schema assumption).
     if (dto.identifiantUnique) {
       const existingIdentifiant = await this.prisma.coCourtier.findUnique({
         where: { identifiantUnique: dto.identifiantUnique },
@@ -94,7 +91,7 @@ export class CoCourtierService {
       );
     }
 
-    // FIX (new): soft cross-entity duplicate-code check — see CedantesService.create().
+    // Soft cross-entity duplicate-code check — see CedantesService.create().
     const [dupCedante, dupReassureur] = await Promise.all([
       this.prisma.cedante.findUnique({ where: { compteComptable: dto.compteComptable } }),
       this.prisma.reassureur.findUnique({ where: { compteComptable: dto.compteComptable } }),
@@ -129,6 +126,12 @@ export class CoCourtierService {
         adresse: dto.adresse,
         pays: dto.pays,
         capital: dto.capital,
+        // FIX (new, Co-Courtier pass): deviseParDefaut/groupKey now persisted.
+        // Passing dto.deviseParDefaut straight through is safe even when
+        // undefined — Prisma omits undefined keys, so the schema's
+        // @default("TND") still applies when the caller doesn't send one.
+        deviseParDefaut: dto.deviseParDefaut,
+        groupKey: dto.groupKey,
         freeFields: dto.freeFields ?? {},
         contacts: dto.contacts ? { create: dto.contacts } : undefined,
         bankAccounts: dto.bankAccounts ? { create: dto.bankAccounts } : undefined,
@@ -216,6 +219,8 @@ export class CoCourtierService {
             adresse: dto.adresse,
             pays: dto.pays,
             capital: dto.capital,
+            // FIX (new, Co-Courtier pass): parity with create().
+            deviseParDefaut: dto.deviseParDefaut || undefined,
             freeFields: {},
           },
         });
@@ -250,6 +255,8 @@ export class CoCourtierService {
     const data: any = {};
     if (dto.pays !== undefined) data.pays = dto.pays;
     if (dto.formeJuridique !== undefined) data.formeJuridique = dto.formeJuridique;
+    // FIX (new, Co-Courtier pass): parity with the DTO addition.
+    if (dto.deviseParDefaut !== undefined) data.deviseParDefaut = dto.deviseParDefaut;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
 
     if (Object.keys(data).length === 0) {
@@ -336,7 +343,6 @@ export class CoCourtierService {
       );
     }
 
-    // FIX: single atomic nested write instead of two separate round-trips.
     return this.prisma.coCourtier.update({
       where: { id },
       data: {
@@ -348,6 +354,9 @@ export class CoCourtierService {
         ...(dto.adresse !== undefined && { adresse: dto.adresse }),
         ...(dto.pays !== undefined && { pays: dto.pays }),
         ...(dto.capital !== undefined && { capital: dto.capital }),
+        // FIX (new, Co-Courtier pass): deviseParDefaut/groupKey now updatable.
+        ...(dto.deviseParDefaut !== undefined && { deviseParDefaut: dto.deviseParDefaut }),
+        ...(dto.groupKey !== undefined && { groupKey: dto.groupKey }),
         ...(dto.freeFields !== undefined && { freeFields: dto.freeFields }),
         ...(dto.contacts !== undefined && {
           contacts: { deleteMany: {}, create: dto.contacts },
@@ -394,8 +403,6 @@ export class CoCourtierService {
 
   /**
    * ADMIN ONLY: allow a super admin to manually override the auto-generated code.
-   * FIX: now bumps the underlying Sequence counter via sequence.bump() — see
-   * SequenceService.bump() for rationale.
    */
   async overrideCode(id: string, newCode: string, userId: string) {
     const existing = await this.findOne(id);
@@ -421,7 +428,6 @@ export class CoCourtierService {
       },
     });
 
-    // FIX: normalized to 'CO_COURTIER' (was 'COCOURTIER', no underscore — see findOne() note above).
     await this.prisma.auditLog.create({
       data: {
         userId,

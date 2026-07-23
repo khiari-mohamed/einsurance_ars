@@ -3,12 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Plus, Search, Edit2, Trash2, X, Eye, Shield, Globe, ChevronLeft, ChevronRight, AlertCircle,
-  Upload, Download,
+  Upload, Download, RotateCcw,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { cedantesApi } from '../../api/master-data.api';
 import {
   Cedante,
+  CreateCedanteDto,
+  UpdateCedanteDto,
   getCompteComptableError,
   getIdentifiantUniqueError,
 } from '../../types/cedante.types';
@@ -96,6 +98,18 @@ export default function CedantesList() {
     },
   });
 
+  // FIX (new): there was no way to reactivate a single INACTIVE cédante — the
+  // "Inactifs" filter lets you find one, but only BulkEditModal (multi-select)
+  // could flip isActive back to true. UpdateCedanteDto has no `isActive` field
+  // at all (only BulkUpdateCedantesDataDto does) — bulkUpdate() with a
+  // single-id array is the only real endpoint that can do this.
+  const reactivateMutation = useMutation({
+    mutationFn: (id: string) => cedantesApi.bulkUpdate([id], { isActive: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cedantes'] });
+    },
+  });
+
   const handleEdit = (cedante: Cedante) => {
     setEditingCedante(cedante);
     setIsModalOpen(true);
@@ -113,6 +127,10 @@ export default function CedantesList() {
         setConfirmState({ type: null });
       },
     });
+  };
+
+  const handleReactivate = (id: string) => {
+    reactivateMutation.mutate(id);
   };
 
   const handleBulkDeactivate = () => {
@@ -195,9 +213,13 @@ export default function CedantesList() {
         <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            {/* FIX: placeholder claimed search-by-"pays" — CedantesService.findAll()'s
+                `where.OR` only matches raisonSociale / code / compteComptable /
+                identifiantUnique. Searching a country silently returned nothing,
+                which reads as "no such company" rather than "unsupported filter". */}
             <input
               type="text"
-              placeholder="Rechercher par raison sociale, code, compte comptable, identifiant unique ou pays..."
+              placeholder="Rechercher par raison sociale, code, compte comptable ou identifiant unique..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -341,7 +363,18 @@ export default function CedantesList() {
                           >
                             <Edit2 size={16} />
                           </button>
-                          {cedante.isActive !== false && (
+                          {/* FIX (new): was no way at all to reactivate a single
+                              inactive cédante from the list. */}
+                          {cedante.isActive === false ? (
+                            <button
+                              onClick={() => handleReactivate(cedante.id)}
+                              disabled={reactivateMutation.isPending}
+                              className="p-1.5 rounded-lg hover:bg-green-50 text-green-600 transition-colors disabled:opacity-50"
+                              title="Réactiver"
+                            >
+                              <RotateCcw size={16} />
+                            </button>
+                          ) : (
                             <button
                               onClick={() => handleDeactivate(cedante.id)}
                               className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors"
@@ -381,7 +414,15 @@ export default function CedantesList() {
                       <button onClick={() => handleEdit(cedante)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors">
                         <Edit2 size={18} />
                       </button>
-                      {cedante.isActive !== false && (
+                      {cedante.isActive === false ? (
+                        <button
+                          onClick={() => handleReactivate(cedante.id)}
+                          disabled={reactivateMutation.isPending}
+                          className="p-2 rounded-lg hover:bg-green-50 text-green-600 transition-colors disabled:opacity-50"
+                        >
+                          <RotateCcw size={18} />
+                        </button>
+                      ) : (
                         <button onClick={() => handleDeactivate(cedante.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-600 transition-colors">
                           <Trash2 size={18} />
                         </button>
@@ -477,6 +518,10 @@ interface CedanteModalProps {
   onClose: () => void;
 }
 
+// FIX: form state is still seeded from the full Cedante object on edit (so every
+// field is pre-filled), but submission NO LONGER spreads that object straight into
+// the request — see handleSubmit below. Kept as Partial<Cedante> here purely for
+// convenient two-way binding with the inputs.
 function CedanteModal({ cedante, onClose }: CedanteModalProps) {
   const queryClient = useQueryClient();
   const [formData, setFormData] = useState<Partial<Cedante>>(
@@ -496,11 +541,11 @@ function CedanteModal({ cedante, onClose }: CedanteModalProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const mutation = useMutation({
-    mutationFn: (data: Partial<Cedante>) => {
+    mutationFn: (data: CreateCedanteDto | UpdateCedanteDto) => {
       if (cedante) {
-        return cedantesApi.update(cedante.id, data);
+        return cedantesApi.update(cedante.id, data as UpdateCedanteDto);
       }
-      return cedantesApi.create(data as any);
+      return cedantesApi.create(data as CreateCedanteDto);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cedantes'] });
@@ -527,13 +572,58 @@ function CedanteModal({ cedante, onClose }: CedanteModalProps) {
       return;
     }
 
-    const compteError = getCompteComptableError(formData.compteComptable);
-    if (compteError) {
-      setErrors({ compteComptable: compteError });
-      return;
+    // FIX: compteComptable is locked/disabled on edit and excluded from
+    // UpdateCedanteDto entirely — validating and submitting it on every edit
+    // was pointless at best. Only validated (and only sent) on create.
+    if (!isEdit) {
+      const compteError = getCompteComptableError(formData.compteComptable);
+      if (compteError) {
+        setErrors({ compteComptable: compteError });
+        return;
+      }
     }
 
-    mutation.mutate(formData);
+    // FIX: this used to be `mutation.mutate(formData)` — on edit, formData was a
+    // spread of the ENTIRE Cedante object (id, code, isActive, isAccountLocked,
+    // contacts, bankAccounts, compteComptable, createdAt, updatedAt...), none of
+    // which belong in UpdateCedanteDto. If the backend's ValidationPipe uses
+    // `forbidNonWhitelisted: true`, that made every single edit fail with a 400.
+    // Now builds an explicit payload containing only the fields this form
+    // actually edits, matching CreateCedanteDto / UpdateCedanteDto exactly.
+    // contacts/bankAccounts are intentionally omitted (not `undefined`-spread) —
+    // the service only touches those relations when the field is explicitly
+    // present, so omitting them leaves existing contacts/bank accounts untouched.
+    const capitalValue =
+      formData.capital === undefined || formData.capital === null || (formData.capital as unknown) === ''
+        ? undefined
+        : Number(formData.capital);
+
+    if (isEdit) {
+      const payload: UpdateCedanteDto = {
+        raisonSociale: formData.raisonSociale,
+        rne: formData.rne || undefined,
+        identifiantUnique: formData.identifiantUnique || undefined,
+        resident: formData.resident,
+        formeJuridique: formData.formeJuridique || undefined,
+        adresse: formData.adresse || undefined,
+        pays: formData.pays || undefined,
+        capital: capitalValue,
+      };
+      mutation.mutate(payload);
+    } else {
+      const payload: CreateCedanteDto = {
+        compteComptable: formData.compteComptable as string,
+        raisonSociale: formData.raisonSociale as string,
+        rne: formData.rne || undefined,
+        identifiantUnique: formData.identifiantUnique || undefined,
+        resident: formData.resident as boolean,
+        formeJuridique: formData.formeJuridique || undefined,
+        adresse: formData.adresse || undefined,
+        pays: formData.pays || undefined,
+        capital: capitalValue,
+      };
+      mutation.mutate(payload);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -541,6 +631,13 @@ function CedanteModal({ cedante, onClose }: CedanteModalProps) {
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
       setFormData((prev) => ({ ...prev, [name]: checked }));
+    } else if (name === 'capital') {
+      // FIX: was stored as the raw string from the DOM event with no conversion —
+      // `formData.capital` is typed `number | undefined` but at runtime held a
+      // string, which the backend's `@IsNumber()` on capital could reject
+      // depending on ValidationPipe transform settings. Parsed to a real number
+      // here so state always matches its declared type.
+      setFormData((prev) => ({ ...prev, capital: value === '' ? undefined : Number(value) }));
     } else {
       // FIX: was `value.toUpperCase()` applied to EVERY field — typing "Star
       // Assurances" into Raison Sociale silently became "STAR ASSURANCES" on every
@@ -579,8 +676,8 @@ function CedanteModal({ cedante, onClose }: CedanteModalProps) {
           {/* NOTE: this modal (Onglet 1 — Informations Générales) is intentionally
               the only tab implemented here. Onglets 2-5 (Contacts, Conventions/GED,
               Coordonnées Bancaires, Champs Libres) aren't collected at creation time
-              — no bank-account fields exist in this create/edit flow at all. If that's
-              not the intended flow, flag it and I'll help build the missing tabs. */}
+              — no bank-account fields exist in this create/edit flow at all. Contacts
+              and bank accounts are managed from CedanteDetail after creation. */}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
@@ -698,10 +795,12 @@ function CedanteModal({ cedante, onClose }: CedanteModalProps) {
 
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Capital (TND)</label>
+              {/* FIX: was `formData.capital || ''` — a capital of exactly 0 is
+                  falsy in JS, so it displayed as a blank field instead of "0". */}
               <input
                 type="number"
                 name="capital"
-                value={formData.capital || ''}
+                value={formData.capital ?? ''}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />

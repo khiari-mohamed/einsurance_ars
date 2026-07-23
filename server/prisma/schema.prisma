@@ -461,6 +461,7 @@ model Contact {
   telephoneFixe    String?
   telephoneMobile  String?
   email            String?
+  isDefault        Boolean     @default(false)
 
   assureId     String?
   assure       Assure?     @relation(fields: [assureId], references: [id])
@@ -644,7 +645,7 @@ model Reassureur {
   @@index([groupKey])
 }
 
-// Fiche Co-courtier (Courtier en réassurance) — identical structure to Réassureur
+// Fiche Co-Courtier (Courtier en réassurance) — identical structure to Réassureur
 // FIX #7: Section 5.7 says Co-Courtier is "identique au Réassureur" —
 // added identifiantUnique + resident for consistency (structural only;
 // question 5.6.4 on whether co-courtiers can be foreign is still pending,
@@ -655,12 +656,26 @@ model CoCourtier {
   compteComptable  String         @unique    // 401300xx (confirmed by data)
   isAccountLocked  Boolean        @default(false)
   raisonSociale    String
-  // FIX #9 (applied — decision documented): non-unique intentionally, same
-  // reasoning as Reassureur.rne.
+  // FIX (Co-Courtier pass): non-unique intentionally — same reasoning as
+  // Reassureur.rne. Co-courtiers are frequently foreign brokerage entities.
   rne              String?        // Optional for foreign courtiers
   identifiantUnique String?       @unique
   resident         Boolean?
-  // FIX (Low/deferred item, applied): open question 5.6.7.
+  // FIX (new, Co-Courtier pass): dual-code tracking, mirrors Cedante.groupKey /
+  // Reassureur.groupKey. Directly justified by Section 4/7.6 of the CDC — AON
+  // LIMITED (40133000 / 41131500), MNK RE LIMITED and CKRE were explicitly
+  // reclassified from "Réassureur" to "Courtage (cocourtage)" by ARS on
+  // 15/06/2026, and AON LIMITED is one of the 6 confirmed dual-code entities
+  // in Section 12.2. Without this field there's no way to link a courtier
+  // reclassified out of the 401xxxxx/411xxxxx tiers table back to its sibling
+  // code once the RNE-based dedup pass (recommended by Sofien Benzakour,
+  // 15/06/2026) runs. Not exposed on the public create/update DTOs — this is
+  // an admin/dedup-script field only, same as the CDC treats it (§12.2 is
+  // still "❌ à décider").
+  groupKey         String?
+  // FIX (new, Co-Courtier pass): open question 5.6.7 (transversal, all
+  // fiches) — this field already existed on Assure/Cedante/Reassureur; it was
+  // missing on CoCourtier only.
   deviseParDefaut  String?        @default("TND")
   // NEW: Audit trail for admin code modifications
   codeModifiedBy   String?        // User ID who last modified the auto-generated code
@@ -680,6 +695,8 @@ model CoCourtier {
   isActive         Boolean        @default(true)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+
+  @@index([groupKey])
 }
 
 // ============================================================

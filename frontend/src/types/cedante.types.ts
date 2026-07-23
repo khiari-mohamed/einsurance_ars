@@ -1,3 +1,22 @@
+// FIX (new): CedantesService.findOne() includes `documents: { where: { entityType:
+// 'CEDANTE' }, include: { document: true } }` in its query — the data has always
+// been returned by the API, it just had nowhere to land on the frontend type.
+export interface CedanteDocumentLink {
+  id: string;
+  documentId: string;
+  entityType: string; // 'CEDANTE'
+  document: {
+    id: string;
+    nom: string;
+    originalName?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    documentType?: string;
+    createdAt: string;
+  };
+  createdAt: string;
+}
+
 export interface Cedante {
   id: string;
   code: string;
@@ -17,6 +36,8 @@ export interface Cedante {
   freeFields?: Record<string, any>;
   contacts?: CedanteContact[];
   bankAccounts?: CedanteBankAccount[];
+  // FIX (new): see CedanteDocumentLink above — was missing from the type entirely.
+  documents?: CedanteDocumentLink[];
   isActive?: boolean;
   isAccountLocked?: boolean;
   codeModifiedBy?: string;
@@ -38,8 +59,11 @@ export interface CedanteContact {
   telephoneFixe?: string;
   telephoneMobile?: string;
   email?: string;
-  // Optional UI flag for marking a contact as the primary contact.
-  isDefault?: boolean;
+  // FIX (removed): `isDefault` was rendered/edited in the UI but the backend
+  // `Contact` Prisma model has no such field (unlike `BankAccount`, which does).
+  // It was silently dropped on every save — removed here so the type doesn't
+  // promise something the API can't persist. If a "contact principal" flag is
+  // wanted, it needs to be added to the Contact model + CreateContactDto first.
   cedanteId: string;
   createdAt: string;
   updatedAt: string;

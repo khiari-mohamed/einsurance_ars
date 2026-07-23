@@ -13,13 +13,8 @@ export class CreateCoCourtierDto {
   @ApiProperty() @IsString() raisonSociale: string;
   @ApiPropertyOptional() @IsOptional() @IsString() rne?: string;
 
-  // FIX (ASSUMES SCHEMA ADDITION — CONFIRM): Section 5.7 says Co-Courtier is
-  // "identique au Réassureur" structurally. Cedante/Reassureur both carry
-  // identifiantUnique + resident; CoCourtier was inconsistent (missing both) even
-  // though co-brokers can equally be Tunisian or foreign (open question 5.6.4).
-  // *** Assumes your corrected schema added `identifiantUnique` and `resident`
-  // columns to the CoCourtier model. If it didn't, strip these two fields + the
-  // matching service logic before compiling. ***
+  // Confirmed — Co-Courtier is structurally identical to Reassureur (CDC 5.7),
+  // including identifiantUnique and resident. Matches the corrected schema.
   @ApiPropertyOptional({ description: 'Identifiant unique (7 chiffres + 1 lettre) — obligatoire pour les entités tunisiennes' })
   @IsOptional()
   @Matches(/^[0-9]{7}[A-Z]$/, { message: "Identifiant Unique doit être 7 chiffres suivis d'une lettre majuscule (ex: 1234567A)" })
@@ -32,6 +27,19 @@ export class CreateCoCourtierDto {
   @ApiPropertyOptional() @IsOptional() @IsString() adresse?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() pays?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() capital?: number;
+
+  // FIX (new, Co-Courtier pass): existed on the schema (@default("TND")) but
+  // was never exposed on the DTO — silently unsettable from create/update.
+  // Mirrors the field on Assure/Cedante/Reassureur.
+  @ApiPropertyOptional({ description: 'Devise par défaut (ex: TND, EUR, USD)', default: 'TND' })
+  @IsOptional() @IsString() deviseParDefaut?: string;
+
+  // FIX (new, Co-Courtier pass): admin/dedup-script field, see schema comment.
+  // Deliberately NOT surfaced in the day-to-day create/edit UI — CDC §12.2
+  // still marks the dual-code resolution strategy as "❌ à décider".
+  @ApiPropertyOptional({ description: "Clé de regroupement pour lier deux codes (401xxxxx / 411xxxxx) d'une même entité — usage interne/admin, dédoublonnage" })
+  @IsOptional() @IsString() groupKey?: string;
+
   @ApiPropertyOptional() @IsOptional() freeFields?: Record<string, any>;
 
   @ApiPropertyOptional({ type: [CreateContactDto] })

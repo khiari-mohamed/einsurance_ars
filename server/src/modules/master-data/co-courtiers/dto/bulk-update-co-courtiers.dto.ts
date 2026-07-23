@@ -10,6 +10,11 @@ export class BulkUpdateCoCourtiersDataDto {
   @IsOptional() @IsString()
   formeJuridique?: string;
 
+  // FIX (new, Co-Courtier pass): exposed for bulk edit — e.g. re-pointing a
+  // batch of foreign co-courtiers to EUR after an initial TND-default import.
+  @IsOptional() @IsString()
+  deviseParDefaut?: string;
+
   @IsOptional() @IsBoolean()
   isActive?: boolean;
 }

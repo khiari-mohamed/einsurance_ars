@@ -1,21 +1,21 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
-import { cedantesApi } from '../../api/master-data.api';
-import { CedanteContact, CreateCedanteContactDto } from '../../types/cedante.types';
+import { reassureursApi } from '../../api/master-data.api';
+import { ReassureurContact, CreateReassureurContactDto } from '../../types/reassureur.types';
 
-interface CedanteContactModalProps {
-  cedanteId: string;
-  // FIX: needs the full existing contacts list — the backend has no per-contact
-  // route (see master-data.api.ts note). The only real way to change a contact is
-  // CedantesService.update(), which replaces the ENTIRE contacts array in one shot
-  // (deleteMany + create). This modal now builds that full array itself.
-  existingContacts: CedanteContact[];
-  contact: CedanteContact | null;
+interface ReassureurContactModalProps {
+  reassureurId: string;
+  // FIX: needs the full existing contacts list — ReassureursController has no
+  // per-contact route. The only real way to change a contact is
+  // ReassureursService.update(), which replaces the ENTIRE contacts array in one
+  // shot (deleteMany + create). Mirrors CedanteContactModal exactly.
+  existingContacts: ReassureurContact[];
+  contact: ReassureurContact | null;
   onClose: () => void;
 }
 
-interface CedanteContactFormData {
+interface ContactFormData {
   nom: string;
   prenom: string;
   poste: string;
@@ -24,9 +24,9 @@ interface CedanteContactFormData {
   email: string;
 }
 
-export default function CedanteContactModal({ cedanteId, existingContacts, contact, onClose }: CedanteContactModalProps) {
+export default function ReassureurContactModal({ reassureurId, existingContacts, contact, onClose }: ReassureurContactModalProps) {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState<CedanteContactFormData>(() => {
+  const [formData, setFormData] = useState<ContactFormData>(() => {
     if (contact) {
       return {
         nom: contact.nom || '',
@@ -37,34 +37,20 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
         email: contact.email || '',
       };
     }
-
-    return {
-      nom: '',
-      prenom: '',
-      poste: '',
-      telephoneFixe: '',
-      telephoneMobile: '',
-      email: '',
-    };
+    return { nom: '', prenom: '', poste: '', telephoneFixe: '', telephoneMobile: '', email: '' };
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // FIX: routes through cedantesApi.update() with the full contacts array
-  // instead of the nonexistent addContact/updateContact endpoints.
   const mutation = useMutation({
-    mutationFn: (nextContacts: CreateCedanteContactDto[]) =>
-      cedantesApi.update(cedanteId, { contacts: nextContacts }),
+    mutationFn: (nextContacts: CreateReassureurContactDto[]) =>
+      reassureursApi.update(reassureurId, { contacts: nextContacts }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cedantes', cedanteId] });
+      queryClient.invalidateQueries({ queryKey: ['reassureurs', reassureurId] });
       onClose();
     },
     onError: (error: any) => {
-      if (error.response?.data?.message) {
-        setErrors({ submit: error.response.data.message });
-      } else {
-        setErrors({ submit: 'Erreur lors de l\'enregistrement du contact.' });
-      }
+      setErrors({ submit: error.response?.data?.message || "Erreur lors de l'enregistrement du contact." });
     },
   });
 
@@ -76,15 +62,12 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
       setErrors({ nom: 'Le nom est obligatoire' });
       return;
     }
-
     if (formData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      setErrors({ email: 'Format d\'email invalide' });
+      setErrors({ email: "Format d'email invalide" });
       return;
     }
 
-    // Strip id/cedanteId/timestamps — the backend recreates every row fresh on
-    // each update() call, so only the DTO-shaped fields matter.
-    const toDto = (c: CedanteContact): CreateCedanteContactDto => ({
+    const toDto = (c: ReassureurContact): CreateReassureurContactDto => ({
       nom: c.nom,
       prenom: c.prenom,
       poste: c.poste,
@@ -93,14 +76,12 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
       email: c.email,
     });
 
-    const editedDto: CreateCedanteContactDto = { ...formData };
+    const editedDto: CreateReassureurContactDto = { ...formData };
 
-    let nextContacts: CreateCedanteContactDto[];
+    let nextContacts: CreateReassureurContactDto[];
     if (contact) {
-      // Editing — replace this one entry, keep every other contact as-is.
       nextContacts = existingContacts.map((c) => (c.id === contact.id ? editedDto : toDto(c)));
     } else {
-      // Adding — keep every existing contact, append the new one.
       nextContacts = [...existingContacts.map(toDto), editedDto];
     }
 
@@ -110,9 +91,7 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
-    if (errors[name]) {
-      setErrors((prev) => ({ ...prev, [name]: '' }));
-    }
+    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: '' }));
   };
 
   return (
@@ -122,10 +101,7 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
           <h2 className="text-[18px] font-semibold text-gray-900">
             {contact ? 'Modifier le contact' : 'Nouveau contact'}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-          >
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -145,7 +121,7 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
               <input
                 type="text"
                 name="nom"
-                value={formData.nom || ''}
+                value={formData.nom}
                 onChange={handleChange}
                 required
                 className={`w-full px-3 py-2 border ${errors.nom ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
@@ -158,7 +134,7 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
               <input
                 type="text"
                 name="prenom"
-                value={formData.prenom || ''}
+                value={formData.prenom}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -169,7 +145,7 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
               <input
                 type="text"
                 name="poste"
-                value={formData.poste || ''}
+                value={formData.poste}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -180,7 +156,7 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
               <input
                 type="tel"
                 name="telephoneFixe"
-                value={formData.telephoneFixe || ''}
+                value={formData.telephoneFixe}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -191,7 +167,7 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
               <input
                 type="tel"
                 name="telephoneMobile"
-                value={formData.telephoneMobile || ''}
+                value={formData.telephoneMobile}
                 onChange={handleChange}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -202,22 +178,16 @@ export default function CedanteContactModal({ cedanteId, existingContacts, conta
               <input
                 type="email"
                 name="email"
-                value={formData.email || ''}
+                value={formData.email}
                 onChange={handleChange}
                 className={`w-full px-3 py-2 border ${errors.email ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
               />
-              {errors.email && (
-                <p className="mt-1 text-[11px] text-red-500">{errors.email}</p>
-              )}
+              {errors.email && <p className="mt-1 text-[11px] text-red-500">{errors.email}</p>}
             </div>
           </div>
 
           <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-            >
+            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
               Annuler
             </button>
             <button

@@ -30,6 +30,11 @@ export class BulkImportCoCourtierItemDto {
 
   @IsOptional() @IsNumber()
   capital?: number;
+
+  // FIX (new, Co-Courtier pass): was silently dropped on import even though
+  // the schema/create-DTO both support it — added for parity.
+  @IsOptional() @IsString()
+  deviseParDefaut?: string;
 }
 
 export class BulkImportCoCourtiersDto {

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -16,6 +17,7 @@ import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 type Statut = 'ACTIVE' | 'INACTIVE' | 'ALL';
 const LIMIT = 20;
+const CURRENCIES = ['TND', 'EUR', 'USD', 'GBP', 'JPY'];
 
 export default function CoCourtiersList() {
   const [searchInput, setSearchInput] = useState('');
@@ -186,7 +188,7 @@ export default function CoCourtiersList() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
-              placeholder="Rechercher par raison sociale, code, compte comptable ou pays..."
+              placeholder="Rechercher par raison sociale, code, compte comptable, identifiant unique ou pays..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -462,17 +464,26 @@ interface CoCourtierModalProps {
 
 function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState<Partial<CoCourtier>>(
     coCourtier || {
       raisonSociale: '',
       compteComptable: '',
       identifiantUnique: '',
-      resident: true,
+      // FIX (Co-Courtier pass): defaulted to true previously, which doesn't
+      // match the actual data — the documented co-courtiers (AON LIMITED,
+      // MNK RE LIMITED, CKRE) are all foreign brokerage entities. Flipped to
+      // false; this is purely a form default, not a business rule (CDC
+      // §5.6.4 leaves "tunisien vs international" explicitly open).
+      resident: false,
       rne: '',
       formeJuridique: '',
       adresse: '',
       pays: 'Tunisie',
       capital: undefined,
+      // FIX (new): was entirely absent from the form even though the schema
+      // has always had it.
+      deviseParDefaut: 'TND',
     }
   );
 
@@ -485,9 +496,17 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
       }
       return coCourtiersApi.create(data as any);
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['co-courtiers'] });
       onClose();
+      // FIX (new): the fiche needs Contacts / Coordonnées Bancaires /
+      // Conventions filled in next (Onglets 2-4, CDC §5.7) — those only
+      // exist on the Detail page. Route straight there right after create
+      // so the record doesn't sit half-empty.
+      const newId = (res as any)?.data?.id;
+      if (!coCourtier && newId) {
+        navigate(`/co-courtiers/${newId}`);
+      }
     },
     onError: (error: any) => {
       if (error.response?.data?.message) {
@@ -515,7 +534,7 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
     mutation.mutate(formData);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     if (type === 'checkbox') {
       const checked = (e.target as HTMLInputElement).checked;
@@ -642,6 +661,21 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
               />
             </div>
 
+            <div>
+              {/* FIX (new): devise par défaut field — was entirely missing. */}
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise par défaut</label>
+              <select
+                name="deviseParDefaut"
+                value={formData.deviseParDefaut || 'TND'}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                {CURRENCIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="md:col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Adresse</label>
               <input
@@ -676,6 +710,13 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
             </div>
           </div>
 
+          {!isEdit && (
+            <p className="mt-4 text-[11px] text-gray-400">
+              Les contacts, coordonnées bancaires et conventions (GED) se gèrent depuis la fiche
+              détaillée, juste après la création.
+            </p>
+          )}
+
           <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
             <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
               Annuler
@@ -709,6 +750,7 @@ interface ParsedCoCourtierRow {
   adresse: string;
   pays: string;
   capital: string;
+  deviseParDefaut: string;
   isValid: boolean;
   errorMsg?: string;
 }
@@ -737,6 +779,11 @@ const HEADER_ALIASES: Record<string, string> = {
   pays: 'pays',
   capital: 'capital',
   capitaltnd: 'capital',
+  // FIX (new): devise column mapping — was previously unmapped.
+  devise: 'deviseParDefaut',
+  deviseparfaut: 'deviseParDefaut',
+  deviseparfaut2: 'deviseParDefaut',
+  monnaie: 'deviseParDefaut',
 };
 
 function parseResident(value: string): boolean | undefined {
@@ -816,6 +863,7 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
           adresse: mapped.adresse || '',
           pays: mapped.pays || '',
           capital: mapped.capital || '',
+          deviseParDefaut: mapped.deviseParDefaut || '',
           isValid,
           errorMsg,
         };
@@ -840,6 +888,7 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
         Adresse: '',
         Pays: '',
         Capital: '',
+        Devise: 'TND',
       },
     ];
     const ws = XLSX.utils.json_to_sheet(template);
@@ -862,6 +911,7 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
       adresse: r.adresse || undefined,
       pays: r.pays || undefined,
       capital: r.capital ? Number(r.capital) : undefined,
+      deviseParDefaut: r.deviseParDefaut || undefined,
     }));
     importMutation.mutate(items);
   };
@@ -889,7 +939,7 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
                 <Upload className="mx-auto text-gray-400 mb-3" size={32} />
                 <p className="text-[13px] text-gray-600 mb-1">Sélectionnez un fichier Excel ou CSV</p>
                 <p className="text-[11px] text-gray-400 mb-4">
-                  Colonnes attendues : Raison Sociale (obligatoire), Compte Comptable (obligatoire), Identifiant Unique, Résident, RNE, Forme Juridique, Adresse, Pays, Capital
+                  Colonnes attendues : Raison Sociale (obligatoire), Compte Comptable (obligatoire), Identifiant Unique, Résident, RNE, Forme Juridique, Adresse, Pays, Capital, Devise
                 </p>
                 <label className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer hover:bg-blue-700 transition-colors">
                   <Upload size={16} />
@@ -938,6 +988,7 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
                         <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Raison Sociale</th>
                         <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Compte</th>
                         <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Résident</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Devise</th>
                         <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Statut</th>
                       </tr>
                     </thead>
@@ -948,6 +999,7 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
                           <td className="px-3 py-2 text-[12px] text-gray-900">{r.raisonSociale || '-'}</td>
                           <td className="px-3 py-2 text-[12px] text-gray-600 font-mono">{r.compteComptable || '-'}</td>
                           <td className="px-3 py-2 text-[12px] text-gray-600">{r.resident || '-'}</td>
+                          <td className="px-3 py-2 text-[12px] text-gray-600">{r.deviseParDefaut || '-'}</td>
                           <td className="px-3 py-2 text-[12px]">
                             {r.isValid ? (
                               <span className="text-green-700">OK</span>
@@ -1034,8 +1086,10 @@ interface BulkEditModalProps {
 function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
   const [pays, setPays] = useState('');
   const [formeJuridique, setFormeJuridique] = useState('');
+  const [deviseParDefaut, setDeviseParDefaut] = useState('TND');
   const [applyPays, setApplyPays] = useState(false);
   const [applyForme, setApplyForme] = useState(false);
+  const [applyDevise, setApplyDevise] = useState(false);
   const [statutAction, setStatutAction] = useState<'NONE' | 'ACTIVATE' | 'DEACTIVATE'>('NONE');
   const [error, setError] = useState('');
 
@@ -1055,6 +1109,7 @@ function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
     const data: any = {};
     if (applyPays) data.pays = pays;
     if (applyForme) data.formeJuridique = formeJuridique;
+    if (applyDevise) data.deviseParDefaut = deviseParDefaut;
     if (statutAction === 'ACTIVATE') data.isActive = true;
     if (statutAction === 'DEACTIVATE') data.isActive = false;
 
@@ -1125,6 +1180,28 @@ function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
                   disabled={!applyForme}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
                 />
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={applyDevise}
+                onChange={(e) => setApplyDevise(e.target.checked)}
+                className="mt-2.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <div className="flex-1">
+                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise par défaut</label>
+                <select
+                  value={deviseParDefaut}
+                  onChange={(e) => setDeviseParDefaut(e.target.value)}
+                  disabled={!applyDevise}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                >
+                  {CURRENCIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </div>
             </div>
 

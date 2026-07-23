@@ -15,6 +15,29 @@ import api from '../../lib/api';
 import { dashboardApi, type DashboardFilters } from '../../api/dashboard.api';
 import { cedantesApi, reassureursApi } from '../../api/master-data.api';
 
+// FIX (audit): Dashboard.tsx used to define its own local KPIData / TopAffaire /
+// SinistreMajeur / Echeance / DashboardAlert interfaces that were an incomplete
+// subset of the canonical types already modeled in types/dashboard.types.ts
+// (missing affaires.nouvelles/enCours, cedantes.total, sinistres.total,
+// primesAEncaisser, paiementsEnRetard, TopAffaire.reassureurName/status/
+// paymentStatus, SinistreMajeur.dateOccurrence/status, Echeance.status,
+// Alert.entityType/entityId/createdAt). Backend data for these fields was
+// silently dropped by the UI. Now importing the canonical types (aliased so
+// the rest of the file's variable names don't need to change) and actually
+// rendering the previously-ignored fields below.
+import type {
+  DashboardKPIs as KPIData,
+  CAEvolutionData,
+  CACedanteData,
+  CAReassureurData,
+  SinistreTrendData,
+  TopAffaire,
+  SinistreMajeur,
+  Echeance,
+  Alert as DashboardAlert,
+  CashFlowData,
+} from '../../types/dashboard.types';
+
 // ── Palette used across all charts ────────────────────────────────────────────
 
 const C = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4', '#EC4899', '#14B8A6'] as const;
@@ -45,58 +68,37 @@ const DASHBOARD_PRINT_STYLES = `
   }
 `;
 
-// ── Domain types ───────────────────────────────────────────────────────────────
-
-interface KPIData {
-  ca:                { realise: number; previsionnel: number; trend: number; tauxRealisation: number };
-  margeARS:          { value: number; trend: number };
-  tresorerie:        { value: number; trend: number };
-  sinistres:         { ouverts: number; trend: number; montantTotal: number; tauxSinistralite: number };
-  affaires:          { total: number; trend: number };
-  cedantes:          { actives: number; trend: number };
-  primesAEncaisser:  { montant: number };
-}
-
-interface TopAffaire {
-  id: string;
-  numeroAffaire: string;
-  cedanteName: string;
-  prime: number;
-  commissionARS: number;
-}
-
-interface SinistreMajeur {
-  id: string;
-  numeroSinistre: string;
-  affaireNumero: string;
-  cedanteName: string;
-  montant: number;
-  joursOuvert: number;
-  statut: string;
-}
-
-interface Echeance {
-  id: string;
-  type: string;
-  affaireNumero: string;
-  montant: number;
-  dateEcheance: string;
-  responsable: string;
-}
-
-interface DashboardAlert {
-  id: string;
-  title: string;
-  message: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-}
+// ── Backend exchange-rate shape ─────────────────────────────────────────────────
+// FIX (audit — CRITICAL): the Prisma schema (core-archi.md, FIX #2) renamed
+// ExchangeRate.tauxRealisation -> taux and dropped tauxReglement entirely
+// (BCT publishes one rate/currency/day; tauxRealisation/tauxReglement were the
+// same rate looked up on two different dates, not two distinct rates on one
+// row). This component was still reading `.tauxRealisation` everywhere, which
+// would silently resolve to `undefined` the moment the backend is redeployed
+// against the new schema — every converted amount would quietly show 0 or "—"
+// with no visible error.
+//
+// Fix: BackendRate now accepts both `taux` (current schema) and the legacy
+// `tauxRealisation` (kept optional, for safety during any transition period),
+// and every read goes through getOfficialRate() below instead of a raw field
+// access. Once the backend is confirmed fully migrated, the legacy fields can
+// be deleted from this interface.
 
 interface BackendRate {
   id: string;
   currencyCode: string;
-  tauxRealisation: number;
-  tauxReglement: number | null;
+  taux?: number;
   dateEffet: string;
+  /** @deprecated legacy field name — kept only as a fallback, see note above */
+  tauxRealisation?: number;
+  /** @deprecated removed from the schema — kept only for old API responses */
+  tauxReglement?: number | null;
+}
+
+function getOfficialRate(r: BackendRate | null | undefined): number | null {
+  if (!r) return null;
+  const v = r.taux ?? r.tauxRealisation;
+  return typeof v === 'number' && v > 0 ? v : null;
 }
 
 // ── Currencies shown in the exchange widget ────────────────────────────────────
@@ -158,10 +160,10 @@ function makeCurrencyFormatter(
     let converted = amountTND;
 
     if (currency !== 'TND') {
-      // tauxRealisation = TND per 1 unit of foreign currency
-      // to convert TND → foreign:  amount / tauxRealisation
-      const rate = backendRates.find((r) => r.currencyCode === currency)?.tauxRealisation;
-      if (rate && rate > 0) converted = amountTND / rate;
+      // rate = TND per 1 unit of foreign currency
+      // to convert TND → foreign:  amount / rate
+      const rate = getOfficialRate(backendRates.find((r) => r.currencyCode === currency));
+      if (rate) converted = amountTND / rate;
     }
 
     return new Intl.NumberFormat('fr-TN', {
@@ -233,14 +235,19 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
   const navigate = useNavigate();
   const dashboardRef = useRef<HTMLDivElement>(null);
   const [filters, setFilters] = useState<DashboardFilters>(savedFilters);
+  const [ePage, setEPage] = useState<number>(1);
+  const [ePageSize] = useState<number>(20);
 
+  // FIX (audit): removed the dead try/catch that wrapped setEPage(1) with a
+  // misleading comment ("ePage not in scope for other dashboards"). setEPage
+  // is declared in this same component and handleFilterChange is only ever
+  // invoked after the component (and all its hooks) have fully mounted, so
+  // there was never a real scope/TDZ risk here — just confusing dead code.
   const handleFilterChange = (f: DashboardFilters) => {
     setFilters(f);
     saveFilters(f);
-    // Reset echeances page when filters change so results start from first page
-    try { setEPage(1); } catch (e) { /* ePage not in scope for other dashboards */ }
+    setEPage(1); // reset échéances pagination whenever filters change
   };
-
 
   const qOpts = { staleTime: 30_000, retry: 1 };
 
@@ -250,25 +257,25 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
     ...qOpts,
   });
 
-  const { data: caEvolution = [] } = useQuery({
+  const { data: caEvolution = [] } = useQuery<CAEvolutionData[]>({
     queryKey: ['ca-evolution', filters],
     queryFn:  () => dashboardApi.getCAEvolution().then((r) => r.data),
     ...qOpts,
   });
 
-  const { data: caCedantes = [] } = useQuery({
+  const { data: caCedantes = [] } = useQuery<CACedanteData[]>({
     queryKey: ['ca-cedantes', filters],
     queryFn:  () => dashboardApi.getCACedantes({ limit: 8, startDate: filters.startDate, endDate: filters.endDate }).then((r) => r.data),
     ...qOpts,
   });
 
-  const { data: caReassureurs = [] } = useQuery({
+  const { data: caReassureurs = [] } = useQuery<CAReassureurData[]>({
     queryKey: ['ca-reassureurs', filters],
     queryFn:  () => dashboardApi.getCAReassureurs({ limit: 6, startDate: filters.startDate, endDate: filters.endDate }).then((r) => r.data),
     ...qOpts,
   });
 
-  const { data: sinistresTrend = [] } = useQuery({
+  const { data: sinistresTrend = [] } = useQuery<SinistreTrendData[]>({
     queryKey: ['sinistres-trend', filters],
     queryFn:  () => dashboardApi.getSinistresTrend({ months: 12 }).then((r) => r.data),
     ...qOpts,
@@ -285,9 +292,6 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
     queryFn:  () => dashboardApi.getSinistresMajeurs({ minAmount: 50_000, limit: 10 }).then((r) => r.data),
     ...qOpts,
   });
-
-  const [ePage, setEPage] = useState<number>(1);
-  const [ePageSize] = useState<number>(20);
 
   const { data: echeancesData } = useQuery<{ items: Echeance[]; total: number; page: number; pageSize: number } | undefined>({
     queryKey: ['echeances', ePage, ePageSize],
@@ -317,21 +321,25 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           <h1 className="text-2xl font-bold text-slate-900">Tableau de Bord</h1>
           <p className="text-sm text-slate-500 mt-0.5">Vue d'ensemble des opérations de réassurance</p>
         </div>
+        {/* FIX (audit): missing `no-print` — this button was rendering inside
+            .dashboard-printable, so it used to show up in the printed page too. */}
         <button
           onClick={() => window.print()}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+          className="no-print inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
         >
           <Printer className="h-4 w-4" />
           Imprimer
         </button>
       </div>
 
-      <FilterBar
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        currency={currency}
-        onCurrencyChange={saveCurrency}
-      />
+      <div className="no-print">
+        <FilterBar
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          currency={currency}
+          onCurrencyChange={saveCurrency}
+        />
+      </div>
 
       <AlertPanel alerts={alerts} />
 
@@ -339,42 +347,85 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           title="CA Réalisé"
-          value={fmt(kpis?.ca.realise ?? 0)}
-          trend={kpis?.ca.trend ?? 0}
+          value={fmt(kpis?.ca?.realise ?? 0)}
+          trend={kpis?.ca?.trend ?? 0}
           onClick={() => navigate('/affaires')}
           color="blue"
         />
         <KPICard
           title="Marge ARS"
-          value={fmt(kpis?.margeARS.value ?? 0)}
-          trend={kpis?.margeARS.trend ?? 0}
+          value={fmt(kpis?.margeARS?.value ?? 0)}
+          trend={kpis?.margeARS?.trend ?? 0}
           onClick={() => navigate('/finances')}
           color="green"
         />
         <KPICard
           title="Trésorerie"
-          value={fmt(kpis?.tresorerie.value ?? 0)}
-          trend={kpis?.tresorerie.trend ?? 0}
-          isNegative={(kpis?.tresorerie.value ?? 0) < 0}
+          value={fmt(kpis?.tresorerie?.value ?? 0)}
+          trend={kpis?.tresorerie?.trend ?? 0}
+          isNegative={(kpis?.tresorerie?.value ?? 0) < 0}
           onClick={() => navigate('/finances')}
           color="purple"
         />
         <KPICard
           title="Sinistres Ouverts"
-          value={kpis?.sinistres.ouverts ?? 0}
-          trend={kpis?.sinistres.trend ?? 0}
+          value={kpis?.sinistres?.ouverts ?? 0}
+          trend={kpis?.sinistres?.trend ?? 0}
           isNegative
           onClick={() => navigate('/sinistres')}
           color="amber"
+          // FIX (audit): sinistres.total existed on the KPI payload but was
+          // never surfaced anywhere in the UI.
+          subtitle={kpis?.sinistres?.total != null ? `sur ${kpis?.sinistres?.total} au total` : undefined}
         />
       </div>
 
       {/* KPI Row 2 — Secondary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Total Affaires"     value={kpis?.affaires.total ?? 0}                           trend={kpis?.affaires.trend ?? 0}  color="blue" />
-        <KPICard title="Cédantes Actives"   value={kpis?.cedantes.actives ?? 0}                         trend={kpis?.cedantes.trend ?? 0}  color="green" />
-        <KPICard title="Taux de Réalisation" value={`${(kpis?.ca.tauxRealisation ?? 0).toFixed(1)}%`}   trend={kpis?.ca.trend ?? 0}        color="indigo" />
-        <KPICard title="Taux Sinistralité"  value={`${(kpis?.sinistres.tauxSinistralite ?? 0).toFixed(1)}%`} trend={kpis?.sinistres.trend ?? 0} isNegative color="red" />
+        <KPICard title="Total Affaires"     value={kpis?.affaires?.total ?? 0}                           trend={kpis?.affaires?.trend ?? 0}  color="blue" />
+        <KPICard
+          title="Cédantes Actives"
+          value={kpis?.cedantes?.actives ?? 0}
+          trend={kpis?.cedantes?.trend ?? 0}
+          color="green"
+          // FIX (audit): cedantes.total existed on the KPI payload but was
+          // never surfaced anywhere in the UI.
+          subtitle={kpis?.cedantes?.total != null ? `sur ${kpis?.cedantes?.total} au total` : undefined}
+        />
+        <KPICard title="Taux de Réalisation" value={`${(kpis?.ca?.tauxRealisation ?? 0).toFixed(1)}%`}   trend={kpis?.ca?.trend ?? 0}        color="indigo" />
+        <KPICard title="Taux Sinistralité"  value={`${(kpis?.sinistres?.tauxSinistralite ?? 0).toFixed(1)}%`} trend={kpis?.sinistres?.trend ?? 0} isNegative color="red" />
+      </div>
+
+      {/* FIX (audit): new row — surfaces affaires.nouvelles / affaires.enCours /
+          primesAEncaisser / paiementsEnRetard, all present on DashboardKPIs but
+          previously never rendered anywhere in this component. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <KPICard title="Nouvelles Affaires" value={kpis?.affaires?.nouvelles ?? 0} trend={0} color="blue" />
+        <KPICard title="Affaires En Cours"  value={kpis?.affaires?.enCours ?? 0}   trend={0} color="indigo" />
+        <KPICard
+          title="Primes à Encaisser"
+          value={fmt(kpis?.primesAEncaisser?.montant ?? 0)}
+          trend={0}
+          color="purple"
+          subtitle={kpis?.primesAEncaisser?.count != null ? `${kpis?.primesAEncaisser?.count} prime(s)` : undefined}
+          onClick={() => navigate('/finances')}
+        />
+        <KPICard
+          title="Paiements en Retard"
+          value={kpis?.paiementsEnRetard?.count ?? 0}
+          trend={0}
+          isNegative
+          color="red"
+          subtitle={kpis?.paiementsEnRetard?.montant != null ? fmt(kpis?.paiementsEnRetard?.montant ?? 0) : undefined}
+          onClick={() => navigate('/finances')}
+        />
+        <KPICard
+          title="Retard Moyen Encaissement"
+          value={`${(kpis?.primesAEncaisser?.retardMoyen ?? 0).toFixed(0)} j`}
+          trend={0}
+          isNegative
+          color="amber"
+        />
       </div>
 
       {/* Charts 2×2 */}
@@ -388,6 +439,8 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Line type="monotone" dataKey="realise"      stroke={C[0]} strokeWidth={2} dot={false} name="Réalisé" />
               <Line type="monotone" dataKey="previsionnel" stroke={C[1]} strokeWidth={2} dot={false} strokeDasharray="5 5" name="Prévisionnel" />
+              {/* FIX (audit): CAEvolutionData.target existed but wasn't plotted */}
+              <Line type="monotone" dataKey="target"        stroke={C[3]} strokeWidth={1.5} dot={false} strokeDasharray="2 4" name="Objectif" />
             </LineChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -406,11 +459,16 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
                 }
                 labelLine={false}
               >
-                {caCedantes.map((_: unknown, i: number) => (
+                {caCedantes.map((_, i) => (
                   <Cell key={i} fill={C[i % C.length]} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v: number) => fmt(v)} />
+              {/* FIX (audit): CACedanteData.affairesCount existed but wasn't surfaced anywhere */}
+              <Tooltip
+                formatter={(v: number, _n, props: any) =>
+                  [`${fmt(v)} (${props?.payload?.affairesCount ?? 0} affaire(s))`, props?.payload?.cedanteName]
+                }
+              />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -420,7 +478,12 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
             <BarChart data={caReassureurs} layout="vertical" margin={{ left: 16 }}>
               <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
               <YAxis dataKey="reassureurName" type="category" width={110} tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(v: number) => fmt(v)} />
+              {/* FIX (audit): CAReassureurData.affairesCount existed but wasn't surfaced anywhere */}
+              <Tooltip
+                formatter={(v: number, _n, props: any) =>
+                  [`${fmt(v)} (${props?.payload?.affairesCount ?? 0} affaire(s))`, props?.payload?.reassureurName]
+                }
+              />
               <Bar dataKey="ca" fill={C[0]} radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -431,7 +494,14 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
             <AreaChart data={sinistresTrend} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
               <XAxis dataKey="month" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => fmt(v)} />
+              {/* FIX (audit): surfaces SinistreTrendData.tauxSinistralite in the tooltip */}
+              <Tooltip
+                formatter={(v: number, name: string, props: any) =>
+                  name === 'Sinistres'
+                    ? [`${fmt(v)} (sinistralité ${Number(props?.payload?.tauxSinistralite ?? 0).toFixed(1)}%)`, name]
+                    : [fmt(v), name]
+                }
+              />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Area type="monotone" dataKey="primes"    stroke={C[0]} fill={C[0]} fillOpacity={0.2} name="Primes" />
               <Area type="monotone" dataKey="sinistres" stroke={C[4]} fill={C[4]} fillOpacity={0.2} name="Sinistres" />
@@ -448,8 +518,12 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
               <tr className="border-b border-slate-100">
                 <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Affaire</th>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Cédante</th>
+                {/* FIX (audit): TopAffaire.reassureurName/status/paymentStatus existed but weren't rendered */}
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Réassureur</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Prime</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Commission</th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Paiement</th>
               </tr>
             </thead>
             <tbody>
@@ -457,12 +531,23 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
                 <tr key={a.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
                   <td className="px-3 py-2.5 font-mono text-xs text-slate-700">{a.numeroAffaire}</td>
                   <td className="px-3 py-2.5 text-slate-700">{a.cedanteName}</td>
+                  <td className="px-3 py-2.5 text-slate-700">{a.reassureurName}</td>
                   <td className="px-3 py-2.5 text-right font-medium">{fmt(a.prime)}</td>
                   <td className="px-3 py-2.5 text-right font-medium text-green-600">{fmt(a.commissionARS)}</td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{a.status}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                      a.paymentStatus === 'PAYE' || a.paymentStatus === 'SOLDE'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-amber-100 text-amber-700'
+                    }`}>{a.paymentStatus}</span>
+                  </td>
                 </tr>
               ))}
               {topAffaires.length === 0 && (
-                <tr><td colSpan={4} className="px-3 py-6 text-center text-sm text-slate-400">Aucune affaire trouvée</td></tr>
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-400">Aucune affaire trouvée</td></tr>
               )}
             </tbody>
           </table>
@@ -474,8 +559,11 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
               <tr className="border-b border-slate-100">
                 <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Sinistre</th>
                 <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Cédante</th>
+                {/* FIX (audit): SinistreMajeur.dateOccurrence/status existed but weren't rendered here */}
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Survenance</th>
                 <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
                 <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Jours</th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
               </tr>
             </thead>
             <tbody>
@@ -483,6 +571,7 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
                 <tr key={s.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
                   <td className="px-3 py-2.5 font-mono text-xs text-slate-700">{s.numeroSinistre}</td>
                   <td className="px-3 py-2.5 text-slate-700">{s.cedanteName}</td>
+                  <td className="px-3 py-2.5 text-slate-500">{s.dateOccurrence ? new Date(s.dateOccurrence).toLocaleDateString('fr-FR') : '—'}</td>
                   <td className="px-3 py-2.5 text-right font-medium text-red-600">{fmt(s.montant)}</td>
                   <td className="px-3 py-2.5 text-center">
                     <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -491,10 +580,15 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
                       'bg-green-100 text-green-700'
                     }`}>{s.joursOuvert}j</span>
                   </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                      s.status === 'RECUPERE' || s.status === 'CLOS' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                    }`}>{s.status}</span>
+                  </td>
                 </tr>
               ))}
               {sinistresMajeurs.length === 0 && (
-                <tr><td colSpan={4} className="px-3 py-6 text-center text-sm text-slate-400">Aucun sinistre majeur</td></tr>
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-400">Aucun sinistre majeur</td></tr>
               )}
             </tbody>
           </table>
@@ -510,6 +604,8 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
               <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Responsable</th>
+              {/* FIX (audit): Echeance.status existed but wasn't rendered */}
+              <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
             </tr>
           </thead>
           <tbody>
@@ -522,16 +618,19 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
                 <td className="px-3 py-2.5 text-right font-medium">{fmt(e.montant ?? 0)}</td>
                 <td className="px-3 py-2.5 text-slate-700">{new Date(e.dateEcheance).toLocaleDateString('fr-FR')}</td>
                 <td className="px-3 py-2.5 text-slate-500">{e.responsable}</td>
+                <td className="px-3 py-2.5 text-center">
+                  <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{e.status}</span>
+                </td>
               </tr>
             ))}
             {echeances.length === 0 && (
-              <tr><td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-400">Aucune échéance dans les 7 prochains jours</td></tr>
+              <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-400">Aucune échéance dans les 7 prochains jours</td></tr>
             )}
           </tbody>
         </table>
       </TableCard>
 
-      <div className="flex items-center justify-between px-3">
+      <div className="flex items-center justify-between px-3 no-print">
         <div className="text-sm text-slate-500">{`Total: ${echeancesTotal}`}</div>
         <div className="flex items-center gap-2">
           <button
@@ -574,7 +673,7 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
     ...qOpts,
   });
 
-  const { data: cashFlow = [], isLoading } = useQuery({
+  const { data: cashFlow = [], isLoading } = useQuery<CashFlowData[]>({
     queryKey: ['cash-flow', filters],
     queryFn:  () => dashboardApi.getCashFlow(filters).then((r) => r.data),
     ...qOpts,
@@ -586,8 +685,8 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
     ...qOpts,
   });
 
-  const totalEnc = (cashFlow as { encaissements: number }[]).reduce((s, d) => s + d.encaissements, 0);
-  const totalDec = (cashFlow as { decaissements: number }[]).reduce((s, d) => s + d.decaissements, 0);
+  const totalEnc = cashFlow.reduce((s, d) => s + d.encaissements, 0);
+  const totalDec = cashFlow.reduce((s, d) => s + d.decaissements, 0);
   const solde    = totalEnc - totalDec;
 
   const AGING_BUCKETS = [
@@ -601,15 +700,29 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
   if (isLoading) return <div className="p-6"><SkeletonLoader /></div>;
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <>
+      {/* FIX (audit): Finance and Sinistres dashboards had no print support at
+          all, despite being the two roles most likely to print statements
+          (DAF / IRDS). Now wrapped the same way GeneralDashboard is. */}
+      <style>{DASHBOARD_PRINT_STYLES}</style>
+      <div className="dashboard-printable p-4 lg:p-6 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Tableau de Bord — Finances</h1>
           <p className="text-sm text-slate-500 mt-0.5">Vue DAF — Flux de trésorerie et situations financières</p>
         </div>
+        <button
+          onClick={() => window.print()}
+          className="no-print inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+        >
+          <Printer className="h-4 w-4" />
+          Imprimer
+        </button>
       </div>
 
-      <FilterBar filters={filters} onFilterChange={handleFilterChange} currency={currency} onCurrencyChange={saveCurrency} />
+      <div className="no-print">
+        <FilterBar filters={filters} onFilterChange={handleFilterChange} currency={currency} onCurrencyChange={saveCurrency} />
+      </div>
 
       {/* Trésorerie KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -627,14 +740,41 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
         </div>
         <div className="rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100 p-5">
           <p className="text-sm font-medium text-purple-700">Commission ARS</p>
-          <p className="mt-1 text-2xl font-bold text-purple-900">{fmt(kpis?.margeARS.value ?? 0)}</p>
+          <p className="mt-1 text-2xl font-bold text-purple-900">{fmt(kpis?.margeARS?.value ?? 0)}</p>
         </div>
+      </div>
+
+      {/* FIX (audit): surfaces paiementsEnRetard / primesAEncaisser for the
+          DAF view too — this is the role that most needs to see them. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <KPICard
+          title="Primes à Encaisser"
+          value={fmt(kpis?.primesAEncaisser?.montant ?? 0)}
+          trend={0}
+          color="purple"
+          subtitle={kpis?.primesAEncaisser?.count != null ? `${kpis?.primesAEncaisser?.count} prime(s)` : undefined}
+        />
+        <KPICard
+          title="Paiements en Retard"
+          value={kpis?.paiementsEnRetard?.count ?? 0}
+          trend={0}
+          isNegative
+          color="red"
+          subtitle={kpis?.paiementsEnRetard?.montant != null ? fmt(kpis?.paiementsEnRetard?.montant ?? 0) : undefined}
+        />
+        <KPICard
+          title="Retard Moyen Encaissement"
+          value={`${(kpis?.primesAEncaisser?.retardMoyen ?? 0).toFixed(0)} j`}
+          trend={0}
+          isNegative
+          color="amber"
+        />
       </div>
 
       {/* Cash Flow chart */}
       <ChartCard title="Flux de Trésorerie">
         <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={cashFlow as object[]} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <AreaChart data={cashFlow} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
             <XAxis dataKey="date" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip formatter={(v: number) => fmt(v)} />
@@ -674,7 +814,7 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Bénéficiaire</th>
               <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
               <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
-              <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Actions</th>
+              <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 no-print">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -690,7 +830,7 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
                 <td className="px-3 py-2.5 text-slate-700">{p.beneficiaire}</td>
                 <td className="px-3 py-2.5 text-right font-medium">{fmt(p.montant)}</td>
                 <td className="px-3 py-2.5 text-slate-500">{new Date(p.date).toLocaleDateString('fr-FR')}</td>
-                <td className="px-3 py-2.5 text-center">
+                <td className="px-3 py-2.5 text-center no-print">
                   <button className="mr-3 rounded-lg bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-100 transition">✓ Approuver</button>
                   <button className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition">✗ Rejeter</button>
                 </td>
@@ -704,7 +844,8 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
       </TableCard>
 
       <ExchangeRateWidget />
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -712,35 +853,73 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
 // SINISTRES DASHBOARD (SERVICE_IRDS)
 // ══════════════════════════════════════════════════════════════════════════════
 
-function SinistresDashboard({ fmt }: SharedProps) {
+// FIX (audit): this dashboard used to only destructure `{ fmt }` from
+// SharedProps and ignored filters/currency entirely — no date/cédante
+// filtering was possible for the IRDS role, unlike the other two views.
+function SinistresDashboard({ fmt, savedFilters, saveFilters, currency, saveCurrency }: SharedProps) {
+  const [filters, setFilters] = useState<DashboardFilters>(savedFilters);
+
+  const handleFilterChange = (f: DashboardFilters) => {
+    setFilters(f);
+    saveFilters(f);
+  };
+
   const qOpts = { staleTime: 30_000, retry: 1 };
 
-  const { data: kpis }               = useQuery<KPIData>({ queryKey: ['dashboard-kpis'], queryFn: () => dashboardApi.getKPIs().then((r) => r.data), ...qOpts });
-  const { data: trend = [] }         = useQuery({ queryKey: ['sinistres-trend'], queryFn: () => dashboardApi.getSinistresTrend({ months: 12 }).then((r) => r.data), ...qOpts });
-  const { data: sinistres = [], isLoading } = useQuery<SinistreMajeur[]>({ queryKey: ['sinistres-majeurs'], queryFn: () => dashboardApi.getSinistresMajeurs({ limit: 20 }).then((r) => r.data), ...qOpts });
+  const { data: kpis }               = useQuery<KPIData>({ queryKey: ['dashboard-kpis', filters], queryFn: () => dashboardApi.getKPIs(filters).then((r) => r.data), ...qOpts });
+  const { data: trend = [] }         = useQuery<SinistreTrendData[]>({ queryKey: ['sinistres-trend', filters], queryFn: () => dashboardApi.getSinistresTrend({ months: 12 }).then((r) => r.data), ...qOpts });
+  const { data: sinistres = [], isLoading } = useQuery<SinistreMajeur[]>({ queryKey: ['sinistres-majeurs', filters], queryFn: () => dashboardApi.getSinistresMajeurs({ limit: 20 }).then((r) => r.data), ...qOpts });
 
   if (isLoading) return <div className="p-6"><SkeletonLoader /></div>;
 
   return (
-    <div className="p-4 lg:p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Tableau de Bord — Sinistres</h1>
-        <p className="text-sm text-slate-500 mt-0.5">Vue Service IRDS — Suivi et gestion des sinistres</p>
+    <>
+      <style>{DASHBOARD_PRINT_STYLES}</style>
+      <div className="dashboard-printable p-4 lg:p-6 space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Tableau de Bord — Sinistres</h1>
+          <p className="text-sm text-slate-500 mt-0.5">Vue Service IRDS — Suivi et gestion des sinistres</p>
+        </div>
+        <button
+          onClick={() => window.print()}
+          className="no-print inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+        >
+          <Printer className="h-4 w-4" />
+          Imprimer
+        </button>
+      </div>
+
+      <div className="no-print">
+        <FilterBar filters={filters} onFilterChange={handleFilterChange} currency={currency} onCurrencyChange={saveCurrency} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Sinistres Ouverts"   value={kpis?.sinistres.ouverts ?? 0}                                trend={kpis?.sinistres.trend ?? 0}                         isNegative color="amber" />
-        <KPICard title="Montant Total"        value={fmt(kpis?.sinistres.montantTotal ?? 0)}                      trend={0}                                                  isNegative color="red" />
-        <KPICard title="Taux Sinistralité"    value={`${(kpis?.sinistres.tauxSinistralite ?? 0).toFixed(1)}%`}   trend={kpis?.sinistres.trend ?? 0}                         isNegative color="amber" />
-        <KPICard title="Réserves SAP"         value={fmt((kpis?.sinistres.montantTotal ?? 0) * 0.3)}              trend={0}                                                  color="purple" />
+        <KPICard
+          title="Sinistres Ouverts"
+          value={kpis?.sinistres?.ouverts ?? 0}
+          trend={kpis?.sinistres?.trend ?? 0}
+          isNegative
+          color="amber"
+          subtitle={kpis?.sinistres?.total != null ? `sur ${kpis?.sinistres?.total} au total` : undefined}
+        />
+        <KPICard title="Montant Total"        value={fmt(kpis?.sinistres?.montantTotal ?? 0)}                      trend={0}                                                  isNegative color="red" />
+        <KPICard title="Taux Sinistralité"    value={`${(kpis?.sinistres?.tauxSinistralite ?? 0).toFixed(1)}%`}   trend={kpis?.sinistres?.trend ?? 0}                         isNegative color="amber" />
+        <KPICard title="Réserves SAP"         value={fmt((kpis?.sinistres?.montantTotal ?? 0) * 0.3)}              trend={0}                                                  color="purple" />
       </div>
 
       <ChartCard title="Tendance Primes / Sinistres (12 mois)">
         <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={trend as object[]} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+          <AreaChart data={trend} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
             <XAxis dataKey="month" tick={{ fontSize: 11 }} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip formatter={(v: number) => fmt(v)} />
+            <Tooltip
+              formatter={(v: number, name: string, props: any) =>
+                name === 'Sinistres'
+                  ? [`${fmt(v)} (sinistralité ${Number(props?.payload?.tauxSinistralite ?? 0).toFixed(1)}%)`, name]
+                  : [fmt(v), name]
+              }
+            />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <Area type="monotone" dataKey="primes"    stroke={C[0]} fill={C[0]} fillOpacity={0.2} name="Primes" />
             <Area type="monotone" dataKey="sinistres" stroke={C[4]} fill={C[4]} fillOpacity={0.2} name="Sinistres" />
@@ -752,7 +931,7 @@ function SinistresDashboard({ fmt }: SharedProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-100">
-              {['Numéro', 'Affaire', 'Cédante', 'Montant', 'Jours', 'Statut'].map((h) => (
+              {['Numéro', 'Affaire', 'Cédante', 'Survenance', 'Montant', 'Jours', 'Statut'].map((h) => (
                 <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
               ))}
             </tr>
@@ -763,6 +942,7 @@ function SinistresDashboard({ fmt }: SharedProps) {
                 <td className="px-3 py-2.5 font-mono text-xs">{s.numeroSinistre}</td>
                 <td className="px-3 py-2.5 font-mono text-xs">{s.affaireNumero}</td>
                 <td className="px-3 py-2.5">{s.cedanteName}</td>
+                <td className="px-3 py-2.5 text-slate-500">{s.dateOccurrence ? new Date(s.dateOccurrence).toLocaleDateString('fr-FR') : '—'}</td>
                 <td className="px-3 py-2.5 font-medium text-red-600">{fmt(s.montant)}</td>
                 <td className="px-3 py-2.5">
                   <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
@@ -772,18 +952,19 @@ function SinistresDashboard({ fmt }: SharedProps) {
                 </td>
                 <td className="px-3 py-2.5">
                   <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                    s.statut === 'RECUPERE' || s.statut === 'CLOS' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
-                  }`}>{s.statut}</span>
+                    s.status === 'RECUPERE' || s.status === 'CLOS' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                  }`}>{s.status}</span>
                 </td>
               </tr>
             ))}
             {sinistres.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-400">Aucun sinistre trouvé</td></tr>
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-400">Aucun sinistre trouvé</td></tr>
             )}
           </tbody>
         </table>
       </TableCard>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -823,10 +1004,20 @@ function ExchangeRateWidget() {
   } = useQuery<LiveRateResponse>({
     queryKey: ['live-exchange-rates'],
     queryFn:  async () => {
-      // Free API — no key required. Replace URL with paid provider when needed.
-      const res = await fetch('https://api.exchangerate-api.com/v4/latest/TND');
-      if (!res.ok) throw new Error('Live API unavailable');
-      return res.json() as Promise<LiveRateResponse>;
+      // FIX (audit): native fetch had no timeout/abort — a slow/unresponsive
+      // external API could leave the "Actualiser" button spinning forever,
+      // unlike the axios `api` instance which already has a 30s timeout.
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8_000);
+      try {
+        const res = await fetch('https://api.exchangerate-api.com/v4/latest/TND', {
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error('Live API unavailable');
+        return (await res.json()) as LiveRateResponse;
+      } finally {
+        clearTimeout(timeoutId);
+      }
     },
     staleTime:  10 * 60_000,
     retry: 1,
@@ -840,11 +1031,11 @@ function ExchangeRateWidget() {
     // Both in terms of TND:
     // fromCurrency: how many TND = 1 unit of fromCurrency
     const fromRate = fromCurrency === 'TND' ? 1
-      : (officialRates.find((r) => r.currencyCode === fromCurrency)?.tauxRealisation
+      : (getOfficialRate(officialRates.find((r) => r.currencyCode === fromCurrency))
         ?? liveData?.rates[fromCurrency]
         ?? null);
     const toRate = toCurrency === 'TND' ? 1
-      : (officialRates.find((r) => r.currencyCode === toCurrency)?.tauxRealisation
+      : (getOfficialRate(officialRates.find((r) => r.currencyCode === toCurrency))
         ?? liveData?.rates[toCurrency]
         ?? null);
 
@@ -878,7 +1069,7 @@ function ExchangeRateWidget() {
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 no-print">
           {dataUpdatedAt > 0 && (
             <span className="text-xs text-slate-400">
               Mis à jour : {new Date(dataUpdatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
@@ -923,7 +1114,7 @@ function ExchangeRateWidget() {
                 const official = officialRates.find((r) => r.currencyCode === cur.code);
                 // liveData.rates[cur.code] = how many cur.code per 1 TND
                 const liveRate = liveData?.rates[cur.code];
-                const arsRate  = official ? Number(official.tauxRealisation) : null; // TND per 1 foreign unit
+                const arsRate  = getOfficialRate(official); // TND per 1 foreign unit
                 // 1 TND in foreign = 1 / arsRate
                 const arsForward = arsRate ? (1 / arsRate) : null;
 
@@ -989,7 +1180,7 @@ function ExchangeRateWidget() {
 
       {/* Calculator view */}
       {tab === 'calc' && (
-        <div className="p-6">
+        <div className="p-6 no-print">
           <p className="text-sm text-slate-500 mb-5">
             Convertisseur utilisant les taux officiels ARS (si disponibles) ou les taux marché.
           </p>
@@ -1091,7 +1282,7 @@ const COLOR_MAP: Record<CardColor, { bg: string; text: string; badge: string }> 
 };
 
 function KPICard({
-  title, value, trend, isNegative = false, color = 'blue', onClick,
+  title, value, trend, isNegative = false, color = 'blue', onClick, subtitle,
 }: {
   title: string;
   value: string | number;
@@ -1099,6 +1290,10 @@ function KPICard({
   isNegative?: boolean;
   color?: CardColor;
   onClick?: () => void;
+  /** FIX (audit): optional small secondary line under the value, used to
+   * surface "part of a larger total" style figures (e.g. "sur 40 au total")
+   * without needing a dedicated extra card for every such field. */
+  subtitle?: string;
 }) {
   const c = COLOR_MAP[color];
   const trendPositive = isNegative ? trend < 0 : trend > 0;
@@ -1114,6 +1309,7 @@ function KPICard({
       </div>
       <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{title}</p>
       <p className="mt-1 text-2xl font-bold text-slate-900 truncate">{value}</p>
+      {subtitle && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
       {!trendNeutral && (
         <div className="mt-2 flex items-center gap-1">
           <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -1209,11 +1405,14 @@ function FilterBar({
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-medium text-slate-500">Devise d'affichage</label>
+          {/* FIX (audit): was hardcoded to TND/EUR/USD/GBP only, inconsistent
+              with the 16-currency list already used by ExchangeRateWidget
+              below (MENA + reinsurance markets relevant to ARS). */}
           <select className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={currency} onChange={(e) => onCurrencyChange(e.target.value)}>
-            <option value="TND">TND — Dinar Tunisien</option>
-            <option value="EUR">EUR — Euro</option>
-            <option value="USD">USD — Dollar US</option>
-            <option value="GBP">GBP — Livre Sterling</option>
+            <option value="TND">🇹🇳 TND — Dinar Tunisien</option>
+            {DISPLAY_CURRENCIES.map((c) => (
+              <option key={c.code} value={c.code}>{c.flag} {c.code} — {c.label}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -1234,8 +1433,28 @@ function FilterBar({
 }
 
 function AlertPanel({ alerts }: { alerts: DashboardAlert[] }) {
+  const navigate = useNavigate();
   const critical = alerts.filter((a) => a.severity === 'critical' || a.severity === 'high');
   if (critical.length === 0) return null;
+
+  // FIX (audit): Alert.entityType/entityId/createdAt existed on the canonical
+  // type but were never used — alerts were plain unclickable text with no
+  // timestamp. Now clicking a critical alert (when it references a known
+  // entity) navigates straight to it.
+  const ENTITY_ROUTES: Record<string, string> = {
+    affaire: '/affaires',
+    sinistre: '/sinistres',
+    cedante: '/cedantes',
+    reassureur: '/reassureurs',
+    'co-courtier': '/co-courtiers',
+    bordereau: '/bordereaux',
+  };
+
+  const resolveRoute = (a: DashboardAlert): string | null => {
+    if (!a.entityType || !a.entityId) return null;
+    const base = ENTITY_ROUTES[a.entityType];
+    return base ? `${base}/${a.entityId}` : null;
+  };
 
   return (
     <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
@@ -1245,12 +1464,25 @@ function AlertPanel({ alerts }: { alerts: DashboardAlert[] }) {
           {critical.length} alerte{critical.length > 1 ? 's' : ''} critique{critical.length > 1 ? 's' : ''}
         </h3>
       </div>
-      <ul className="space-y-1">
-        {critical.map((alert) => (
-          <li key={alert.id} className="text-sm text-red-700">
-            <span className="font-medium">{alert.title} :</span> {alert.message}
-          </li>
-        ))}
+      <ul className="space-y-1.5">
+        {critical.map((alert) => {
+          const route = resolveRoute(alert);
+          return (
+            <li
+              key={alert.id}
+              onClick={route ? () => navigate(route) : undefined}
+              className={`text-sm text-red-700 flex flex-wrap items-baseline gap-x-2 ${route ? 'cursor-pointer hover:underline' : ''}`}
+            >
+              <span className="font-medium">{alert.title} :</span>
+              <span>{alert.message}</span>
+              {alert.createdAt && (
+                <span className="ml-auto text-xs text-red-400 no-print">
+                  {new Date(alert.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

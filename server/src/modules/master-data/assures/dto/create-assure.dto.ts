@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -23,6 +23,7 @@ export class CreateContactDto {
   @IsOptional() @IsString() telephoneMobile?: string;
 
   @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsBoolean() isDefault?: boolean;
 }
 
 export class CreateAssureDto {
@@ -32,6 +33,7 @@ export class CreateAssureDto {
   @IsOptional() @IsString() adresse?: string;
   @IsOptional() @IsString() pays?: string;
   @IsOptional() @IsNumber() capital?: number;
+  @IsOptional() @IsString() deviseParDefaut?: string;
   @IsOptional() freeFields?: Record<string, any>;
   @ApiPropertyOptional({ type: [CreateContactDto] })
   @IsOptional() @ValidateNested({ each: true }) @Type(() => CreateContactDto)

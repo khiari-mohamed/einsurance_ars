@@ -23,7 +23,9 @@ import CedantesList from './features/cedantes/CedantesList';
 import CedanteDetail from './features/cedantes/CedanteDetail';
 import ReassureursList from './features/reassureurs/ReassureursList';
 import ReassureurDetail from './features/reassureurs/ReassureurDetail';
-import CoCourtiersList from './features/co-courtiers/CoCourtiersList';import ReferentielHistory from './features/referentiel/ReferentielHistory';
+import CoCourtiersList from './features/co-courtiers/CoCourtiersList';
+import CoCourtierDetail from './features/co-courtiers/CoCourtierDetail';
+import ReferentielHistory from './features/referentiel/ReferentielHistory';
 // ── Affaires ──────────────────────────────────────────────────────────────────────
 import AffairesList from './features/affaires/AffairesList';
 import AffaireDetail from './features/affaires/AffaireDetail';
@@ -185,6 +187,14 @@ export default function App() {
                 element={
                   <ProtectedRoute path="/co-courtiers">
                     <CoCourtiersList />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="co-courtiers/:id"
+                element={
+                  <ProtectedRoute path="/co-courtiers">
+                    <CoCourtierDetail />
                   </ProtectedRoute>
                 }
               />

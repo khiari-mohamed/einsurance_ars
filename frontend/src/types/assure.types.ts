@@ -14,6 +14,20 @@
 // MAIN ENTITY
 // ============================================================
 
+export interface AssureDocumentLink {
+  id: string;
+  document: {
+    id: string;
+    nom: string;
+    originalName?: string;
+    mimeType?: string;
+    filePath: string;
+    documentType?: string;
+    statut?: string;
+    createdAt: string;
+  };
+}
+
 export interface Assure {
   id: string;
   code: string;
@@ -23,6 +37,7 @@ export interface Assure {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
   freeFields?: Record<string, any>;
 
   codeModifiedBy?: string;
@@ -30,6 +45,7 @@ export interface Assure {
   oldCode?: string;
 
   contacts?: AssureContact[];
+  documents?: AssureDocumentLink[];
   facultatives?: FacultativeAffaire[];
 
   isActive: boolean;
@@ -86,6 +102,7 @@ export interface CreateAssureDto {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
   freeFields?: Record<string, any>;
   contacts?: CreateAssureContactDto[];
 }
@@ -97,6 +114,7 @@ export interface UpdateAssureDto {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
   freeFields?: Record<string, any>;
   contacts?: CreateAssureContactDto[];
 }

@@ -15,8 +15,11 @@ import {
 import * as XLSX from 'xlsx';
 import { assuresApi } from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
+import { useAuthStore } from '../../lib/store';
 import { Assure, AssureContact } from '../../types/assure.types';
+import { EntityType } from '../../types/ged.types';
 import ContactModal from './ContactModal';
+import DocumentUploadModal from '../../components/documents/DocumentUploadModal';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 // ------------------------------------------------------------------
@@ -69,6 +72,9 @@ export default function AssureDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  
+  const canOverrideCode = user?.role === 'SUPER_ADMIN';
 
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<AssureContact | null>(null);
@@ -84,6 +90,7 @@ export default function AssureDetail() {
   const [dateTo, setDateTo] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [viewerDocument, setViewerDocument] = useState<AssureDocumentItem | null>(null);
+  const [isDocumentUploadOpen, setIsDocumentUploadOpen] = useState(false);
   const [confirmState, setConfirmState] = useState<{ type: 'deactivate' | 'delete-contact' | 'override-code' | null; message?: string; onConfirm?: () => void }>({ type: null });
 
   const { data: assure, isLoading } = useQuery<Assure>({
@@ -386,8 +393,6 @@ export default function AssureDetail() {
     return <div className="p-6 text-center text-gray-500">Client non trouvé</div>;
   }
 
-  const isAdmin = true; // TODO: Get from user context
-
   return (
     <div className="p-4 lg:p-6">
       {/* Header */}
@@ -420,7 +425,7 @@ export default function AssureDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {isAdmin && (
+          {canOverrideCode && (
             <button
               onClick={() => setIsOverrideModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
@@ -659,10 +664,19 @@ export default function AssureDetail() {
 
           {/* Documents */}
           <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <FileText size={18} />
-              Documents
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
+                <FileText size={18} />
+                Documents
+              </h2>
+              <button
+                onClick={() => setIsDocumentUploadOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Plus size={16} />
+                Ajouter
+              </button>
+            </div>
             {documents.length > 0 ? (
               <div className="space-y-2">
                 {documents.map((doc) => {
@@ -962,6 +976,17 @@ export default function AssureDetail() {
           </div>
         </div>
       )}
+
+      <DocumentUploadModal
+        isOpen={isDocumentUploadOpen}
+        onClose={() => setIsDocumentUploadOpen(false)}
+        entityType={EntityType.CLIENT}
+        entityId={id!}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['assures', id] });
+          setIsDocumentUploadOpen(false);
+        }}
+      />
 
       <ConfirmDialog
         open={confirmState.type !== null}

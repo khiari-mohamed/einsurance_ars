@@ -1,11 +1,33 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit2, Trash2, Plus, Mail, Phone, Building2, CreditCard, FileText, FileCheck, Shield, Globe } from 'lucide-react';
-import { cedantesApi } from '../../api/master-data.api';
+import {
+  ArrowLeft, Edit2, Trash2, Plus, Mail, Phone, Building2, CreditCard, FileText,
+  FileCheck, Shield, Globe, Paperclip, Folder, Sliders, Download as DownloadIcon,
+} from 'lucide-react';
+import { cedantesApi, conventionsApi } from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
-import { Cedante, CedanteContact, CedanteBankAccount } from '../../types/cedante.types';
+import {
+  Cedante, CedanteContact, CedanteBankAccount,
+  CreateCedanteContactDto, CreateCedanteBankAccountDto,
+} from '../../types/cedante.types';
+import { Convention } from '../../types/convention.types';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import CedanteContactModal from './CedanteContactModal';
+import CedanteBankAccountModal from './CedanteBankAccountModal';
+import CedanteConventionModal from './CedanteConventionModal';
+import CedanteFreeFieldsModal from './CedanteFreeFieldsModal';
+
+// FIX: this type + useState was used all over the component (handleDeactivate,
+// handleDeleteContact, handleOverrideCode, and the final <ConfirmDialog> render)
+// but was NEVER DECLARED — every one of those handlers threw a ReferenceError at
+// runtime the moment it was called, and the ConfirmDialog itself couldn't render.
+// This was the single blocking bug in the file.
+interface ConfirmState {
+  type: 'deactivate' | 'delete-contact' | 'delete-bank-account' | 'deactivate-convention' | 'override-code' | null;
+  message?: string;
+  onConfirm?: () => void;
+}
 
 export default function CedanteDetail() {
   const { id } = useParams<{ id: string }>();
@@ -13,8 +35,13 @@ export default function CedanteDetail() {
   const queryClient = useQueryClient();
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [editingContact, setEditingContact] = useState<CedanteContact | null>(null);
+  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [editingBank, setEditingBank] = useState<CedanteBankAccount | null>(null);
+  const [isConventionModalOpen, setIsConventionModalOpen] = useState(false);
+  const [isFreeFieldsModalOpen, setIsFreeFieldsModalOpen] = useState(false);
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [newCode, setNewCode] = useState('');
+  const [confirmState, setConfirmState] = useState<ConfirmState>({ type: null });
 
   const { data: cedante, isLoading } = useQuery({
     queryKey: ['cedantes', id],
@@ -34,6 +61,20 @@ export default function CedanteDetail() {
     enabled: !!id,
   });
 
+  // FIX (new): Onglet 3 — Conventions (CDC §5.7: "Pièce jointe GED (convention
+  // signée obligatoire), Date de signature, Date d'effet, Notes") was entirely
+  // absent from the UI even though ConventionsController/Service fully support
+  // it. listForPartner() only returns isActive: true conventions (backend-side
+  // filter), matching the historized-conventions decision from §5.6.2.
+  const { data: conventions = [] } = useQuery({
+    queryKey: ['cedantes', id, 'conventions'],
+    queryFn: async () => {
+      const { data } = await conventionsApi.listForPartner('CEDANTE', id!);
+      return data;
+    },
+    enabled: !!id,
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => cedantesApi.delete(id!),
     onSuccess: () => {
@@ -42,10 +83,57 @@ export default function CedanteDetail() {
     },
   });
 
+  // FIX: was cedantesApi.deleteContact(id, contactId) — that route doesn't exist
+  // on the backend (see master-data.api.ts). The only real way to remove a contact
+  // is to submit the full contacts array minus this one via update().
   const deleteContactMutation = useMutation({
-    mutationFn: (contactId: string) => cedantesApi.deleteContact(id!, contactId),
+    mutationFn: (contactId: string) => {
+      const remaining: CreateCedanteContactDto[] = (cedante?.contacts || [])
+        .filter((c) => c.id !== contactId)
+        .map((c) => ({
+          nom: c.nom,
+          prenom: c.prenom,
+          poste: c.poste,
+          telephoneFixe: c.telephoneFixe,
+          telephoneMobile: c.telephoneMobile,
+          email: c.email,
+        }));
+      return cedantesApi.update(id!, { contacts: remaining });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cedantes', id] });
+    },
+  });
+
+  // FIX (new): bank account deletion — same full-array-replace pattern, previously
+  // impossible entirely since no delete path existed for bank accounts at all.
+  const deleteBankAccountMutation = useMutation({
+    mutationFn: (bankId: string) => {
+      const remaining: CreateCedanteBankAccountDto[] = (cedante?.bankAccounts || [])
+        .filter((b) => b.id !== bankId)
+        .map((b) => ({
+          banque: b.banque,
+          agence: b.agence,
+          rib: b.rib,
+          iban: b.iban,
+          swift: b.swift,
+          currency: b.currency,
+          isDefault: b.isDefault,
+        }));
+      return cedantesApi.update(id!, { bankAccounts: remaining });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cedantes', id] });
+    },
+  });
+
+  // FIX (new): conventions have their own dedicated soft-delete route
+  // (DELETE /master-data/conventions/:id, sets isActive: false) — unlike
+  // contacts/bank accounts, this one actually exists on the backend.
+  const deactivateConventionMutation = useMutation({
+    mutationFn: (conventionId: string) => conventionsApi.deactivate(conventionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cedantes', id, 'conventions'] });
     },
   });
 
@@ -78,6 +166,28 @@ export default function CedanteDetail() {
       message: 'Êtes-vous sûr de vouloir supprimer ce contact ?',
       onConfirm: () => {
         deleteContactMutation.mutate(contactId);
+        setConfirmState({ type: null });
+      },
+    });
+  };
+
+  const handleDeleteBankAccount = (bankId: string) => {
+    setConfirmState({
+      type: 'delete-bank-account',
+      message: 'Êtes-vous sûr de vouloir supprimer ce compte bancaire ?',
+      onConfirm: () => {
+        deleteBankAccountMutation.mutate(bankId);
+        setConfirmState({ type: null });
+      },
+    });
+  };
+
+  const handleDeactivateConvention = (conventionId: string) => {
+    setConfirmState({
+      type: 'deactivate-convention',
+      message: 'Désactiver cette convention ? Elle ne sera plus affichée dans la liste active mais restera conservée (durée légale de conservation).',
+      onConfirm: () => {
+        deactivateConventionMutation.mutate(conventionId);
         setConfirmState({ type: null });
       },
     });
@@ -189,16 +299,6 @@ export default function CedanteDetail() {
               <InfoField label="Adresse" value={cedante.adresse || '-'} className="md:col-span-2" />
               <InfoField label="Capital" value={cedante.capital ? `${cedante.capital} TND` : '-'} />
             </div>
-            {cedante.freeFields && Object.keys(cedante.freeFields).length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <h3 className="text-[12px] font-medium text-gray-500 mb-2">Champs libres</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {Object.entries(cedante.freeFields).map(([key, value]) => (
-                    <InfoField key={key} label={key} value={String(value)} />
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Contacts */}
@@ -227,13 +327,6 @@ export default function CedanteDetail() {
                       <div>
                         <p className="text-[13px] font-medium text-gray-900">
                           {contact.prenom} {contact.nom}
-                          {/* NOTE: isDefault display kept — flagged in review, needs
-                              backend confirmation (see intro). Renders fine either way. */}
-                          {contact.isDefault && (
-                            <span className="ml-2 text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
-                              Principal
-                            </span>
-                          )}
                         </p>
                         {contact.poste && (
                           <p className="text-[11px] text-gray-500">{contact.poste}</p>
@@ -263,9 +356,6 @@ export default function CedanteDetail() {
                         {contact.email}
                       </p>
                     )}
-                    {/* FIX: was contact.telephone (field doesn't exist on the
-                        corrected CedanteContact type) — now telephoneFixe /
-                        telephoneMobile, matching the backend Contact model. */}
                     {contact.telephoneFixe && (
                       <p className="text-[12px] text-gray-600 flex items-center gap-1">
                         <Phone size={12} />
@@ -293,18 +383,17 @@ export default function CedanteDetail() {
                 <CreditCard size={18} />
                 Coordonnées bancaires
               </h2>
-              {/* FIX: this button previously set isBankModalOpen/editingBank state
-                  but no modal was ever rendered anywhere in the file — clicking it
-                  silently did nothing, which reads as broken rather than
-                  unimplemented. Disabled with an explicit label until the bank
-                  account modal component exists. */}
+              {/* FIX: was permanently disabled ("bientôt") — CedanteBankAccountModal
+                  now exists and follows the same update()-based pattern as contacts. */}
               <button
-                disabled
-                title="Modal de compte bancaire pas encore disponible"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-gray-400 bg-gray-50 rounded-lg cursor-not-allowed"
+                onClick={() => {
+                  setEditingBank(null);
+                  setIsBankModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
               >
                 <Plus size={16} />
-                Ajouter (bientôt)
+                Ajouter
               </button>
             </div>
             {cedante.bankAccounts && cedante.bankAccounts.length > 0 ? (
@@ -324,21 +413,34 @@ export default function CedanteDetail() {
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
                           <p className="text-[12px] text-gray-600">RIB: {bank.rib}</p>
                           <p className="text-[12px] text-gray-600">Devise: {bank.currency}</p>
-                          {/* FIX: iban field existed on the type but was never
-                              rendered — real cédante/réassureur data increasingly
-                              includes IBAN separately from RIB (audit Découverte 3). */}
                           {bank.iban && (
                             <p className="text-[12px] text-gray-600 col-span-2">IBAN: {bank.iban}</p>
                           )}
+                          {bank.swift && (
+                            <p className="text-[12px] text-gray-600 col-span-2">SWIFT: {bank.swift}</p>
+                          )}
+                          {bank.agence && (
+                            <p className="text-[12px] text-gray-600 col-span-2">Agence: {bank.agence}</p>
+                          )}
                         </div>
                       </div>
+                      {/* FIX: edit/delete were both dead (edit disabled with no
+                          modal, delete never existed) — both now wired. */}
                       <div className="flex items-center gap-1">
                         <button
-                          disabled
-                          title="Modal de compte bancaire pas encore disponible"
-                          className="p-1 rounded text-gray-300 cursor-not-allowed"
+                          onClick={() => {
+                            setEditingBank(bank);
+                            setIsBankModalOpen(true);
+                          }}
+                          className="p-1 rounded hover:bg-blue-50 text-blue-600"
                         >
                           <Edit2 size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteBankAccount(bank.id)}
+                          className="p-1 rounded hover:bg-red-50 text-red-600"
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
@@ -350,15 +452,137 @@ export default function CedanteDetail() {
             )}
           </div>
 
-          {cedante.freeFields?.notes && (
-            <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-              <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                <FileText size={18} />
-                Notes
+          {/* FIX (new): Onglet 3 — Conventions. Was completely absent from the UI
+              even though ConventionsController/Service fully support it (see
+              master-data.api.ts conventionsApi). */}
+          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
+                <Paperclip size={18} />
+                Conventions
               </h2>
-              <p className="text-[13px] text-gray-600 whitespace-pre-wrap">{cedante.freeFields.notes}</p>
+              <button
+                onClick={() => setIsConventionModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              >
+                <Plus size={16} />
+                Ajouter
+              </button>
             </div>
-          )}
+            {conventions.length > 0 ? (
+              <div className="space-y-3">
+                {conventions.map((convention: Convention) => (
+                  <div key={convention.id} className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-gray-900 flex items-center gap-1.5 truncate">
+                          <FileText size={14} className="shrink-0 text-gray-400" />
+                          {convention.document?.originalName || convention.document?.nom || 'Document sans nom'}
+                        </p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
+                          {convention.dateSignature && (
+                            <span className="text-[11px] text-gray-500">
+                              Signée le {new Date(convention.dateSignature).toLocaleDateString()}
+                            </span>
+                          )}
+                          {convention.dateEffet && (
+                            <span className="text-[11px] text-gray-500">
+                              Effet le {new Date(convention.dateEffet).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                        {convention.notes && (
+                          <p className="text-[12px] text-gray-600 mt-1.5 whitespace-pre-wrap">{convention.notes}</p>
+                        )}
+                      </div>
+                      {/* NOTE: no download link — Document.filePath is a server-side
+                          path/key, not a public URL, and no document-download route
+                          was provided in this review. Add one here once that route
+                          is confirmed. */}
+                      <button
+                        onClick={() => handleDeactivateConvention(convention.id)}
+                        className="p-1.5 rounded hover:bg-red-50 text-red-600 shrink-0 ml-2"
+                        title="Désactiver cette convention"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-gray-500 text-center py-4">Aucune convention</p>
+            )}
+          </div>
+
+          {/* FIX (new): read-only GED (Documents) list — CedantesService.findOne()
+              already includes `documents: { where: { entityType: 'CEDANTE' },
+              include: { document: true } }`, but nothing rendered it. No generic
+              upload endpoint was provided in this review (only the Conventions
+              upload flow above is confirmed), so this stays display-only. Since
+              ConventionsService.attach() routes through GedService.upload() with
+              entityType: 'CEDANTE', a convention's document may also show up here
+              depending on what GedService does internally — this is flagged rather
+              than assumed, since ged.service.ts wasn't part of this review. */}
+          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+            <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Folder size={18} />
+              Documents (GED)
+            </h2>
+            {cedante.documents && cedante.documents.length > 0 ? (
+              <div className="space-y-2">
+                {cedante.documents.map((link) => (
+                  <div key={link.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileText size={14} className="text-gray-400 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-[13px] text-gray-900 truncate">
+                          {link.document?.originalName || link.document?.nom}
+                        </p>
+                        {link.document?.documentType && (
+                          <p className="text-[11px] text-gray-400">{link.document.documentType}</p>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[11px] text-gray-400 shrink-0 ml-2">
+                      {new Date(link.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-gray-500 text-center py-4">Aucun document</p>
+            )}
+          </div>
+
+          {/* FIX: Onglet 5 — Champs libres was read-only (no way to add/edit a
+              field, and the section only rendered at all if freeFields already had
+              entries). Now a dedicated, always-visible card with an edit modal —
+              matches CDC §5.7 "Champs libres configurables". */}
+          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
+                <Sliders size={18} />
+                Champs libres
+              </h2>
+              <button
+                onClick={() => setIsFreeFieldsModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              >
+                <Edit2 size={14} />
+                Modifier
+              </button>
+            </div>
+            {cedante.freeFields && Object.keys(cedante.freeFields).length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {Object.entries(cedante.freeFields).map(([key, value]) => (
+                  <InfoField key={key} label={key} value={String(value)} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-[13px] text-gray-500 text-center py-4">Aucun champ libre défini</p>
+            )}
+          </div>
         </div>
 
         {/* Right Column */}
@@ -418,7 +642,19 @@ export default function CedanteDetail() {
 
       <ConfirmDialog
         open={confirmState.type !== null}
-        title={confirmState.type === 'deactivate' ? 'Désactivation' : confirmState.type === 'delete-contact' ? 'Suppression' : 'Confirmation'}
+        title={
+          confirmState.type === 'deactivate'
+            ? 'Désactivation'
+            : confirmState.type === 'delete-contact'
+            ? 'Suppression du contact'
+            : confirmState.type === 'delete-bank-account'
+            ? 'Suppression du compte bancaire'
+            : confirmState.type === 'deactivate-convention'
+            ? 'Désactivation de la convention'
+            : confirmState.type === 'override-code'
+            ? 'Modification du code'
+            : 'Confirmation'
+        }
         message={confirmState.message || ''}
         confirmLabel="Confirmer"
         confirmVariant="danger"
@@ -430,11 +666,42 @@ export default function CedanteDetail() {
       {isContactModalOpen && (
         <CedanteContactModal
           cedanteId={id!}
+          existingContacts={cedante.contacts || []}
           contact={editingContact}
           onClose={() => {
             setIsContactModalOpen(false);
             setEditingContact(null);
           }}
+        />
+      )}
+
+      {/* Bank Account Modal */}
+      {isBankModalOpen && (
+        <CedanteBankAccountModal
+          cedanteId={id!}
+          existingBankAccounts={cedante.bankAccounts || []}
+          bankAccount={editingBank}
+          onClose={() => {
+            setIsBankModalOpen(false);
+            setEditingBank(null);
+          }}
+        />
+      )}
+
+      {/* Convention Modal */}
+      {isConventionModalOpen && (
+        <CedanteConventionModal
+          cedanteId={id!}
+          onClose={() => setIsConventionModalOpen(false)}
+        />
+      )}
+
+      {/* Free Fields Modal */}
+      {isFreeFieldsModalOpen && (
+        <CedanteFreeFieldsModal
+          cedanteId={id!}
+          freeFields={cedante.freeFields}
+          onClose={() => setIsFreeFieldsModalOpen(false)}
         />
       )}
 

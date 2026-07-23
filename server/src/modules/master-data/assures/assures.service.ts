@@ -36,6 +36,8 @@ export class AssuresService {
         { raisonSociale: { contains: search, mode: 'insensitive' } },
         { code: { contains: search, mode: 'insensitive' } },
         { rne: { contains: search, mode: 'insensitive' } },
+        { pays: { contains: search, mode: 'insensitive' } },
+        { contacts: { some: { email: { contains: search, mode: 'insensitive' } } } },
       ];
     }
     const [data, total] = await Promise.all([
@@ -95,6 +97,7 @@ export class AssuresService {
         adresse: dto.adresse,
         pays: dto.pays,
         capital: dto.capital,
+        deviseParDefaut: dto.deviseParDefaut,
         freeFields: dto.freeFields ?? {},
         contacts: dto.contacts ? { create: dto.contacts } : undefined,
       },
@@ -190,6 +193,7 @@ export class AssuresService {
         ...(dto.adresse !== undefined && { adresse: dto.adresse }),
         ...(dto.pays !== undefined && { pays: dto.pays }),
         ...(dto.capital !== undefined && { capital: dto.capital }),
+        ...(dto.deviseParDefaut !== undefined && { deviseParDefaut: dto.deviseParDefaut }),
         ...(dto.freeFields !== undefined && { freeFields: dto.freeFields }),
         ...(dto.contacts !== undefined && {
           contacts: { deleteMany: {}, create: dto.contacts },

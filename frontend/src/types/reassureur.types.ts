@@ -17,6 +17,25 @@
 // MAIN ENTITY
 // ============================================================
 
+// FIX (new): ReassureursService.findOne() includes `documents: { where: {
+// entityType: 'REASSUREUR' }, include: { document: true } }` — was never typed,
+// same gap as Cedante had.
+export interface ReassureurDocumentLink {
+  id: string;
+  documentId: string;
+  entityType: string; // 'REASSUREUR'
+  document: {
+    id: string;
+    nom: string;
+    originalName?: string;
+    mimeType?: string;
+    sizeBytes?: number;
+    documentType?: string;
+    createdAt: string;
+  };
+  createdAt: string;
+}
+
 export interface Reassureur {
   id: string;
   code: string;
@@ -39,6 +58,8 @@ export interface Reassureur {
   contacts?: ReassureurContact[];
   bankAccounts?: ReassureurBankAccount[];
   participations?: AffaireReassureur[];
+  // FIX (new): see ReassureurDocumentLink above.
+  documents?: ReassureurDocumentLink[];
 
   isActive: boolean;
   createdAt: string;
@@ -54,14 +75,15 @@ export interface ReassureurContact {
   nom: string;
   prenom?: string;
   poste?: string;
-  // FIX: this type previously had ONLY `telephone` while CreateReassureurContactDto
-  // (below) had BOTH `telephone` and `mobile` — two types describing the same
-  // conceptual object disagreed with each other, and neither matched the backend's
-  // actual field names (telephoneFixe / telephoneMobile). Unified here.
   telephoneFixe?: string;
   telephoneMobile?: string;
   email?: string;
-  isDefault?: boolean;
+  // FIX (removed): `isDefault` was rendered/edited in the UI (ReassureurDetail's
+  // "Principal" badge, ReassureurContactModal's checkbox) but the backend `Contact`
+  // Prisma model — shared across Cedante/Reassureur/CoCourtier — has no such field
+  // (unlike `BankAccount`, which does have `isDefault`). Every submission of this
+  // flag was silently dropped. Removed here so the type doesn't promise something
+  // the API can't persist — same fix already applied to CedanteContact.
   reassureurId: string;
   createdAt: string;
   updatedAt: string;
@@ -97,11 +119,26 @@ export interface ReassureurBankAccount {
 // PARTICIPATION (Affaire → Réassureur relationship)
 // ============================================================
 
+// FIX (new): ReassureursService.findOne() nests `affaire: { include: { cedante:
+// true, facultativeData: { include: { assure: true } } } }` inside each
+// participation — the field existed in every real API response but was never
+// declared on this type, so ReassureurDetail's participations list was reading
+// undefined fields (see affaire.numéroPolice / numeroAffaire / reference / category
+// fix in ReassureurDetail.tsx — none of those exist on the real Affaire model,
+// whose actual fields are `numero` and `type`).
 export interface AffaireReassureur {
   id: string;
   affaireId: string;
   reassureurId: string;
   reassureur?: Reassureur;
+  affaire?: {
+    id: string;
+    numero: string;
+    type: 'FACULTATIVE' | 'TRAITE';
+    statut: 'EN_COTATION' | 'PREVISION' | 'PLACEMENT_REALISE';
+    cedante?: { id: string; raisonSociale: string };
+    facultativeData?: { assure?: { id: string; raisonSociale: string } };
+  };
 
   partPct: number;
   isLeader: boolean;
