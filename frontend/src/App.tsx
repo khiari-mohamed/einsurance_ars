@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { useAuthStore } from './lib/store';
 import { canAccessRoute } from './config/permissions.config';
-
+import { useApplyTheme } from './hooks/useApplyTheme';   // ← ADD
 // ── Auth ─────────────────────────────────────────────────────────────────────────
 import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
@@ -111,6 +111,7 @@ function ProtectedRoute({
 
 export default function App() {
   const token = useAuthStore((s) => s.token);
+    useApplyTheme();
 
   return (
     <>

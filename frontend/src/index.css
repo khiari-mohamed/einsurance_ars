@@ -18,3 +18,93 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* ─────────────────────────────────────────
+   APPEARANCE SYSTEM (added)
+───────────────────────────────────────── */
+:root {
+  --ars-primary: #d52b36;
+}
+
+/* ── Primary color retrofit ──────────────────────────────
+   Targets the literal arbitrary-value classes used across
+   the app (bg-[#d52b36], text-[#d52b36], border-[#d52b36])
+   wherever they appear, without touching component files. */
+.bg-\[\#d52b36\] { background-color: var(--ars-primary) !important; }
+.text-\[\#d52b36\] { color: var(--ars-primary) !important; }
+.border-\[\#d52b36\] { border-color: var(--ars-primary) !important; }
+.hover\:bg-\[\#d52b36\]:hover { background-color: var(--ars-primary) !important; }
+.hover\:text-\[\#d52b36\]:hover { color: var(--ars-primary) !important; }
+.focus\:ring-\[\#d52b36\]:focus { --tw-ring-color: var(--ars-primary) !important; }
+
+/* ── Dark mode retrofit ──────────────────────────────────
+   Remaps the standard Tailwind neutral palette + the app's
+   hardcoded shell hex (#f1f1f1) under .dark, globally. */
+.dark .bg-\[\#f1f1f1\] { background-color: #0a0a0f !important; }
+
+.dark .bg-white       { background-color: #16161f !important; }
+.dark .bg-gray-50      { background-color: #1a1a24 !important; }
+.dark .bg-gray-100      { background-color: #1e1e2c !important; }
+.dark .bg-gray-200      { background-color: #262636 !important; }
+
+.dark .text-gray-900   { color: #f8fafc !important; }
+.dark .text-gray-800   { color: #e2e8f0 !important; }
+.dark .text-gray-700   { color: #cbd5e1 !important; }
+.dark .text-gray-600   { color: #94a3b8 !important; }
+.dark .text-gray-500   { color: #64748b !important; }
+.dark .text-gray-400   { color: #475569 !important; }
+
+.dark .border-gray-100 { border-color: #1e1e2c !important; }
+.dark .border-gray-200 { border-color: #262636 !important; }
+.dark .border-gray-300 { border-color: #2e2e42 !important; }
+
+.dark .hover\:bg-gray-50:hover  { background-color: #1e1e2c !important; }
+.dark .hover\:bg-gray-100:hover { background-color: #262636 !important; }
+.dark .hover\:bg-white:hover    { background-color: #1e1e2c !important; }
+
+/* Tinted status backgrounds (alerts, badges) — kept colored,
+   just darkened so they don't stay paper-white in dark mode */
+.dark .bg-red-50    { background-color: rgba(239, 68, 68, 0.12) !important; }
+.dark .bg-blue-50    { background-color: rgba(59, 130, 246, 0.12) !important; }
+.dark .bg-green-50    { background-color: rgba(34, 197, 94, 0.12) !important; }
+.dark .bg-amber-50    { background-color: rgba(245, 158, 11, 0.12) !important; }
+.dark .bg-emerald-50    { background-color: rgba(16, 185, 129, 0.12) !important; }
+.dark .bg-purple-50    { background-color: rgba(139, 92, 246, 0.12) !important; }
+
+/* Inputs / selects (jj/mm/aaaa fields, dropdowns) */
+.dark input, .dark select, .dark textarea {
+  background-color: #1a1a24 !important;
+  color: #f8fafc !important;
+  border-color: #262636 !important;
+}
+.dark input::placeholder, .dark textarea::placeholder { color: #64748b !important; }
+
+/* ── Appearance dialog own styling (unaffected by above) ── */
+:root {
+  --ars-primary: #d52b36;
+  --ars-bg: #ffffff;
+  --ars-surface: #f8fafc;
+  --ars-dialog: #ffffff;
+  --ars-border: #e2e8f0;
+  --ars-border-dim: #f1f5f9;
+  --ars-text: #0f172a;
+  --ars-text-sec: #475569;
+  --ars-text-muted: #94a3b8;
+}
+.dark {
+  --ars-bg: #0a0a0f;
+  --ars-surface: #13131a;
+  --ars-dialog: #16161f;
+  --ars-border: #262636;
+  --ars-border-dim: #1e1e2c;
+  --ars-text: #f8fafc;
+  --ars-text-sec: #94a3b8;
+  --ars-text-muted: #475569;
+}
+.bg-ars-dialog { background: var(--ars-dialog); }
+.border-ars-border { border-color: var(--ars-border); }
+.text-ars-text { color: var(--ars-text); }
+
+.appearance-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px; border-radius: 12px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; background: rgba(0,0,0,0.03); border: 1px solid var(--ars-border-dim); color: var(--ars-text-sec); }
+.dark .appearance-btn { background: rgba(255,255,255,0.04); }
+.appearance-btn:hover { border-color: var(--ars-border); color: var(--ars-text); }
+.appearance-btn-active { background: rgba(213,43,54,0.08); border-color: var(--ars-primary); color: var(--ars-text); }

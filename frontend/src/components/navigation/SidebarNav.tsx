@@ -1,177 +1,22 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import {
-  Home,
-  Database,
-  FileText,
-  AlertTriangle,
-  DollarSign,
-  LogOut,
-  X,
-  ChevronDown,
-  ChevronRight,
-  BookOpen,
-  BarChart3,
-  FolderOpen,
-  Settings,
-  Receipt,
-  ListTodo,
-  BookOpenCheck,
-  Scale,
-} from 'lucide-react';
+import { LogOut, X, ChevronDown, ChevronRight, Settings2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../lib/store';
 import { canAccessRoute } from '../../config/permissions.config';
-
-// ── Navigation definition ─────────────────────────────────────────────────────
-
-interface SubMenuItem {
-  name: string;
-  href: string;
-}
-
-interface NavigationItem {
-  name: string;
-  href?: string;
-  icon: React.ElementType;
-  subItems?: SubMenuItem[];
-}
-
-const navigation: NavigationItem[] = [
-  {
-    name: 'Dashboard',
-    href: '/',
-    icon: Home,
-  },
-
-  // ============================================================
-  // RÉFÉRENTIEL — Updated labels per June 26 meeting
-  // ============================================================
-  {
-    name: 'Référentiel',
-    icon: Database,
-    subItems: [
-      { name: 'Clients',                     href: '/assures' },          // WAS: 'Assurés'
-      { name: 'Compagnies d\'assurances',    href: '/cedantes' },        // WAS: 'Cédantes'
-      { name: 'Réassureurs',                 href: '/reassureurs' },     // UNCHANGED
-      { name: 'Courtiers en réassurance',    href: '/co-courtiers' },   // WAS: 'Co-Courtiers'
-      { name: 'Historique des désactivations', href: '/referentiel/history' }, // NEW
-    ],
-  },
-
-  {
-    name: 'Affaires',
-    icon: FileText,
-    subItems: [
-      { name: 'Toutes les affaires', href: '/affaires' },
-      { name: 'Facultatives',        href: '/facultatives' },
-      { name: 'Traités',             href: '/traites' },
-    ],
-  },
-
-  {
-    name: 'Bordereaux',
-    icon: Receipt,
-    href: '/bordereaux',
-  },
-
-  {
-    name: 'Sinistres',
-    icon: AlertTriangle,
-    subItems: [
-      { name: 'Liste',       href: '/sinistres' },
-      { name: 'Déclarer',   href: '/sinistres/new' },
-      { name: 'Analytique', href: '/sinistres/suivi' },
-    ],
-  },
-
-  {
-    name: 'Finances',
-    icon: DollarSign,
-    subItems: [
-      { name: 'Transactions',         href: '/finances' },
-      { name: 'Commissions',          href: '/finances/commissions' },
-      { name: 'Situations',           href: '/finances/settlements' },
-      { name: 'Compiler Situation',   href: '/finances/situation-builder' },
-      { name: 'Ordres de Paiement',   href: '/finances/payment-orders' },
-      { name: 'Dashboard Financier',  href: '/finances/dashboard' },
-    ],
-  },
-
-  {
-    name: 'Comptabilité',
-    icon: BookOpen,
-    subItems: [
-      { name: 'Dashboard',          href: '/comptabilite/dashboard' },
-      { name: 'Plan Comptable',     href: '/comptabilite/plan-comptable' },
-      { name: 'Grand Livre',        href: '/comptabilite/grand-livre' },
-      { name: 'Balance',            href: '/comptabilite/balance' },
-      { name: 'Bilan',              href: '/comptabilite/bilan' },
-      { name: 'Compte Résultat',    href: '/comptabilite/resultat' },
-      { name: 'Journal Ventes',     href: '/comptabilite/journal-ventes' },
-      { name: 'Journal Achats',     href: '/comptabilite/journal-achats' },
-      { name: 'Journal Banque',     href: '/comptabilite/journal-banque' },
-      { name: 'Réconciliation',     href: '/comptabilite/reconciliation' },
-    ],
-  },
-
-  {
-    name: 'Reporting',
-    icon: BarChart3,
-    subItems: [
-      { name: 'Tableaux de Bord', href: '/reporting/dashboard' },
-      { name: 'Portfolio',        href: '/reporting/portfolio' },
-      { name: 'Générateur',       href: '/reporting/generator' },
-      { name: 'Exports',          href: '/reporting/exports' },
-    ],
-  },
-
-  {
-    name: 'GED',
-    href: '/documents',
-    icon: FolderOpen,
-  },
-
-  {
-    name: 'Workflow',
-    icon: ListTodo,
-    subItems: [
-      { name: 'Tâches en cours',   href: '/workflow/notifications' },
-      { name: 'Historique',        href: '/workflow/history' },
-    ],
-  },
-
-  {
-    name: 'Administration',
-    icon: Settings,
-    subItems: [
-      { name: 'Utilisateurs',        href: '/admin/users' },
-      { name: 'Paramètres Société',  href: '/admin/company-settings' },
-      { name: 'Taux de Change',      href: '/admin/exchange-rates' },
-      { name: 'Sauvegardes',         href: '/admin/backups' },
-      { name: 'Import / Export',     href: '/admin/import-export' },
-      { name: 'Audit Système',       href: '/admin/system' },
-    ],
-  },
-
-  {
-    name: 'Guide',
-    href: '/guide',
-    icon: BookOpenCheck,
-  },
-];
-
-// ── Component ─────────────────────────────────────────────────────────────────
+import { navigation } from '../../config/navigation.config';
 
 interface SidebarNavProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenAppearance: () => void;
 }
 
-export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
+export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: SidebarNavProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const { user, logout, initials, displayName } = useAuthStore();
 
-  // Auto-expand parent sections based on the current URL
   const [expandedItems, setExpandedItems] = useState<string[]>(() =>
     navigation
       .filter(
@@ -181,10 +26,9 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
             location.pathname.startsWith(sub.href + '/'),
           ),
       )
-      .map((item) => item.name),
+      .map((item) => item.nameKey),
   );
 
-  // Keep expanded state in sync when navigating programmatically
   useEffect(() => {
     setExpandedItems((prev) => {
       const toAdd = navigation
@@ -194,18 +38,18 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
               (sub) =>
                 location.pathname === sub.href ||
                 location.pathname.startsWith(sub.href + '/'),
-            ) && !prev.includes(item.name),
+            ) && !prev.includes(item.nameKey),
         )
-        .map((item) => item.name);
+        .map((item) => item.nameKey);
       return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
     });
   }, [location.pathname]);
 
-  const toggleExpand = (itemName: string) => {
+  const toggleExpand = (itemKey: string) => {
     setExpandedItems((prev) =>
-      prev.includes(itemName)
-        ? prev.filter((n) => n !== itemName)
-        : [...prev, itemName],
+      prev.includes(itemKey)
+        ? prev.filter((n) => n !== itemKey)
+        : [...prev, itemKey],
     );
   };
 
@@ -237,7 +81,7 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
       <aside
         className={`
           fixed lg:relative inset-y-0 left-0 z-50
-          bg-[#f1f1f1] shadow-[0_0_40px_rgba(0,0,0,0.08)]
+          bg-[#f1f1f1] dark:bg-[#0a0a0f] shadow-[0_0_40px_rgba(0,0,0,0.08)]
           flex flex-col
           transition-all duration-300 ease-in-out
           will-change-[width,transform]
@@ -248,7 +92,7 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
         `}
       >
         {/* ── Logo / header ─────────────────────────────────────────────── */}
-        <div className="h-16 px-4 flex items-center justify-between border-b border-gray-200 flex-shrink-0 overflow-hidden">
+        <div className="h-16 px-4 flex items-center justify-between border-b border-gray-200 dark:border-[#262636] flex-shrink-0 overflow-hidden">
           <div
             className={`flex items-center gap-3 transition-opacity duration-200 ${
               isOpen ? 'opacity-100' : 'opacity-0 lg:opacity-0 pointer-events-none'
@@ -260,11 +104,11 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
               className="w-8 h-8 object-contain flex-shrink-0"
             />
             <div className="min-w-0">
-              <p className="text-[14px] font-bold text-gray-900 leading-tight whitespace-nowrap">
-                ARS Tunisie
+              <p className="text-[14px] font-bold text-gray-900 dark:text-white leading-tight whitespace-nowrap">
+                {t('sidebar.appName')}
               </p>
-              <p className="text-[10px] text-gray-500 whitespace-nowrap">
-                Réassurance ERP
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                {t('sidebar.appSubtitle')}
               </p>
             </div>
           </div>
@@ -281,7 +125,7 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
           {/* Mobile close button */}
           <button
             onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg hover:bg-gray-200 text-gray-500 transition-colors flex-shrink-0"
+            className="lg:hidden p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-[#1e1e2c] text-gray-500 dark:text-gray-400 transition-colors flex-shrink-0"
           >
             <X size={16} />
           </button>
@@ -290,11 +134,11 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
         {/* ── Navigation ───────────────────────────────────────────────── */}
         <nav
           className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden
-            scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
+            scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-[#262636] scrollbar-track-transparent"
         >
           {filteredNavigation.map((item) => {
             const Icon = item.icon;
-            const isExpanded = expandedItems.includes(item.name);
+            const isExpanded = expandedItems.includes(item.nameKey);
             const hasSubItems = !!item.subItems?.length;
             const isActive =
               item.href
@@ -303,23 +147,29 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
             const isParentActive =
               hasSubItems &&
               item.subItems!.some((sub) => isSubItemActive(sub.href));
+            const label = t(item.nameKey);
 
             return (
-              <div key={item.name}>
+              <div key={item.nameKey}>
                 {item.href ? (
                   /* ── Direct link ────────────────────────────────────── */
                   <Link
                     to={item.href}
                     onClick={() => window.innerWidth < 1024 && onClose()}
-                    title={!isOpen ? item.name : undefined}
+                    title={!isOpen ? label : undefined}
                     className={`
                       flex items-center gap-3 px-3 py-2.5 rounded-lg
                       transition-all duration-150 group
                       ${isActive
-                        ? 'bg-red-50 text-[#d52b36] font-medium'
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                        ? 'font-medium'
+                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1e1e2c] hover:text-gray-900 dark:hover:text-white'
                       }
                     `}
+                    style={
+                      isActive
+                        ? { backgroundColor: 'color-mix(in srgb, var(--ars-primary) 10%, transparent)', color: 'var(--ars-primary)' }
+                        : undefined
+                    }
                   >
                     <Icon
                       size={17}
@@ -331,23 +181,28 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
                         isOpen ? 'opacity-100' : 'opacity-0 lg:opacity-0'
                       }`}
                     >
-                      {item.name}
+                      {label}
                     </span>
                   </Link>
                 ) : (
                   /* ── Expandable parent ──────────────────────────────── */
                   <>
                     <button
-                      onClick={() => toggleExpand(item.name)}
-                      title={!isOpen ? item.name : undefined}
+                      onClick={() => toggleExpand(item.nameKey)}
+                      title={!isOpen ? label : undefined}
                       className={`
                         w-full flex items-center gap-3 px-3 py-2.5 rounded-lg
                         transition-all duration-150 text-left
                         ${isParentActive
-                          ? 'bg-red-50 text-[#d52b36] font-medium'
-                          : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                          ? 'font-medium'
+                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1e1e2c] hover:text-gray-900 dark:hover:text-white'
                         }
                       `}
+                      style={
+                        isParentActive
+                          ? { backgroundColor: 'color-mix(in srgb, var(--ars-primary) 10%, transparent)', color: 'var(--ars-primary)' }
+                          : undefined
+                      }
                     >
                       <Icon
                         size={17}
@@ -359,7 +214,7 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
                           isOpen ? 'opacity-100' : 'opacity-0 lg:opacity-0'
                         }`}
                       >
-                        {item.name}
+                        {label}
                       </span>
                       {hasSubItems && isOpen && (
                         <span className="flex-shrink-0">
@@ -379,6 +234,7 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
                           .filter((sub) => canAccessRoute(role, sub.href))
                           .map((sub) => {
                             const active = isSubItemActive(sub.href);
+                            const subLabel = t(sub.nameKey);
                             return (
                               <Link
                                 key={sub.href}
@@ -390,17 +246,21 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
                                   flex items-center gap-2 px-3 py-2 rounded-lg
                                   text-[12px] transition-all duration-150
                                   ${active
-                                    ? 'bg-red-50 text-[#d52b36] font-medium'
-                                    : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                                    ? 'font-medium'
+                                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1e1e2c] hover:text-gray-900 dark:hover:text-white'
                                   }
                                 `}
+                                style={
+                                  active
+                                    ? { backgroundColor: 'color-mix(in srgb, var(--ars-primary) 10%, transparent)', color: 'var(--ars-primary)' }
+                                    : undefined
+                                }
                               >
                                 <span
-                                  className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                                    active ? 'bg-[#d52b36]' : 'bg-gray-400'
-                                  }`}
+                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-gray-400 dark:bg-gray-600"
+                                  style={active ? { backgroundColor: 'var(--ars-primary)' } : undefined}
                                 />
-                                {sub.name}
+                                {subLabel}
                               </Link>
                             );
                           })}
@@ -414,10 +274,13 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
         </nav>
 
         {/* ── User footer ──────────────────────────────────────────────── */}
-        <div className="p-3 border-t border-gray-200 flex-shrink-0 overflow-hidden">
-          <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-100 transition-colors group">
+        <div className="p-3 border-t border-gray-200 dark:border-[#262636] flex-shrink-0 overflow-hidden">
+          <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-[#1e1e2c] transition-colors group">
             {/* Avatar */}
-            <div className="w-8 h-8 rounded-full bg-[#d52b36] flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 select-none">
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 select-none"
+              style={{ backgroundColor: 'var(--ars-primary)' }}
+            >
               {initials()}
             </div>
 
@@ -427,20 +290,33 @@ export default function SidebarNav({ isOpen, onClose }: SidebarNavProps) {
                 isOpen ? 'opacity-100' : 'opacity-0 lg:opacity-0'
               }`}
             >
-              <p className="text-[12px] font-semibold text-gray-900 truncate leading-tight">
+              <p className="text-[12px] font-semibold text-gray-900 dark:text-white truncate leading-tight">
                 {displayName()}
               </p>
-              <p className="text-[10px] text-gray-500 truncate">
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
                 {user?.role?.replace(/_/g, ' ')}
               </p>
             </div>
 
+            {/* Appearance button (only when expanded + hovered) */}
+            <button
+              onClick={onOpenAppearance}
+              title={t('sidebar.appearanceTooltip')}
+              className={`
+                p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-[#262636] text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200
+                transition-all flex-shrink-0
+                ${isOpen ? 'opacity-0 group-hover:opacity-100' : 'opacity-0 lg:opacity-0'}
+              `}
+            >
+              <Settings2 size={14} />
+            </button>
+
             {/* Logout button (only when expanded + hovered) */}
             <button
               onClick={logout}
-              title="Se déconnecter"
+              title={t('sidebar.logoutTooltip')}
               className={`
-                p-1.5 rounded-md hover:bg-red-50 text-gray-400 hover:text-red-500
+                p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400
                 transition-all flex-shrink-0
                 ${isOpen
                   ? 'opacity-0 group-hover:opacity-100'
