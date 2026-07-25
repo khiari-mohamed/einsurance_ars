@@ -1,101 +1,59 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { X, Zap, Calendar } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { X, Zap } from 'lucide-react';
 import { bordereauxApi } from '../../api/bordereaux.api';
 import type { BordereauType } from '../../types/bordereau.types';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import api from '../../lib/api';
 import masterDataApi from '../../api/master-data.api';
 
-interface BordereauGenerateModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
+interface Props { isOpen: boolean; onClose: () => void }
 
-const GENERATION_TYPES = [
-  { value: 'cession', label: 'Bordereau de Cession', description: 'Générer pour une période donnée' },
-  { value: 'reassureur', label: 'Bordereau Réassureur', description: 'Générer par réassureur ou traité' },
-  { value: 'sinistre', label: 'Bordereau Sinistre', description: 'Générer pour un sinistre spécifique' },
-  { value: 'situation', label: 'Bordereau de Situation', description: 'État de compte global' },
+// Only the three types the backend's generate() actually implements —
+// SITUATION_TRAITE/NOTE_DE_CREDIT/etc. must be created manually via
+// BordereauCreateModal until a generator is written for them.
+const GENERATABLE_TYPES: { value: BordereauType; label: string; description: string }[] = [
+  { value: 'CESSION_CEDANTE', label: 'Cession Cédante', description: 'Un bordereau pour la cédante de l\'affaire' },
+  { value: 'CESSION_REASSUREUR', label: 'Cession Réassureur', description: 'Un bordereau par réassureur participant (ou un seul si filtré)' },
+  { value: 'SINISTRE_FACULTATIVE', label: 'Sinistre Facultative', description: 'Regroupe les sinistres validés de l\'affaire sur la période' },
 ];
 
-export default function BordereauGenerateModal({ isOpen, onClose }: BordereauGenerateModalProps) {
+export default function BordereauGenerateModal({ isOpen, onClose }: Props) {
   const queryClient = useQueryClient();
-  
-  const [generationType, setGenerationType] = useState<BordereauType>('cession');
+
   const [formData, setFormData] = useState({
-    cedanteId: '',
+    type: 'CESSION_CEDANTE' as BordereauType,
+    affaireId: '',
     reassureurId: '',
-    treatyId: '',
-    sinistreId: '',
-    entityType: 'cedante' as 'cedante' | 'reassureur',
-    entityId: '',
-    periodStart: '',
-    periodEnd: '',
+    datePeriodeDebut: '',
+    datePeriodeFin: '',
+    dateLimitePaiement: '',
   });
 
-  // Fetch data
-  const { data: cedantes } = useQuery({
-    queryKey: ['cedantes'],
-    queryFn: async () => {
-      const { data } = await masterDataApi.cedantes.getAll();
-      return data.data;
-    },
+  const { data: affaires } = useQuery({
+    queryKey: ['affaires-placees'],
+    queryFn: () => api.get('/affaires', { params: { statut: 'PLACEMENT_REALISE', limit: 200 } }),
   });
 
   const { data: reassureurs } = useQuery({
     queryKey: ['reassureurs'],
-    queryFn: async () => {
-      const { data } = await masterDataApi.reassureurs.getAll();
-      return data.data;
-    },
-    enabled: generationType === 'reassureur' || generationType === 'situation',
-  });
-
-  const { data: traites } = useQuery({
-    queryKey: ['traites', formData.cedanteId],
-    queryFn: () => api.get('/affaires', { 
-      params: { 
-        cedanteId: formData.cedanteId, 
-        category: 'traitee',
-        limit: 100 
-      } 
-    }),
-    enabled: generationType === 'reassureur' && !!formData.cedanteId,
-  });
-
-  const { data: sinistres } = useQuery({
-    queryKey: ['sinistres'],
-    queryFn: () => api.get('/sinistres', { params: { limit: 100 } }),
-    enabled: generationType === 'sinistre',
+    queryFn: async () => (await masterDataApi.reassureurs.getAll()).data,
+    enabled: formData.type === 'CESSION_REASSUREUR',
   });
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
-      if (generationType === 'sinistre') {
-        return bordereauxApi.generateSinistre(formData.sinistreId);
-      } else if (generationType === 'situation') {
-        return bordereauxApi.generateSituation({
-          entityType: formData.entityType,
-          entityId: formData.entityId,
-          periodStart: formData.periodStart,
-          periodEnd: formData.periodEnd,
-        });
-      } else {
-        return bordereauxApi.generate({
-          type: generationType,
-          cedanteId: formData.cedanteId,
-          periodStart: formData.periodStart,
-          periodEnd: formData.periodEnd,
-          treatyId: formData.treatyId || undefined,
-          reassureurId: formData.reassureurId || undefined,
-        });
-      }
-    },
-    onSuccess: (data) => {
+    mutationFn: () => bordereauxApi.generate({
+      affaireId: formData.affaireId,
+      type: formData.type,
+      reassureurId: formData.reassureurId || undefined,
+      datePeriodeDebut: formData.datePeriodeDebut || undefined,
+      datePeriodeFin: formData.datePeriodeFin || undefined,
+      dateLimitePaiement: formData.dateLimitePaiement || undefined,
+    }),
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['bordereaux'] });
-      const count = Array.isArray(data.data) ? data.data.length : 1;
-      alert(`${count} bordereau(x) généré(s) avec succès`);
+      alert(`${res.data.length} bordereau(x) généré(s) avec succès`);
       onClose();
       resetForm();
     },
@@ -104,374 +62,95 @@ export default function BordereauGenerateModal({ isOpen, onClose }: BordereauGen
     },
   });
 
-  const resetForm = () => {
-    setFormData({
-      cedanteId: '',
-      reassureurId: '',
-      treatyId: '',
-      sinistreId: '',
-      entityType: 'cedante',
-      entityId: '',
-      periodStart: '',
-      periodEnd: '',
-    });
-  };
+  const resetForm = () => setFormData({ type: 'CESSION_CEDANTE', affaireId: '', reassureurId: '', datePeriodeDebut: '', datePeriodeFin: '', dateLimitePaiement: '' });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-
-    // Validation
-    if (generationType === 'sinistre') {
-      if (!formData.sinistreId) {
-        alert('Veuillez sélectionner un sinistre');
-        return;
-      }
-    } else if (generationType === 'situation') {
-      if (!formData.entityId || !formData.periodStart || !formData.periodEnd) {
-        alert('Veuillez remplir tous les champs requis');
-        return;
-      }
-    } else {
-      if (!formData.cedanteId || !formData.periodStart || !formData.periodEnd) {
-        alert('Veuillez remplir tous les champs requis');
-        return;
-      }
-    }
-
+    if (!formData.affaireId) { alert('Veuillez sélectionner une affaire'); return; }
     generateMutation.mutate();
-  };
-
-  // Quick period presets
-  const setQuickPeriod = (type: 'current_month' | 'last_month' | 'current_quarter' | 'last_quarter') => {
-    const now = new Date();
-    let start: Date, end: Date;
-
-    switch (type) {
-      case 'current_month':
-        start = new Date(now.getFullYear(), now.getMonth(), 1);
-        end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        break;
-      case 'last_month':
-        start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        end = new Date(now.getFullYear(), now.getMonth(), 0);
-        break;
-      case 'current_quarter':
-        const currentQuarter = Math.floor(now.getMonth() / 3);
-        start = new Date(now.getFullYear(), currentQuarter * 3, 1);
-        end = new Date(now.getFullYear(), (currentQuarter + 1) * 3, 0);
-        break;
-      case 'last_quarter':
-        const lastQuarter = Math.floor(now.getMonth() / 3) - 1;
-        start = new Date(now.getFullYear(), lastQuarter * 3, 1);
-        end = new Date(now.getFullYear(), (lastQuarter + 1) * 3, 0);
-        break;
-    }
-
-    setFormData({
-      ...formData,
-      periodStart: start.toISOString().split('T')[0],
-      periodEnd: end.toISOString().split('T')[0],
-    });
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <Card className="max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+      <Card className="max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <Zap className="text-yellow-600" size={24} />
-              </div>
+              <div className="p-2 bg-yellow-100 rounded-lg"><Zap className="text-yellow-600" size={24} /></div>
               <div>
                 <h2 className="text-2xl font-bold">Génération Automatique</h2>
-                <p className="text-gray-600">Générer des bordereaux automatiquement</p>
+                <p className="text-gray-600">À partir des données d'une affaire placée</p>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X size={20} />
-            </Button>
+            <Button variant="ghost" size="sm" onClick={onClose}><X size={20} /></Button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Type Selection */}
             <div>
-              <label className="block text-sm font-medium mb-3">
-                Type de Génération <span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {GENERATION_TYPES.map(type => (
+              <label className="block text-sm font-medium mb-3">Type <span className="text-red-500">*</span></label>
+              <div className="grid grid-cols-1 gap-3">
+                {GENERATABLE_TYPES.map((t) => (
                   <button
-                    key={type.value}
+                    key={t.value}
                     type="button"
-                    onClick={() => {
-                      setGenerationType(type.value as BordereauType);
-                      resetForm();
-                    }}
-                    className={`p-4 border-2 rounded-lg text-left transition-all ${
-                      generationType === type.value
-                        ? 'border-yellow-600 bg-yellow-50'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
+                    onClick={() => setFormData({ ...formData, type: t.value, reassureurId: '' })}
+                    className={`p-4 border-2 rounded-lg text-left transition-all ${formData.type === t.value ? 'border-yellow-600 bg-yellow-50' : 'border-gray-200 hover:border-gray-300'}`}
                   >
-                    <p className="font-semibold">{type.label}</p>
-                    <p className="text-sm text-gray-600 mt-1">{type.description}</p>
+                    <p className="font-semibold">{t.label}</p>
+                    <p className="text-sm text-gray-600 mt-1">{t.description}</p>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Sinistre Generation */}
-            {generationType === 'sinistre' && (
+            <div>
+              <label className="block text-sm font-medium mb-2">Affaire (placée) <span className="text-red-500">*</span></label>
+              <select value={formData.affaireId} onChange={(e) => setFormData({ ...formData, affaireId: e.target.value })} className="w-full border rounded-lg px-3 py-2" required>
+                <option value="">Sélectionner une affaire</option>
+                {affaires?.data?.data?.map((a: any) => (
+                  <option key={a.id} value={a.id}>{a.numero} — {a.cedante?.raisonSociale}</option>
+                ))}
+              </select>
+            </div>
+
+            {formData.type === 'CESSION_REASSUREUR' && (
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Sinistre <span className="text-red-500">*</span>
-                </label>
-                <select
-                  value={formData.sinistreId}
-                  onChange={(e) => setFormData({ ...formData, sinistreId: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                >
-                  <option value="">Sélectionner un sinistre</option>
-                  {sinistres?.data?.data?.map((sinistre: any) => (
-                    <option key={sinistre.id} value={sinistre.id}>
-                      {sinistre.numeroSinistre} - {sinistre.montantTotal?.toLocaleString()} {sinistre.devise}
-                    </option>
-                  ))}
+                <label className="block text-sm font-medium mb-2">Réassureur (optionnel — sinon un bordereau par réassureur)</label>
+                <select value={formData.reassureurId} onChange={(e) => setFormData({ ...formData, reassureurId: e.target.value })} className="w-full border rounded-lg px-3 py-2">
+                  <option value="">Tous les réassureurs de l'affaire</option>
+                  {reassureurs?.data?.map((r: any) => <option key={r.id} value={r.id}>{r.raisonSociale}</option>)}
                 </select>
               </div>
             )}
 
-            {/* Situation Generation */}
-            {generationType === 'situation' && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Type d'Entité <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex gap-4">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        value="cedante"
-                        checked={formData.entityType === 'cedante'}
-                        onChange={(e) => setFormData({ ...formData, entityType: e.target.value as any, entityId: '' })}
-                        className="rounded"
-                      />
-                      <span>Cédante</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        value="reassureur"
-                        checked={formData.entityType === 'reassureur'}
-                        onChange={(e) => setFormData({ ...formData, entityType: e.target.value as any, entityId: '' })}
-                        className="rounded"
-                      />
-                      <span>Réassureur</span>
-                    </label>
-                  </div>
-                </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Date Début</label>
+                <input type="date" value={formData.datePeriodeDebut} onChange={(e) => setFormData({ ...formData, datePeriodeDebut: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Date Fin</label>
+                <input type="date" value={formData.datePeriodeFin} onChange={(e) => setFormData({ ...formData, datePeriodeFin: e.target.value })} className="w-full border rounded-lg px-3 py-2" min={formData.datePeriodeDebut} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Date Limite Paiement</label>
+                <input type="date" value={formData.dateLimitePaiement} onChange={(e) => setFormData({ ...formData, dateLimitePaiement: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+              </div>
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    {formData.entityType === 'cedante' ? 'Cédante' : 'Réassureur'} <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.entityId}
-                    onChange={(e) => setFormData({ ...formData, entityId: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2"
-                    required
-                  >
-                    <option value="">Sélectionner</option>
-                    {(formData.entityType === 'cedante' ? cedantes?.data?.data : reassureurs?.data?.data)?.map((entity: any) => (
-                      <option key={entity.id} value={entity.id}>
-                        {entity.raisonSociale}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
-
-            {/* Cession/Reassureur Generation */}
-            {(generationType === 'cession' || generationType === 'reassureur') && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Cédante <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.cedanteId}
-                    onChange={(e) => setFormData({ ...formData, cedanteId: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2"
-                    required
-                  >
-                    <option value="">Sélectionner une cédante</option>
-                    {cedantes?.data?.data?.map((cedante: any) => (
-                      <option key={cedante.id} value={cedante.id}>
-                        {cedante.raisonSociale}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {generationType === 'reassureur' && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Traité (optionnel)
-                      </label>
-                      <select
-                        value={formData.treatyId}
-                        onChange={(e) => setFormData({ ...formData, treatyId: e.target.value })}
-                        className="w-full border rounded-lg px-3 py-2"
-                      >
-                        <option value="">Tous les traités</option>
-                        {traites?.data?.data?.map((traite: any) => (
-                          <option key={traite.id} value={traite.id}>
-                            {traite.numeroAffaire} - {traite.type}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium mb-2">
-                        Réassureur (optionnel)
-                      </label>
-                      <select
-                        value={formData.reassureurId}
-                        onChange={(e) => setFormData({ ...formData, reassureurId: e.target.value })}
-                        className="w-full border rounded-lg px-3 py-2"
-                      >
-                        <option value="">Tous les réassureurs</option>
-                        {reassureurs?.data?.data?.map((reassureur: any) => (
-                          <option key={reassureur.id} value={reassureur.id}>
-                            {reassureur.raisonSociale}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-
-            {/* Period Selection (for all except sinistre) */}
-            {generationType !== 'sinistre' && (
-              <>
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Période Rapide
-                  </label>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setQuickPeriod('current_month')}
-                      className="gap-2"
-                    >
-                      <Calendar size={14} />
-                      Mois en cours
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setQuickPeriod('last_month')}
-                      className="gap-2"
-                    >
-                      <Calendar size={14} />
-                      Mois dernier
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setQuickPeriod('current_quarter')}
-                      className="gap-2"
-                    >
-                      <Calendar size={14} />
-                      Trimestre en cours
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setQuickPeriod('last_quarter')}
-                      className="gap-2"
-                    >
-                      <Calendar size={14} />
-                      Trimestre dernier
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Date Début <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.periodStart}
-                      onChange={(e) => setFormData({ ...formData, periodStart: e.target.value })}
-                      className="w-full border rounded-lg px-3 py-2"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-2">
-                      Date Fin <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.periodEnd}
-                      onChange={(e) => setFormData({ ...formData, periodEnd: e.target.value })}
-                      className="w-full border rounded-lg px-3 py-2"
-                      required
-                      min={formData.periodStart}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Info Box */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <p className="text-sm text-blue-900">
-                <strong>Note:</strong> La génération automatique créera un ou plusieurs bordereaux 
-                en fonction des affaires trouvées pour la période sélectionnée.
+                <strong>Note :</strong> l'affaire doit être au statut <code>PLACEMENT_REALISE</code>. Pour "Sinistre Facultative", seuls les sinistres validés (ou plus avancés) sur la période sont inclus.
               </p>
             </div>
 
-            {/* Actions */}
             <div className="flex gap-3 pt-4 border-t">
-              <Button
-                type="submit"
-                className="flex-1 gap-2"
-                disabled={generateMutation.isPending}
-              >
-                <Zap size={18} />
-                {generateMutation.isPending ? 'Génération...' : 'Générer'}
+              <Button type="submit" className="flex-1 gap-2" disabled={generateMutation.isPending}>
+                <Zap size={18} /> {generateMutation.isPending ? 'Génération...' : 'Générer'}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  onClose();
-                  resetForm();
-                }}
-                disabled={generateMutation.isPending}
-              >
-                Annuler
-              </Button>
+              <Button type="button" variant="outline" onClick={() => { onClose(); resetForm(); }} disabled={generateMutation.isPending}>Annuler</Button>
             </div>
           </form>
         </div>
