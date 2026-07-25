@@ -7,4 +7,5 @@ export class GenerateBordereauDto {
   @IsOptional() @IsString() reassureurId?: string; // for CESSION_REASSUREUR — generates one per reinsurer if omitted
   @IsOptional() @IsDateString() datePeriodeDebut?: string;
   @IsOptional() @IsDateString() datePeriodeFin?: string;
+  @IsOptional() @IsDateString() dateLimitePaiement?: string;
 }

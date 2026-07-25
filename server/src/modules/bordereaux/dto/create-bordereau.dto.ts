@@ -19,7 +19,9 @@ export class BordereauLineDto {
   @IsOptional() @IsNumber() sinistresPayes?: number;
   @IsOptional() @IsNumber() recConstitues?: number;
   @IsOptional() @IsNumber() sapConstitues?: number;
+  @IsOptional() @IsNumber() participationsBenef?: number;
   @IsOptional() @IsNumber() taxes?: number;
+  @IsOptional() @IsNumber() brokerage?: number;
   @IsOptional() @IsNumber() primesCedees?: number;
   @IsOptional() @IsNumber() recLiberes?: number;
   @IsOptional() @IsNumber() sapLiberes?: number;
@@ -35,7 +37,9 @@ export class CreateBordereauDto {
   @IsOptional() @IsString() reassureurCode?: string;
   @IsOptional() @IsDateString() datePeriodeDebut?: string;
   @IsOptional() @IsDateString() datePeriodeFin?: string;
+  @IsOptional() @IsDateString() dateLimitePaiement?: string;
   @IsOptional() @IsString() currency?: string;
+  @IsOptional() @IsString() notes?: string;
 
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => BordereauLineDto)
   lines?: BordereauLineDto[];

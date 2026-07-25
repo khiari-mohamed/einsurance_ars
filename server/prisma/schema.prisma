@@ -156,10 +156,29 @@ enum BordereauType {
   FACTURE_PRIME_REASSURANCE_AJUSTEMENT // Reinsurance Premium Invoice — variant B (adjustment)
 }
 
+// ============================================================
+// CHANGED: BordereauStatut — extended from 3 to 6 states to support
+// the real validation → send → payment → archive lifecycle.
+// REJETE is intentionally NOT a persisted status — a rejection folds
+// the bordereau back to BROUILLON (see BordereauxService.reject());
+// the reason is snapshotted on `rejectionReason` and logged to AuditLog.
+// ============================================================
 enum BordereauStatut {
   BROUILLON
+  EN_VALIDATION
+  VALIDE
   EMIS
   ACQUITTE
+  ARCHIVE
+}
+
+// NEW
+enum PaymentMode {
+  VIREMENT
+  CHEQUE
+  TRAITE
+  COMPENSATION
+  AUTRE
 }
 
 enum DocumentStatut {
@@ -584,6 +603,7 @@ model Cedante {
   auxiliaryAccounts AuxiliaryAccount[]
   journalLines     JournalLine[]
   documents        DocumentLink[]     @relation("cedanteDocuments")
+  bordereaux       Bordereau[]
   conventions      Convention[]
 
   isActive         Boolean            @default(true)
@@ -1488,6 +1508,12 @@ model IntegrationExport {
 // BORDEREAUX
 // ============================================================
 
+// ============================================================
+// CHANGED: Bordereau — added workflow timestamps, payment tracking,
+// recipient snapshot (for reminders), notes, and creator/validator
+// bare FKs (no relation — same pattern as FiscalPeriod.closedByUserId /
+// JournalEntry.validatedByUserId elsewhere in this schema).
+// ============================================================
 model Bordereau {
   id               String          @id @default(uuid())
   numero           String          @unique
@@ -1501,6 +1527,7 @@ model Bordereau {
 
   // Party-specific
   cedanteId        String?
+  cedante          Cedante?        @relation(fields: [cedanteId], references: [id])
   reassureurCode   String?         // for CESSION_REASSUREUR — one bordereau per reinsurer
 
   dateEmission     DateTime        @default(now())
@@ -1511,6 +1538,21 @@ model Bordereau {
   montantTotal     Decimal?        @db.Decimal(20, 3)
   montantEnLettres String?         // legal requirement — "CENT QUARANTE HUIT DINARS, 994 MILLIMES"
 
+  // NEW — workflow
+  dateLimitePaiement DateTime?
+  dateValidation     DateTime?
+  dateEnvoi          DateTime?
+  rejectionReason    String?
+  recipients         String[]      @default([])   // snapshot of last send() recipients — reused by reminders
+  notes              String?
+
+  createdByUserId    String?
+  validatedByUserId  String?
+
+  // NEW — payment tracking (cached; solde = montantTotal - montantRegle, derived at read time)
+  montantRegle       Decimal       @default(0) @db.Decimal(20, 3)
+  payments           BordereauPayment[]
+
   lines            BordereauLine[]
   journalEntries   JournalEntry[]
   lettrageItems    LettrageItem[]
@@ -1520,6 +1562,28 @@ model Bordereau {
   updatedAt        DateTime        @updatedAt
 
   @@index([affaireId, type])
+  @@index([statut, dateLimitePaiement])
+  @@index([cedanteId])
+  @@index([reassureurCode])
+}
+
+// NEW
+model BordereauPayment {
+  id                String       @id @default(uuid())
+  bordereauId       String
+  bordereau         Bordereau    @relation(fields: [bordereauId], references: [id])
+
+  montant           Decimal      @db.Decimal(20, 3)
+  modePaiement      PaymentMode
+  datePaiement      DateTime
+  referenceBancaire String?
+  notes             String?
+
+  recordedByUserId  String?
+
+  createdAt         DateTime     @default(now())
+
+  @@index([bordereauId])
 }
 
 model BordereauLine {
