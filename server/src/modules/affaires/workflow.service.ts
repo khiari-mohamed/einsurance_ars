@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AffaireStatut, AffaireType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -25,6 +25,12 @@ export class AffaireWorkflowService {
       where: { id: affaireId },
       include: { reassureurs: true, facultativeData: true, traiteData: true, cedante: true },
     });
+
+    // FIX (Workflow pass): findUniqueOrThrow doesn't filter isActive — a
+    // soft-deleted affaire could previously still have its statut changed.
+    if (!affaire.isActive) {
+      throw new NotFoundException('Affaire introuvable');
+    }
 
     const allowed = TRANSITIONS[affaire.statut];
     if (!allowed.includes(targetStatus)) {

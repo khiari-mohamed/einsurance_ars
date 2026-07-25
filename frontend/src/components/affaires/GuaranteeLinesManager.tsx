@@ -1,299 +1,172 @@
-import React, { useState, useEffect } from 'react';
-import { guaranteeLinesApi } from '../../api/extended.api';
-
-interface GuaranteeLine {
-  id: string;
-  affaireId: string;
-  numeroLigne: number;
-  codeGarantie: string;
-  libelleGarantie: string;
-  capitalAssure: number;
-  tauxPrime: number;
-  primeNette: number;
-  franchise?: number;
-  plafond?: number;
-  observations?: string;
-}
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Plus, Trash2, Save, AlertCircle } from 'lucide-react';
+import { facultativeApi } from '../../api/facultative.api';
+import { formatCurrency } from '../../lib/currency';
+import { GuaranteeLineInput } from '../../types/facultative.types';
 
 interface Props {
   affaireId: string;
 }
 
-export const GuaranteeLinesManager: React.FC<Props> = ({ affaireId }) => {
-  const [lines, setLines] = useState<GuaranteeLine[]>([]);
-  const [totals, setTotals] = useState<{ totalCapital: number; totalPrime: number } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [formData, setFormData] = useState<Partial<GuaranteeLine>>({});
+// FIX (Affaires Pass 2): full rewrite. The previous version invented fields
+// (numeroLigne, codeGarantie, libelleGarantie, tauxPrime, primeNette,
+// franchise, plafond, observations) that don't exist on the real
+// GuaranteeLine model (garantie, capitauxAssures100, ordre only) and called
+// a guaranteeLinesApi with getByAffaire/getTotals routes that have no
+// backend counterpart. This version uses facultativeApi (wired to the real
+// /facultatives controller) and edits via the atomic replace-all endpoint,
+// which matches the CDC's "table répétable" pattern for guarantee lines and
+// avoids partial-save inconsistencies.
+export function GuaranteeLinesManager({ affaireId }: Props) {
+  const queryClient = useQueryClient();
+  const [rows, setRows] = useState<GuaranteeLineInput[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [error, setError] = useState('');
+
+  const { data: fac, isLoading } = useQuery({
+    queryKey: ['facultative', affaireId],
+    queryFn: async () => (await facultativeApi.getOne(affaireId)).data,
+  });
 
   useEffect(() => {
-    loadLines();
-  }, [affaireId]);
-
-  const loadLines = async () => {
-    try {
-      const [linesData, totalsData] = await Promise.all([
-        guaranteeLinesApi.getByAffaire(affaireId),
-        guaranteeLinesApi.getTotals(affaireId),
-      ]);
-      setLines(linesData);
-      setTotals(totalsData);
-    } catch (error) {
-      console.error('Failed to load guarantee lines:', error);
-    } finally {
-      setLoading(false);
+    if (fac && !isDirty) {
+      setRows(
+        fac.guaranteeLines.map((g) => ({ garantie: g.garantie, capitauxAssures100: g.capitauxAssures100, ordre: g.ordre })),
+      );
     }
+  }, [fac]);
+
+  const saveMutation = useMutation({
+    mutationFn: (lines: GuaranteeLineInput[]) => facultativeApi.replaceGuaranteeLines(affaireId, lines),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['facultative', affaireId] });
+      queryClient.invalidateQueries({ queryKey: ['affaire', affaireId] });
+      setIsDirty(false);
+      setError('');
+    },
+    onError: (err: any) => {
+      setError(err.response?.data?.message || 'Erreur lors de l\'enregistrement.');
+    },
+  });
+
+  const addRow = () => {
+    setRows((prev) => [...prev, { garantie: '', capitauxAssures100: 0, ordre: prev.length + 1 }]);
+    setIsDirty(true);
   };
 
-  const handleAdd = async () => {
-    try {
-      await guaranteeLinesApi.create({
-        ...formData,
-        affaireId,
-        numeroLigne: lines.length + 1,
-      });
-      await loadLines();
-      setShowAddForm(false);
-      setFormData({});
-    } catch (error) {
-      console.error('Failed to add guarantee line:', error);
+  const updateRow = (idx: number, patch: Partial<GuaranteeLineInput>) => {
+    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+    setIsDirty(true);
+  };
+
+  const removeRow = (idx: number) => {
+    setRows((prev) => prev.filter((_, i) => i !== idx));
+    setIsDirty(true);
+  };
+
+  const handleSave = () => {
+    const invalid = rows.some((r) => !r.garantie.trim() || r.capitauxAssures100 < 0);
+    if (invalid) {
+      setError('Chaque ligne doit avoir un libellé de garantie et un capital assuré ≥ 0.');
+      return;
     }
+    saveMutation.mutate(rows.map((r, i) => ({ ...r, ordre: i + 1 })));
   };
 
-  const handleUpdate = async (id: string) => {
-    try {
-      await guaranteeLinesApi.update(id, formData);
-      await loadLines();
-      setEditingId(null);
-      setFormData({});
-    } catch (error) {
-      console.error('Failed to update guarantee line:', error);
-    }
-  };
+  const totalCapitaux = rows.reduce((sum, r) => sum + (r.capitauxAssures100 || 0), 0);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette ligne de garantie?')) return;
-    try {
-      await guaranteeLinesApi.delete(id);
-      await loadLines();
-    } catch (error) {
-      console.error('Failed to delete guarantee line:', error);
-    }
-  };
-
-  const startEdit = (line: GuaranteeLine) => {
-    setEditingId(line.id);
-    setFormData(line);
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setFormData({});
-  };
-
-  if (loading) return <div>Chargement...</div>;
+  if (isLoading) return <div className="p-4 text-[13px] text-gray-500">Chargement...</div>;
 
   return (
-    <div className="guarantee-lines-manager">
-      <div className="header">
-        <h3>Lignes de Garantie</h3>
-        <button onClick={() => setShowAddForm(true)} className="btn-primary">
-          Ajouter Ligne
-        </button>
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-[13px] font-semibold text-gray-900">Capitaux assurés 100% par garantie</h4>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={addRow}
+            className="flex items-center gap-1.5 text-[12px] font-medium text-blue-600 hover:text-blue-700"
+          >
+            <Plus size={14} />
+            Ajouter une ligne
+          </button>
+          {isDirty && (
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saveMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              <Save size={13} />
+              {saveMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+            </button>
+          )}
+        </div>
       </div>
 
-      {showAddForm && (
-        <div className="add-form">
-          <h4>Nouvelle Ligne de Garantie</h4>
-          <div className="form-grid">
-            <div className="form-group">
-              <label>Code Garantie *</label>
-              <input
-                type="text"
-                value={formData.codeGarantie || ''}
-                onChange={(e) => setFormData({ ...formData, codeGarantie: e.target.value })}
-                placeholder="Ex: RC-AUTO"
-              />
-            </div>
-            <div className="form-group">
-              <label>Libellé Garantie *</label>
-              <input
-                type="text"
-                value={formData.libelleGarantie || ''}
-                onChange={(e) => setFormData({ ...formData, libelleGarantie: e.target.value })}
-                placeholder="Ex: Responsabilité Civile Automobile"
-              />
-            </div>
-            <div className="form-group">
-              <label>Capital Assuré (TND) *</label>
-              <input
-                type="number"
-                step="0.001"
-                value={formData.capitalAssure || ''}
-                onChange={(e) => setFormData({ ...formData, capitalAssure: Number(e.target.value) })}
-              />
-            </div>
-            <div className="form-group">
-              <label>Taux Prime (%) *</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.tauxPrime || ''}
-                onChange={(e) => {
-                  const taux = Number(e.target.value);
-                  const prime = formData.capitalAssure ? (formData.capitalAssure * taux) / 100 : 0;
-                  setFormData({ ...formData, tauxPrime: taux, primeNette: prime });
-                }}
-              />
-            </div>
-            <div className="form-group">
-              <label>Prime Nette (TND)</label>
-              <input
-                type="number"
-                step="0.001"
-                value={formData.primeNette || ''}
-                readOnly
-                className="readonly"
-              />
-            </div>
-            <div className="form-group">
-              <label>Franchise (TND)</label>
-              <input
-                type="number"
-                step="0.001"
-                value={formData.franchise || ''}
-                onChange={(e) => setFormData({ ...formData, franchise: Number(e.target.value) })}
-              />
-            </div>
-            <div className="form-group">
-              <label>Plafond (TND)</label>
-              <input
-                type="number"
-                step="0.001"
-                value={formData.plafond || ''}
-                onChange={(e) => setFormData({ ...formData, plafond: Number(e.target.value) })}
-              />
-            </div>
-            <div className="form-group full-width">
-              <label>Observations</label>
-              <textarea
-                value={formData.observations || ''}
-                onChange={(e) => setFormData({ ...formData, observations: e.target.value })}
-                rows={3}
-              />
-            </div>
-          </div>
-          <div className="form-actions">
-            <button onClick={handleAdd} className="btn-primary">Ajouter</button>
-            <button onClick={() => { setShowAddForm(false); setFormData({}); }} className="btn-secondary">Annuler</button>
-          </div>
+      {error && (
+        <div className="mb-3 p-2.5 bg-red-50 border border-red-200 rounded-lg text-[12px] text-red-700 flex items-center gap-2">
+          <AlertCircle size={14} />
+          {error}
         </div>
       )}
 
-      <table className="guarantee-lines-table">
-        <thead>
-          <tr>
-            <th>N°</th>
-            <th>Code</th>
-            <th>Garantie</th>
-            <th>Capital Assuré</th>
-            <th>Taux Prime</th>
-            <th>Prime Nette</th>
-            <th>Franchise</th>
-            <th>Plafond</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lines.map((line) => (
-            <tr key={line.id}>
-              {editingId === line.id ? (
-                <>
-                  <td>{line.numeroLigne}</td>
-                  <td>
+      {rows.length === 0 ? (
+        <p className="text-[13px] text-gray-400 text-center py-6 border border-dashed border-gray-200 rounded-lg">
+          Aucune ligne de garantie. Cliquez sur "Ajouter une ligne".
+        </p>
+      ) : (
+        <div className="border border-gray-100 rounded-lg overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Garantie</th>
+                <th className="px-3 py-2 text-right text-[11px] font-semibold text-gray-600 uppercase">Capitaux assurés 100%</th>
+                <th className="px-3 py-2 w-10"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((r, idx) => (
+                <tr key={idx}>
+                  <td className="px-3 py-2">
                     <input
-                      type="text"
-                      value={formData.codeGarantie || ''}
-                      onChange={(e) => setFormData({ ...formData, codeGarantie: e.target.value })}
+                      value={r.garantie}
+                      onChange={(e) => updateRow(idx, { garantie: e.target.value })}
+                      placeholder="Ex: Incendie"
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </td>
-                  <td>
-                    <input
-                      type="text"
-                      value={formData.libelleGarantie || ''}
-                      onChange={(e) => setFormData({ ...formData, libelleGarantie: e.target.value })}
-                    />
-                  </td>
-                  <td>
+                  <td className="px-3 py-2">
                     <input
                       type="number"
-                      value={formData.capitalAssure || ''}
-                      onChange={(e) => setFormData({ ...formData, capitalAssure: Number(e.target.value) })}
+                      step="0.001"
+                      min="0"
+                      value={r.capitauxAssures100}
+                      onChange={(e) => updateRow(idx, { capitauxAssures100: parseFloat(e.target.value) || 0 })}
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] text-right focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={formData.tauxPrime || ''}
-                      onChange={(e) => {
-                        const taux = Number(e.target.value);
-                        const prime = formData.capitalAssure ? (formData.capitalAssure * taux) / 100 : 0;
-                        setFormData({ ...formData, tauxPrime: taux, primeNette: prime });
-                      }}
-                    />
+                  <td className="px-3 py-2 text-right">
+                    <button type="button" onClick={() => removeRow(idx)} className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors">
+                      <Trash2 size={14} />
+                    </button>
                   </td>
-                  <td>{formData.primeNette?.toFixed(3)}</td>
-                  <td>
-                    <input
-                      type="number"
-                      value={formData.franchise || ''}
-                      onChange={(e) => setFormData({ ...formData, franchise: Number(e.target.value) })}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="number"
-                      value={formData.plafond || ''}
-                      onChange={(e) => setFormData({ ...formData, plafond: Number(e.target.value) })}
-                    />
-                  </td>
-                  <td>
-                    <button onClick={() => handleUpdate(line.id)} className="btn-sm btn-success">✓</button>
-                    <button onClick={cancelEdit} className="btn-sm btn-secondary">✗</button>
-                  </td>
-                </>
-              ) : (
-                <>
-                  <td>{line.numeroLigne}</td>
-                  <td>{line.codeGarantie}</td>
-                  <td>{line.libelleGarantie}</td>
-                  <td>{line.capitalAssure.toFixed(3)} TND</td>
-                  <td>{line.tauxPrime}%</td>
-                  <td>{line.primeNette.toFixed(3)} TND</td>
-                  <td>{line.franchise?.toFixed(3) || '-'}</td>
-                  <td>{line.plafond?.toFixed(3) || '-'}</td>
-                  <td>
-                    <button onClick={() => startEdit(line)} className="btn-sm btn-primary">Modifier</button>
-                    <button onClick={() => handleDelete(line.id)} className="btn-sm btn-danger">Supprimer</button>
-                  </td>
-                </>
-              )}
-            </tr>
-          ))}
-        </tbody>
-        {totals && (
-          <tfoot>
-            <tr className="totals-row">
-              <td colSpan={3}><strong>TOTAUX</strong></td>
-              <td><strong>{totals.totalCapital.toFixed(3)} TND</strong></td>
-              <td></td>
-              <td><strong>{totals.totalPrime.toFixed(3)} TND</strong></td>
-              <td colSpan={3}></td>
-            </tr>
-          </tfoot>
-        )}
-      </table>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-gray-50 border-t border-gray-100">
+              <tr>
+                <td className="px-3 py-2 text-[12px] font-semibold text-gray-700">Total</td>
+                <td className="px-3 py-2 text-[13px] font-semibold text-gray-900 text-right">{formatCurrency(totalCapitaux, 'TND')}</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </div>
   );
-};
+}
+
+export default GuaranteeLinesManager;

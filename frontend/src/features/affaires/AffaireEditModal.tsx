@@ -1,127 +1,83 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, Save, AlertCircle } from 'lucide-react';
+import { X, Save, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import masterDataApi from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
-import { Affaire, AffaireCategory, CommissionCalculMode, CreateAffaireReinsurer } from '../../types/affaire.types';
+import {
+  Affaire, AffaireType, UpdateAffaireDto, AffaireReassureurInput, CommissionMode,
+  GuaranteeLineInput,
+} from '../../types/affaire.types';
 
 interface Props {
   affaire: Affaire;
   onClose: () => void;
 }
 
+// FIX (Affaires pass): full rewrite — the old version edited a flat,
+// nonexistent shape (assureId/capitalAssure100/tauxCommissionARS directly on
+// Affaire, single global commission). This edits the real nested structure
+// and — per AffairesService.update()'s contract — sends the FULL
+// facultativeData/traiteData object on every save (the backend's nested
+// DTOs require their base fields even on partial updates), not a delta.
 export default function AffaireEditModal({ affaire, onClose }: Props) {
   const queryClient = useQueryClient();
   const [errors, setErrors] = useState<string[]>([]);
 
-  const [formData, setFormData] = useState({
-    category: affaire.category,
-    type: affaire.type,
-    assureId: affaire.assureId,
-    cedanteId: affaire.cedanteId,
-    coCourtierId: affaire.coCourtierId,
-    numeroPolice: affaire.numeroPolice,
-    branche: affaire.branche,
-    garantie: affaire.garantie,
-    dateEffet: affaire.dateEffet.split('T')[0],
-    dateEcheance: affaire.dateEcheance.split('T')[0],
-    devise: affaire.devise,
-    capitalAssure100: affaire.capitalAssure100,
-    prime100: affaire.prime100,
-    tauxCession: affaire.tauxCession,
-    tauxCommissionCedante: affaire.tauxCommissionCedante,
-    modeCalculCommissionCedante: affaire.modeCalculCommissionCedante,
-    montantCommissionCedante: affaire.montantCommissionCedante,
-    tauxCommissionARS: affaire.tauxCommissionARS,
-    modeCalculCommissionARS: affaire.modeCalculCommissionARS,
-    montantCommissionARS: affaire.montantCommissionARS,
-    treatyType: affaire.treatyType,
-    periodiciteComptes: affaire.periodiciteComptes,
-    primePrevisionnelle: affaire.primePrevisionnelle,
-    pmd: affaire.pmd,
-    reinsurers: affaire.reinsurers.map(r => ({
+  const [modePaiement, setModePaiement] = useState(affaire.modePaiement);
+  const [currency, setCurrency] = useState(affaire.currency);
+
+  const [fac, setFac] = useState(affaire.facultativeData ? { ...affaire.facultativeData } : null);
+  const [guaranteeLines, setGuaranteeLines] = useState<GuaranteeLineInput[]>(
+    affaire.facultativeData?.guaranteeLines?.map((g) => ({ garantie: g.garantie, capitauxAssures100: g.capitauxAssures100, ordre: g.ordre })) || []
+  );
+
+  const [traite, setTraite] = useState(affaire.traiteData ? { ...affaire.traiteData } : null);
+
+  const [reassureurs, setReassureurs] = useState<AffaireReassureurInput[]>(
+    affaire.reassureurs.map((r) => ({
       reassureurId: r.reassureurId,
-      share: r.share,
-      role: r.role,
-    })),
-    notes: affaire.notes,
-  });
+      partPct: r.partPct,
+      isLeader: r.isLeader,
+      commissionMode: r.commissionMode,
+      tauxCommissionArs: r.tauxCommissionArs,
+      commissionForfait: r.commissionForfait,
+    }))
+  );
 
-  const { data: assures = [] } = useQuery({
-    queryKey: ['assures'],
-    queryFn: async () => {
-      const { data } = await masterDataApi.assures.getAll();
-      return data.data;
-    },
-  });
-
-  const { data: cedantes = [] } = useQuery({
-    queryKey: ['cedantes'],
-    queryFn: async () => {
-      const { data } = await masterDataApi.cedantes.getAll();
-      return data.data;
-    },
-  });
-
-  const { data: reassureurs = [] } = useQuery({
+  const { data: reassureursOptions = [] } = useQuery({
     queryKey: ['reassureurs'],
-    queryFn: async () => {
-      const { data } = await masterDataApi.reassureurs.getAll();
-      return data.data;
-    },
+    queryFn: async () => (await masterDataApi.reassureurs.getAll({ limit: 500 })).data.data,
   });
 
   const mutation = useMutation({
-    mutationFn: (data: any) => affairesApi.update(affaire.id, data),
+    mutationFn: (data: UpdateAffaireDto) => affairesApi.update(affaire.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['affaire', affaire.id] });
       queryClient.invalidateQueries({ queryKey: ['affaires'] });
-      alert('✅ Affaire modifiée avec succès');
       onClose();
     },
     onError: (error: any) => {
       const message = error.response?.data?.message || 'Erreur lors de la modification';
-      setErrors([message]);
+      setErrors([Array.isArray(message) ? message.join(', ') : message]);
     },
   });
 
-  const primeCedee = formData.category === AffaireCategory.TRAITEE 
-    ? (formData.primePrevisionnelle || 0)
-    : (formData.prime100 * formData.tauxCession) / 100;
-  
-  const commissionCedante = formData.modeCalculCommissionCedante === CommissionCalculMode.MANUEL
-    ? (formData.montantCommissionCedante || 0)
-    : (primeCedee * (formData.tauxCommissionCedante || 0)) / 100;
-  
-  const commissionARS = formData.modeCalculCommissionARS === CommissionCalculMode.MANUEL
-    ? (formData.montantCommissionARS || 0)
-    : (primeCedee * (formData.tauxCommissionARS || 0)) / 100;
-
-  const totalReinsurerShare = formData.reinsurers.reduce((sum, r) => sum + r.share, 0);
+  const totalShare = reassureurs.reduce((sum, r) => sum + (r.partPct || 0), 0);
 
   const validateForm = (): boolean => {
     const errs: string[] = [];
-    
-    if (totalReinsurerShare !== 100) {
-      errs.push('La somme des parts des réassureurs doit être égale à 100%');
+    if (Math.abs(totalShare - 100) > 0.001) errs.push('La somme des participations doit être 100%');
+    const seen = new Set<string>();
+    for (const r of reassureurs) {
+      if (!r.reassureurId) errs.push('Chaque ligne doit avoir un réassureur sélectionné');
+      if (seen.has(r.reassureurId)) errs.push('Un même réassureur ne peut apparaître qu\'une seule fois');
+      seen.add(r.reassureurId);
     }
-    
-    if (commissionARS > commissionCedante) {
-      errs.push('Commission ARS ne peut pas dépasser la commission cédante');
+    const dateEffet = affaire.type === AffaireType.FACULTATIVE ? fac?.dateEffet : traite?.dateEffet;
+    const dateEcheance = affaire.type === AffaireType.FACULTATIVE ? fac?.dateEcheance : traite?.dateEcheance;
+    if (dateEffet && dateEcheance && new Date(dateEffet) >= new Date(dateEcheance)) {
+      errs.push('La date d\'effet doit être antérieure à la date d\'échéance');
     }
-    
-    if (commissionARS > primeCedee) {
-      errs.push('Commission ARS ne peut pas dépasser la prime cédée');
-    }
-    
-    if (new Date(formData.dateEffet) >= new Date(formData.dateEcheance)) {
-      errs.push('Date effet doit être avant date échéance');
-    }
-    
-    if (formData.reinsurers.length === 0) {
-      errs.push('Au moins un réassureur est requis');
-    }
-    
     setErrors(errs);
     return errs.length === 0;
   };
@@ -129,34 +85,79 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) return;
-    mutation.mutate(formData);
+
+    const dto: UpdateAffaireDto = {
+      modePaiement,
+      currency,
+      reassureurs,
+      ...(affaire.type === AffaireType.FACULTATIVE && fac
+        ? {
+            facultativeData: {
+              reassuranceType: fac.reassuranceType,
+              assureId: fac.assureId,
+              numeroPoliceCedante: fac.numeroPoliceCedante,
+              dateEffet: fac.dateEffet,
+              dateEcheance: fac.dateEcheance,
+              modeRenouvellement: fac.modeRenouvellement,
+              paysAssure: fac.paysAssure,
+              branche: fac.branche,
+              produit: fac.produit,
+              garantie: fac.garantie,
+              prime100Pct: fac.prime100Pct,
+              tauxPrime: fac.tauxPrime,
+              tauxCession: fac.tauxCession,
+              tauxCommissionCedante: fac.tauxCommissionCedante,
+              guaranteeLines,
+            },
+          }
+        : {}),
+      ...(affaire.type === AffaireType.TRAITE && traite
+        ? {
+            traiteData: {
+              referenceTraite: traite.referenceTraite,
+              reassuranceType: traite.reassuranceType,
+              formeCouverture: traite.formeCouverture,
+              dateEffet: traite.dateEffet,
+              dateEcheance: traite.dateEcheance,
+              modeRenouvellement: traite.modeRenouvellement,
+              dateAvisResiliation: traite.dateAvisResiliation,
+              zoneGeographique: traite.zoneGeographique,
+              branche: traite.branche,
+              produit: traite.produit,
+              garantie: traite.garantie,
+              periodicite: traite.periodicite,
+              primePrevisionnelle: traite.primePrevisionnelle,
+              pmd: traite.pmd,
+              tauxCommissionCedante: traite.tauxCommissionCedante,
+              commissionLiquidationArs: traite.commissionLiquidationArs,
+              seuilNotification: traite.seuilNotification,
+              // accountRubriques/pmdInstalments intentionally omitted here —
+              // left unchanged unless edited; a dedicated manager UI for
+              // those (TreatyParametersManager / PmdInstalmentsManager,
+              // already in the tree) is reviewed in the Traité pass.
+            },
+          }
+        : {}),
+    };
+    mutation.mutate(dto);
   };
 
-  const addReinsurer = () => {
-    setFormData({
-      ...formData,
-      reinsurers: [...formData.reinsurers, { reassureurId: '', share: 0, role: 'FOLLOWER' }],
-    });
-  };
+  const addReassureur = () =>
+    setReassureurs((prev) => [...prev, { reassureurId: '', partPct: 0, commissionMode: CommissionMode.CALCULABLE, tauxCommissionArs: 0 }]);
+  const updateReassureur = (idx: number, patch: Partial<AffaireReassureurInput>) =>
+    setReassureurs((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const removeReassureur = (idx: number) => setReassureurs((prev) => prev.filter((_, i) => i !== idx));
 
-  const updateReinsurer = (index: number, field: keyof CreateAffaireReinsurer, value: any) => {
-    const updated = [...formData.reinsurers];
-    updated[index] = { ...updated[index], [field]: value };
-    setFormData({ ...formData, reinsurers: updated });
-  };
-
-  const removeReinsurer = (index: number) => {
-    setFormData({
-      ...formData,
-      reinsurers: formData.reinsurers.filter((_, i) => i !== index),
-    });
-  };
+  const addGuaranteeLine = () => setGuaranteeLines((prev) => [...prev, { garantie: '', capitauxAssures100: 0 }]);
+  const updateGuaranteeLine = (idx: number, patch: Partial<GuaranteeLineInput>) =>
+    setGuaranteeLines((prev) => prev.map((g, i) => (i === idx ? { ...g, ...patch } : g)));
+  const removeGuaranteeLine = (idx: number) => setGuaranteeLines((prev) => prev.filter((_, i) => i !== idx));
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-[18px] font-semibold text-gray-900">Modifier l'Affaire</h2>
+          <h2 className="text-[18px] font-semibold text-gray-900">Modifier l'Affaire {affaire.numero}</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
             <X size={20} />
           </button>
@@ -165,175 +166,139 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Assuré *</label>
-              <select
-                value={formData.assureId}
-                onChange={(e) => setFormData({ ...formData, assureId: e.target.value })}
-                required
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Sélectionner</option>
-                {assures.map((a: any) => (
-                  <option key={a.id} value={a.id}>{a.raisonSociale}</option>
-                ))}
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de paiement</label>
+              <select value={modePaiement} onChange={(e) => setModePaiement(e.target.value as any)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="PAR_AFFAIRE">Par Affaire</option>
+                <option value="PAR_SITUATION">Par Situation</option>
               </select>
             </div>
-
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Cédante *</label>
-              <select
-                value={formData.cedanteId}
-                onChange={(e) => setFormData({ ...formData, cedanteId: e.target.value })}
-                required
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Sélectionner</option>
-                {cedantes.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.raisonSociale}</option>
-                ))}
+              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {['TND', 'EUR', 'USD', 'GBP'].map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
+          </div>
 
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">N° Police</label>
-              <input
-                type="text"
-                value={formData.numeroPolice || ''}
-                onChange={(e) => setFormData({ ...formData, numeroPolice: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Branche</label>
-              <input
-                type="text"
-                value={formData.branche || ''}
-                onChange={(e) => setFormData({ ...formData, branche: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-
-            {formData.category === AffaireCategory.FACULTATIVE ? (
-              <>
+          {affaire.type === AffaireType.FACULTATIVE && fac && (
+            <div className="space-y-4">
+              <h3 className="text-[14px] font-semibold text-gray-900">Données Facultative</h3>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Capital Assuré 100%</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.capitalAssure100}
-                    onChange={(e) => setFormData({ ...formData, capitalAssure100: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">N° Police cédante</label>
+                  <input type="text" value={fac.numeroPoliceCedante || ''} onChange={(e) => setFac({ ...fac, numeroPoliceCedante: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Branche</label>
+                  <input type="text" value={fac.branche || ''} onChange={(e) => setFac({ ...fac, branche: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Effet</label>
+                  <input type="date" value={fac.dateEffet.split('T')[0]} onChange={(e) => setFac({ ...fac, dateEffet: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Échéance</label>
+                  <input type="date" value={fac.dateEcheance.split('T')[0]} onChange={(e) => setFac({ ...fac, dateEcheance: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime 100%</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.prime100}
-                    onChange={(e) => setFormData({ ...formData, prime100: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <input type="number" step="0.001" value={fac.prime100Pct} onChange={(e) => setFac({ ...fac, prime100Pct: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Cession (%)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.tauxCession}
-                    onChange={(e) => setFormData({ ...formData, tauxCession: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <input type="number" step="0.0001" value={fac.tauxCession} onChange={(e) => setFac({ ...fac, tauxCession: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-              </>
-            ) : (
-              <>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission Cédante (%)</label>
+                  <input type="number" step="0.0001" value={fac.tauxCommissionCedante || 0} onChange={(e) => setFac({ ...fac, tauxCommissionCedante: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[13px] font-semibold text-gray-900">Capitaux assurés par garantie</h4>
+                  <button type="button" onClick={addGuaranteeLine} className="flex items-center gap-1 text-[12px] text-blue-600 hover:text-blue-700 font-medium">
+                    <Plus size={13} /> Ajouter
+                  </button>
+                </div>
+                {guaranteeLines.map((g, idx) => (
+                  <div key={idx} className="flex items-center gap-2 mb-2">
+                    <input placeholder="Garantie" value={g.garantie} onChange={(e) => updateGuaranteeLine(idx, { garantie: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <input type="number" step="0.001" placeholder="Capitaux 100%" value={g.capitauxAssures100} onChange={(e) => updateGuaranteeLine(idx, { capitauxAssures100: parseFloat(e.target.value) || 0 })} className="w-40 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <button type="button" onClick={() => removeGuaranteeLine(idx)} className="p-2 rounded-lg hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {affaire.type === AffaireType.TRAITE && traite && (
+            <div className="space-y-4">
+              <h3 className="text-[14px] font-semibold text-gray-900">Données Traité</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Référence traité</label>
+                  <input type="text" value={traite.referenceTraite || ''} onChange={(e) => setTraite({ ...traite, referenceTraite: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Effet</label>
+                  <input type="date" value={traite.dateEffet.split('T')[0]} onChange={(e) => setTraite({ ...traite, dateEffet: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Échéance</label>
+                  <input type="date" value={traite.dateEcheance.split('T')[0]} onChange={(e) => setTraite({ ...traite, dateEcheance: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime Prévisionnelle</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.primePrevisionnelle || 0}
-                    onChange={(e) => setFormData({ ...formData, primePrevisionnelle: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <input type="number" step="0.001" value={traite.primePrevisionnelle || 0} onChange={(e) => setTraite({ ...traite, primePrevisionnelle: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">PMD</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.pmd || 0}
-                    onChange={(e) => setFormData({ ...formData, pmd: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                  <input type="number" step="0.001" value={traite.pmd || 0} onChange={(e) => setTraite({ ...traite, pmd: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-              </>
-            )}
-
-            <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission ARS (%)</label>
-              <input
-                type="number"
-                step="0.01"
-                value={formData.tauxCommissionARS}
-                onChange={(e) => setFormData({ ...formData, tauxCommissionARS: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission Cédante (%)</label>
+                  <input type="number" step="0.0001" value={traite.tauxCommissionCedante || 0} onChange={(e) => setTraite({ ...traite, tauxCommissionCedante: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-400">
+                Rubriques comptables et échéancier PMD se gèrent depuis les gestionnaires dédiés (onglet Traité de la fiche détail).
+              </p>
             </div>
-          </div>
+          )}
 
           <div>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-[14px] font-semibold text-gray-900">Réassureurs</h3>
-              <button
-                type="button"
-                onClick={addReinsurer}
-                className="text-[13px] text-blue-600 hover:text-blue-700 font-medium"
-              >
-                + Ajouter
-              </button>
+              <button type="button" onClick={addReassureur} className="text-[13px] text-blue-600 hover:text-blue-700 font-medium">+ Ajouter</button>
             </div>
-            {formData.reinsurers.map((reinsurer, index) => (
-              <div key={index} className="p-3 border border-gray-200 rounded-lg mb-2">
-                <div className="grid grid-cols-3 gap-3">
+            {reassureurs.map((r, idx) => (
+              <div key={idx} className="p-3 border border-gray-200 rounded-lg mb-2 space-y-2">
+                <div className="grid grid-cols-4 gap-3">
                   <div className="col-span-2">
-                    <select
-                      value={reinsurer.reassureurId}
-                      onChange={(e) => updateReinsurer(index, 'reassureurId', e.target.value)}
-                      required
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
+                    <select value={r.reassureurId} onChange={(e) => updateReassureur(idx, { reassureurId: e.target.value })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option value="">Sélectionner</option>
-                      {reassureurs.map((r: any) => (
-                        <option key={r.id} value={r.id}>{r.raisonSociale}</option>
-                      ))}
+                      {reassureursOptions.map((ro: any) => <option key={ro.id} value={ro.id}>{ro.raisonSociale}</option>)}
                     </select>
                   </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      step="0.01"
-                      placeholder="Part %"
-                      value={reinsurer.share}
-                      onChange={(e) => updateReinsurer(index, 'share', parseFloat(e.target.value) || 0)}
-                      required
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeReinsurer(index)}
-                      className="px-2 text-red-600 hover:bg-red-50 rounded"
-                    >
-                      ×
-                    </button>
-                  </div>
+                  <input type="number" step="0.0001" placeholder="Part %" value={r.partPct} onChange={(e) => updateReassureur(idx, { partPct: parseFloat(e.target.value) || 0 })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <button type="button" onClick={() => removeReassureur(idx)} className="px-2 text-red-600 hover:bg-red-50 rounded">×</button>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  <select value={r.commissionMode} onChange={(e) => updateReassureur(idx, { commissionMode: e.target.value as CommissionMode })} className="px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value={CommissionMode.CALCULABLE}>Calculable</option>
+                    <option value={CommissionMode.FORFAITAIRE}>Forfaitaire</option>
+                  </select>
+                  {r.commissionMode === CommissionMode.CALCULABLE ? (
+                    <input type="number" step="0.0001" placeholder="Taux ARS %" value={r.tauxCommissionArs || 0} onChange={(e) => updateReassureur(idx, { tauxCommissionArs: parseFloat(e.target.value) || 0 })} className="col-span-2 px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  ) : (
+                    <input type="number" step="0.001" placeholder="Montant forfaitaire" value={r.commissionForfait || 0} onChange={(e) => updateReassureur(idx, { commissionForfait: parseFloat(e.target.value) || 0 })} className="col-span-2 px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  )}
                 </div>
               </div>
             ))}
-            <div className={`p-2 rounded-lg text-[12px] ${totalReinsurerShare === 100 ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>
-              Total: {totalReinsurerShare.toFixed(2)}%
+            <div className={`p-2 rounded-lg text-[12px] ${Math.abs(totalShare - 100) < 0.001 ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>
+              Total: {totalShare.toFixed(4)}%
             </div>
           </div>
 
@@ -353,19 +318,10 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
         </form>
 
         <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
+          <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
             Annuler
           </button>
-          <button
-            type="submit"
-            onClick={handleSubmit}
-            disabled={mutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-          >
+          <button type="submit" onClick={handleSubmit} disabled={mutation.isPending} className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
             <Save size={16} />
             {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
           </button>

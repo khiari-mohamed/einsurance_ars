@@ -78,6 +78,9 @@ export const gedApi = {
     return response.data;
   },
 
+  // NOTE: this hits GET /ged/shared/:token, which is a @Public() route on
+  // the backend (no auth header required/sent) — that's intentional, this
+  // is meant to work for an external recipient with just the link.
   accessSharedDocument: async (token: string, password?: string): Promise<Blob> => {
     const response = await api.get(`/ged/shared/${token}`, {
       params: { password },
@@ -108,6 +111,27 @@ export const gedApi = {
 
   getPaymentDocuments: async (paymentId: string): Promise<Document[]> => {
     const response = await api.get(`/ged/finance/payment/${paymentId}/documents`);
+    return response.data;
+  },
+
+  // ── Checklists ────────────────────────────────────────────────────
+  // NEW: DocumentChecklist.tsx previously bypassed the API layer entirely
+  // with raw `fetch()` calls to non-existent/unauthenticated endpoints.
+  // These bring checklist access into the same authenticated axios
+  // instance (Bearer token, envelope-unwrapping, silent refresh) as
+  // everything else in this file.
+  getChecklist: async (affaireId: string): Promise<any> => {
+    const response = await api.get(`/ged/checklist/${affaireId}`);
+    return response.data;
+  },
+
+  markItemReceived: async (checklistId: string, itemId: string, documentId: string): Promise<any> => {
+    const response = await api.post(`/ged/checklist/${checklistId}/items/${itemId}/receive`, { documentId });
+    return response.data;
+  },
+
+  markItemRejected: async (checklistId: string, itemId: string): Promise<any> => {
+    const response = await api.post(`/ged/checklist/${checklistId}/items/${itemId}/reject`, {});
     return response.data;
   },
 };

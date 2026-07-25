@@ -875,6 +875,48 @@ model TraiteAffaire {
   renewalReminderSent      Boolean                 @default(false)     // re-param reminder at Jan 1
 
   situations               Situation[]
+
+  // NEW (Workflow pass): commercial-terms version history — see model below.
+  parameterVersions        TreatyParameterVersion[]
+}
+
+// ============================================================
+// NEW (Workflow pass): Treaty commercial parameter versioning
+// ============================================================
+// TraiteAffaire itself stays flat (one row per affaire, matching how every
+// other Affaires entity works). This model tracks the negotiated commercial
+// terms (commission rates, plafond de garantie, franchises, clauses) as a
+// versioned history *within the same treaty* — every change or renewal
+// archives the old version (isActive: false) and creates a new one, rather
+// than mutating in place. Deliberately does NOT drive commission
+// calculations automatically (TreatyCalculatorService/AffaireReassureur
+// remain the source of truth for that, unchanged) — this is a reference/
+// audit trail of what was commercially agreed and when, matching the CDC's
+// intent for a "historique des modifications" on treaty parameters.
+model TreatyParameterVersion {
+  id                     String        @id @default(uuid())
+  traiteId               String
+  traite                 TraiteAffaire @relation(fields: [traiteId], references: [id])
+  version                Int
+
+  dateDebut              DateTime
+  dateFin                DateTime
+
+  tauxCommissionCedante  Decimal       @db.Decimal(7, 4)
+  tauxCommissionCourtage Decimal       @db.Decimal(7, 4)  // ARS brokerage rate for this period
+  plafondGarantie        Decimal?      @db.Decimal(20, 3)
+  franchiseAbsolue       Decimal?      @db.Decimal(20, 3)
+  franchiseRelative      Decimal?      @db.Decimal(7, 4)
+  clauseParticuliere     String?
+
+  motifModification      String?       // required by the API on update/renew; optional on v1
+  isActive               Boolean       @default(true)
+  createdByUserId        String?       // bare FK, no relation — matches FiscalPeriod.closedByUserId's precedent
+
+  createdAt              DateTime      @default(now())
+
+  @@unique([traiteId, version])
+  @@index([traiteId, isActive])
 }
 
 // Each treaty line (Incendie, Vol, Transport…) maps to an account rubrique
@@ -1528,6 +1570,7 @@ model Document {
   mimeType        String?
   sizeBytes       Int?
   filePath        String              // local path or S3 key
+  ocrText         String?             // OCR extraction result for searchable content
 
   documentType    String?             // 'SLIP_COTATION' | 'CONVENTION' | 'SWIFT' | 'CONTRAT' | 'NOTE_SYNTHESE'...
   statut          DocumentStatut      @default(EN_ATTENTE)
@@ -1620,6 +1663,9 @@ model DocumentShare {
   document          Document @relation(fields: [documentId], references: [id])
   sharedWithUserId  String?
   sharedWithEmail   String?
+  passwordHash      String?
+  maxDownloads      Int?
+  downloadCount     Int      @default(0)
   expiresAt         DateTime?
   createdAt         DateTime @default(now())
 }

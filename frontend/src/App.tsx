@@ -506,6 +506,14 @@ export default function App() {
                 }
               />
               <Route
+                path="workflow/tasks"
+                element={
+                  <ProtectedRoute path="/workflow">
+                    <WorkflowNotifications />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="workflow/notifications"
                 element={
                   <ProtectedRoute path="/workflow">

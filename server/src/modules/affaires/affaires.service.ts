@@ -36,6 +36,11 @@ export class AffairesService {
       where.OR = [
         { numero: { contains: search, mode: 'insensitive' } },
         { cedante: { raisonSociale: { contains: search, mode: 'insensitive' } } },
+        // FIX (Affaires pass): search previously missed the insured party
+        // entirely — a very natural thing to search an affaire by.
+        { facultativeData: { assure: { raisonSociale: { contains: search, mode: 'insensitive' } } } },
+        { facultativeData: { numeroPoliceCedante: { contains: search, mode: 'insensitive' } } },
+        { traiteData: { referenceTraite: { contains: search, mode: 'insensitive' } } },
       ];
     }
     const [data, total] = await Promise.all([
@@ -87,9 +92,21 @@ export class AffairesService {
     if (dto.type === AffaireType.TRAITE && !dto.traiteData) {
       throw new BadRequestException('traiteData requis pour type TRAITE');
     }
+    // FIX (Affaires pass): reject ambiguous payloads — sending traiteData on
+    // a FACULTATIVE affaire (or vice versa) was silently accepted and the
+    // extraneous block simply ignored (Prisma's `undefined` branch never
+    // fired), which could mask a client-side bug where the wrong branch was
+    // populated.
+    if (dto.type === AffaireType.FACULTATIVE && dto.traiteData) {
+      throw new BadRequestException('traiteData ne doit pas être fourni pour type FACULTATIVE');
+    }
+    if (dto.type === AffaireType.TRAITE && dto.facultativeData) {
+      throw new BadRequestException('facultativeData ne doit pas être fourni pour type TRAITE');
+    }
 
     // Validate reinsurer shares
     this.commissionCalc.validateShares(dto.reassureurs);
+    this.assertNoDuplicateReassureurs(dto.reassureurs);
 
     // Validate reassureurs exist
     const reassureurIds = dto.reassureurs.map((r) => r.reassureurId);
@@ -98,6 +115,13 @@ export class AffairesService {
     });
     if (found.length !== reassureurIds.length) {
       throw new BadRequestException('Un ou plusieurs réassureurs sont introuvables ou inactifs');
+    }
+
+    if (dto.facultativeData) {
+      this.assertDateOrder(dto.facultativeData.dateEffet, dto.facultativeData.dateEcheance);
+    }
+    if (dto.traiteData) {
+      this.assertDateOrder(dto.traiteData.dateEffet, dto.traiteData.dateEcheance);
     }
 
     const numero = await this.sequence.next('AFFAIRE');
@@ -143,7 +167,7 @@ export class AffairesService {
       });
     }
 
-    const { affaire, checklist } = await this.prisma.$transaction(async (tx) => {
+    const { affaire } = await this.prisma.$transaction(async (tx) => {
       const affaire = await tx.affaire.create({
         data: {
           numero,
@@ -225,7 +249,7 @@ export class AffairesService {
         },
       });
 
-      const checklist = await tx.documentChecklist.create({
+      await tx.documentChecklist.create({
         data: {
           affaireId: affaire.id,
           items: { create: this.getDefaultChecklistItems(dto.type) },
@@ -236,7 +260,7 @@ export class AffairesService {
         data: { userId, action: 'AFFAIRE_CREATED', entityType: 'Affaire', entityId: affaire.id, after: { numero, type: dto.type } },
       });
 
-      return { affaire, checklist };
+      return { affaire };
     });
 
     return affaire;
@@ -249,8 +273,38 @@ export class AffairesService {
       throw new BadRequestException('Une affaire placée ne peut plus être modifiée');
     }
 
+    // FIX (Affaires pass): type was never guarded against being changed post-
+    // creation. Since UpdateAffaireDto is a PartialType of CreateAffaireDto,
+    // `type` could be silently sent and switched, which is meaningless once
+    // facultativeData/traiteData already exist (switching would leave the
+    // wrong nested relation orphaned). Also guard the nested payload against
+    // being sent for the wrong branch.
+    if (dto.type && dto.type !== affaire.type) {
+      throw new BadRequestException('Le type d\'affaire (Facultative/Traité) ne peut pas être modifié après création');
+    }
+    if (dto.facultativeData && affaire.type !== AffaireType.FACULTATIVE) {
+      throw new BadRequestException('Cette affaire n\'est pas de type FACULTATIVE');
+    }
+    if (dto.traiteData && affaire.type !== AffaireType.TRAITE) {
+      throw new BadRequestException('Cette affaire n\'est pas de type TRAITE');
+    }
+
+    if (dto.facultativeData?.dateEffet || dto.facultativeData?.dateEcheance) {
+      this.assertDateOrder(
+        dto.facultativeData.dateEffet ?? affaire.facultativeData?.dateEffet?.toISOString(),
+        dto.facultativeData.dateEcheance ?? affaire.facultativeData?.dateEcheance?.toISOString(),
+      );
+    }
+    if (dto.traiteData?.dateEffet || dto.traiteData?.dateEcheance) {
+      this.assertDateOrder(
+        dto.traiteData.dateEffet ?? affaire.traiteData?.dateEffet?.toISOString(),
+        dto.traiteData.dateEcheance ?? affaire.traiteData?.dateEcheance?.toISOString(),
+      );
+    }
+
     if (dto.reassureurs) {
       this.commissionCalc.validateShares(dto.reassureurs);
+      this.assertNoDuplicateReassureurs(dto.reassureurs);
       // Delete and recreate reinsurer participation table
       await this.prisma.affaireReassureur.deleteMany({ where: { affaireId: id } });
     }
@@ -278,8 +332,18 @@ export class AffairesService {
               ...(dto.facultativeData.dateEffet && { dateEffet: new Date(dto.facultativeData.dateEffet) }),
               ...(dto.facultativeData.dateEcheance && { dateEcheance: new Date(dto.facultativeData.dateEcheance) }),
               ...(dto.facultativeData.modeRenouvellement !== undefined && { modeRenouvellement: dto.facultativeData.modeRenouvellement }),
+              ...(dto.facultativeData.numeroPoliceCedante !== undefined && { numeroPoliceCedante: dto.facultativeData.numeroPoliceCedante }),
+              ...(dto.facultativeData.paysAssure !== undefined && { paysAssure: dto.facultativeData.paysAssure }),
               ...(dto.facultativeData.branche !== undefined && { branche: dto.facultativeData.branche }),
               ...(dto.facultativeData.produit !== undefined && { produit: dto.facultativeData.produit }),
+              ...(dto.facultativeData.garantie !== undefined && { garantie: dto.facultativeData.garantie }),
+              // FIX (Affaires pass): guaranteeLines had no update path at
+              // all — once an affaire was created, guarantee lines were
+              // permanently frozen. Full-array replace, same pattern used
+              // for Cedante/Reassureur/CoCourtier contacts & bank accounts.
+              ...(dto.facultativeData.guaranteeLines !== undefined && {
+                guaranteeLines: { deleteMany: {}, create: dto.facultativeData.guaranteeLines },
+              }),
               // Recompute derived fields when base financial data changes
               ...(() => {
                 const needsRecompute =
@@ -310,11 +374,38 @@ export class AffairesService {
         ...(dto.traiteData && {
           traiteData: {
             update: {
+              ...(dto.traiteData.referenceTraite !== undefined && { referenceTraite: dto.traiteData.referenceTraite }),
+              ...(dto.traiteData.formeCouverture !== undefined && { formeCouverture: dto.traiteData.formeCouverture }),
+              ...(dto.traiteData.dateEffet && { dateEffet: new Date(dto.traiteData.dateEffet) }),
+              ...(dto.traiteData.dateEcheance && { dateEcheance: new Date(dto.traiteData.dateEcheance) }),
+              ...(dto.traiteData.modeRenouvellement !== undefined && { modeRenouvellement: dto.traiteData.modeRenouvellement }),
+              ...(dto.traiteData.dateAvisResiliation !== undefined && {
+                dateAvisResiliation: dto.traiteData.dateAvisResiliation ? new Date(dto.traiteData.dateAvisResiliation) : null,
+              }),
+              ...(dto.traiteData.zoneGeographique !== undefined && { zoneGeographique: dto.traiteData.zoneGeographique }),
+              ...(dto.traiteData.branche !== undefined && { branche: dto.traiteData.branche }),
+              ...(dto.traiteData.produit !== undefined && { produit: dto.traiteData.produit }),
+              ...(dto.traiteData.garantie !== undefined && { garantie: dto.traiteData.garantie }),
               ...(dto.traiteData.primePrevisionnelle !== undefined && { primePrevisionnelle: dto.traiteData.primePrevisionnelle }),
               ...(dto.traiteData.pmd !== undefined && { pmd: dto.traiteData.pmd }),
               ...(dto.traiteData.tauxCommissionCedante !== undefined && { tauxCommissionCedante: dto.traiteData.tauxCommissionCedante }),
+              ...(dto.traiteData.commissionLiquidationArs !== undefined && { commissionLiquidationArs: dto.traiteData.commissionLiquidationArs }),
               ...(dto.traiteData.seuilNotification !== undefined && { seuilNotification: dto.traiteData.seuilNotification }),
               ...(dto.traiteData.periodicite && { periodicite: dto.traiteData.periodicite }),
+              // FIX (Affaires pass): same gap as guaranteeLines above —
+              // accountRubriques and pmdInstalments had no update path.
+              ...(dto.traiteData.accountRubriques !== undefined && {
+                accountRubriques: { deleteMany: {}, create: dto.traiteData.accountRubriques },
+              }),
+              ...(dto.traiteData.pmdInstalments !== undefined && {
+                pmdInstalments: {
+                  deleteMany: {},
+                  create: dto.traiteData.pmdInstalments.map((p) => ({
+                    ...p,
+                    dateEcheance: new Date(p.dateEcheance),
+                  })),
+                },
+              }),
             },
           },
         }),
@@ -399,6 +490,25 @@ export class AffairesService {
         }),
       ),
     );
+  }
+
+  /** FIX (Affaires pass): was previously not checked anywhere — the same
+   * reassureurId could be submitted twice with two different partPct values,
+   * both silently accepted since validateShares() only checks the sum. */
+  private assertNoDuplicateReassureurs(reassureurs: { reassureurId: string }[]): void {
+    const ids = reassureurs.map((r) => r.reassureurId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('Un même réassureur ne peut apparaître qu\'une seule fois dans la table de participation');
+    }
+  }
+
+  /** FIX (Affaires pass): dateEffet < dateEcheance was validated client-side
+   * only (in the old, now-replaced frontend) — never enforced server-side. */
+  private assertDateOrder(effet?: string, echeance?: string): void {
+    if (!effet || !echeance) return;
+    if (new Date(effet) >= new Date(echeance)) {
+      throw new BadRequestException('La date d\'effet doit être antérieure à la date d\'échéance');
+    }
   }
 
   private getDefaultChecklistItems(type: AffaireType) {

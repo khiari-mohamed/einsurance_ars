@@ -10,6 +10,11 @@ import { RetentionService } from './retention.service';
 import { OcrService } from './ocr.service';
 import { UploadsModule } from '../upload/uploads.module';
 
+// NOTE: bulk/download's ZIP generation (ged.service.ts#bulkDownload) needs
+// the `archiver` package as a runtime dependency:
+//   npm install archiver
+//   npm install -D @types/archiver
+
 @Module({
   imports: [
     UploadsModule,
@@ -18,15 +23,16 @@ import { UploadsModule } from '../upload/uploads.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         storage: memoryStorage(),
-        // FIX: previously no limit at all — an oversized file was fully
-        // buffered into memory before FileValidationPipe rejected it inside
-        // UploadsService. Now rejected by Multer itself, before buffering.
         limits: { fileSize: config.get<number>('app.maxFileSizeMb', 25) * 1024 * 1024 },
       }),
     }),
   ],
   controllers: [GedController],
   providers: [GedService, DocumentChecklistService, ComplianceService, RetentionService, OcrService],
-  exports: [GedService, DocumentChecklistService],
+  // FIX: ComplianceService wasn't exported — a future ReportingModule
+  // dashboard (or any module wanting to surface GED compliance data
+  // alongside other KPIs) had no way to inject it without duplicating the
+  // logic. OcrService stays module-internal (only GedService calls it).
+  exports: [GedService, DocumentChecklistService, ComplianceService],
 })
 export class GedModule {}

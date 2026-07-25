@@ -1,7 +1,8 @@
 import { IsString, IsOptional, IsEnum } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
 import { DocumentEntityType } from '@prisma/client';
 
+// Unchanged in shape — already correctly matched by GedService.resolveEntityRef().
+// Left as-is; only re-confirming it lines up with the entity resolution logic below.
 export class UploadDocumentDto {
   @IsOptional() @IsString() documentType?: string;
   @IsOptional() @IsEnum(DocumentEntityType) entityType?: DocumentEntityType;

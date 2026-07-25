@@ -1,12 +1,13 @@
 import {
   Controller, Get, Post, Put, Patch, Delete,
-  Body, Param, Query, UseGuards,
+  Body, Param, Query, UseGuards, DefaultValuePipe, ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { AffaireStatut, AffaireType } from '@prisma/client';
 import { AffairesService } from './affaires.service';
 import { CreateAffaireDto } from './dto/create-affaire.dto';
 import { UpdateAffaireDto } from './dto/update-affaire.dto';
+import { ChangeAffaireStatusDto } from './dto/change-status.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -33,8 +34,15 @@ export class AffairesController {
     @Query('statut') statut?: AffaireStatut,
     @Query('type') type?: AffaireType,
     @Query('search') search?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
+    // FIX (Affaires pass): page/limit were plain @Query() with no pipe —
+    // arrived as raw strings from the HTTP layer. `skip`/`take` further down
+    // are passed straight to Prisma, which validates argument types strictly;
+    // a string here throws PrismaClientValidationError at runtime. Every
+    // other list endpoint in this codebase (co-courtiers, cedantes...) uses
+    // DefaultValuePipe + ParseIntPipe — this controller was the one
+    // inconsistent spot.
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
   ) {
     return this.service.findAll({ cedanteId, statut, type, search, page, limit });
   }
@@ -60,10 +68,13 @@ export class AffairesController {
   @ApiOperation({ summary: 'Changer le statut d\'une affaire (workflow)' })
   changeStatus(
     @Param('id') id: string,
-    @Body('statut') statut: AffaireStatut,
+    // FIX (Affaires pass): was `@Body('statut') statut: AffaireStatut` with
+    // no validation at all — any string was accepted and passed straight to
+    // the workflow service. Now validated against the enum via a proper DTO.
+    @Body() dto: ChangeAffaireStatusDto,
     @CurrentUser() user: any,
   ) {
-    return this.service.changeStatus(id, statut, user.id);
+    return this.service.changeStatus(id, dto.statut, user.id);
   }
 
   @Post(':id/recalculate-commissions')

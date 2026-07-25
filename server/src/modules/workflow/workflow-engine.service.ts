@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { WorkflowTaskStatut, WorkflowTaskType } from '@prisma/client';
+import { AffaireStatut, ModeRenouvellement, Periodicite, WorkflowTaskStatut, WorkflowTaskType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationService } from '../../shared/services/notification.service';
 import { EmailService } from '../../shared/services/email.service';
+import { CreateWorkflowTaskDto } from './dto/create-workflow-task.dto';
 
 @Injectable()
 export class WorkflowEngineService {
@@ -47,17 +48,80 @@ export class WorkflowEngineService {
     return { data, total, page, limit };
   }
 
-  async assignTask(taskId: string, userId: string) {
-    const task = await this.prisma.workflowTask.findUniqueOrThrow({ where: { id: taskId } });
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  /**
+   * FIX (Workflow pass, new): manual task creation was entirely absent —
+   * needed for ad-hoc tasks like a chargé de dossier → DAF handoff
+   * (INTER_DEPARTEMENT_HANDOFF) that don't yet have an automated trigger
+   * (that lives in the not-yet-reviewed Finances/Sinistres modules).
+   */
+  async createTask(dto: CreateWorkflowTaskDto, creatorUserId: string) {
+    if (dto.affaireId) {
+      const affaire = await this.prisma.affaire.findUnique({ where: { id: dto.affaireId } });
+      if (!affaire || !affaire.isActive) throw new NotFoundException('Affaire introuvable');
+    }
+    if (dto.assignedToId) {
+      const user = await this.prisma.user.findUnique({ where: { id: dto.assignedToId } });
+      if (!user || !user.isActive) throw new BadRequestException('Utilisateur assigné introuvable ou inactif');
+    }
+
+    const task = await this.prisma.workflowTask.create({
+      data: {
+        type: dto.type,
+        statut: dto.assignedToId ? WorkflowTaskStatut.EN_COURS : WorkflowTaskStatut.EN_ATTENTE,
+        affaireId: dto.affaireId,
+        assignedToId: dto.assignedToId,
+        createdById: creatorUserId,
+        description: dto.description,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+      },
+    });
+
+    if (dto.assignedToId) {
+      this.notification.notifyUser(
+        dto.assignedToId,
+        'TASK_ASSIGNED',
+        `Tâche assignée: ${task.type}`,
+        `Vous avez été assigné à: ${task.description ?? task.type}`,
+        { taskId: task.id },
+      );
+    }
+
+    return task;
+  }
+
+  /**
+   * Assign (or self-claim, when assigneeUserId === actorUserId) a task.
+   * FIX (Workflow pass): added actorUserId for audit logging — previously
+   * NO AuditLog entry was ever recorded for any task lifecycle action,
+   * unlike every other write path in the app.
+   */
+  async assignTask(taskId: string, assigneeUserId: string, actorUserId?: string) {
+    const task = await this.prisma.workflowTask.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('Tâche introuvable');
+
+    const user = await this.prisma.user.findUnique({ where: { id: assigneeUserId } });
+    if (!user || !user.isActive) throw new BadRequestException('Utilisateur introuvable ou inactif');
 
     const updated = await this.prisma.workflowTask.update({
       where: { id: taskId },
-      data: { assignedToId: userId, statut: WorkflowTaskStatut.EN_COURS },
+      data: { assignedToId: assigneeUserId, statut: WorkflowTaskStatut.EN_COURS },
     });
 
+    if (actorUserId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actorUserId,
+          action: actorUserId === assigneeUserId ? 'WORKFLOW_TASK_CLAIMED' : 'WORKFLOW_TASK_ASSIGNED',
+          entityType: 'WorkflowTask',
+          entityId: taskId,
+          before: { assignedToId: task.assignedToId, statut: task.statut },
+          after: { assignedToId: assigneeUserId, statut: WorkflowTaskStatut.EN_COURS },
+        },
+      });
+    }
+
     this.notification.notifyUser(
-      userId,
+      assigneeUserId,
       'TASK_ASSIGNED',
       `Tâche assignée: ${task.type}`,
       `Vous avez été assigné à: ${task.description ?? task.type}`,
@@ -67,21 +131,100 @@ export class WorkflowEngineService {
     return updated;
   }
 
+  /**
+   * FIX (Workflow pass): `note` was accepted as a parameter but silently
+   * dropped — WorkflowTask has no dedicated notes field. Appended into
+   * `description` instead, so the text the user typed isn't lost. Also
+   * added the audit log entry that was missing entirely.
+   */
   async completeTask(taskId: string, userId: string, note?: string) {
-    return this.prisma.workflowTask.update({
+    const task = await this.prisma.workflowTask.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('Tâche introuvable');
+    if (task.statut === WorkflowTaskStatut.COMPLETE) {
+      throw new BadRequestException('Tâche déjà terminée');
+    }
+
+    const description = note
+      ? `${task.description ?? ''}${task.description ? '\n' : ''}[Terminée le ${new Date().toLocaleDateString('fr-FR')}] ${note}`
+      : task.description;
+
+    const updated = await this.prisma.workflowTask.update({
       where: { id: taskId },
+      data: { statut: WorkflowTaskStatut.COMPLETE, completedAt: new Date(), description },
+    });
+
+    await this.prisma.auditLog.create({
       data: {
-        statut: WorkflowTaskStatut.COMPLETE,
-        completedAt: new Date(),
+        userId,
+        action: 'WORKFLOW_TASK_COMPLETED',
+        entityType: 'WorkflowTask',
+        entityId: taskId,
+        before: { statut: task.statut },
+        after: { statut: WorkflowTaskStatut.COMPLETE, note },
       },
     });
+
+    return updated;
   }
 
-  async cancelTask(taskId: string) {
-    return this.prisma.workflowTask.update({
+  async cancelTask(taskId: string, userId?: string) {
+    const task = await this.prisma.workflowTask.findUnique({ where: { id: taskId } });
+    if (!task) throw new NotFoundException('Tâche introuvable');
+
+    const updated = await this.prisma.workflowTask.update({
       where: { id: taskId },
       data: { statut: WorkflowTaskStatut.ANNULE },
     });
+
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId,
+          action: 'WORKFLOW_TASK_CANCELLED',
+          entityType: 'WorkflowTask',
+          entityId: taskId,
+          before: { statut: task.statut },
+          after: { statut: WorkflowTaskStatut.ANNULE },
+        },
+      });
+    }
+
+    return updated;
+  }
+
+  /**
+   * FIX (Workflow pass, new): the "Historique Workflow" page had NO backing
+   * endpoint at all (frontend was a static placeholder). Surfaces the
+   * Affaire lifecycle AuditLog entries already written by AffairesService
+   * and AffaireWorkflowService (AFFAIRE_CREATED, AFFAIRE_UPDATED,
+   * AFFAIRE_DELETED, STATUT_CHANGED: X → Y) — data that already existed but
+   * had no way to be read back out.
+   */
+  async getAuditHistory(filters: {
+    affaireId?: string;
+    entityType?: string;
+    action?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const { affaireId, entityType, action, page = 1, limit = 30 } = filters;
+    const skip = (page - 1) * limit;
+
+    const where: any = { entityType: entityType ?? 'Affaire' };
+    if (affaireId) where.entityId = affaireId;
+    if (action) where.action = { contains: action, mode: 'insensitive' };
+
+    const [data, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where,
+        include: { user: { select: { nom: true, prenom: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip, take: limit,
+      }),
+      this.prisma.auditLog.count({ where }),
+    ]);
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   /** Daily: send reminders for overdue tasks */
@@ -117,12 +260,11 @@ export class WorkflowEngineService {
   async checkPendingSituations() {
     const now = new Date();
     const traites = await this.prisma.traiteAffaire.findMany({
-      where: { affaire: { statut: 'PLACEMENT_REALISE', isActive: true } },
+      where: { affaire: { statut: AffaireStatut.PLACEMENT_REALISE, isActive: true } },
       include: { affaire: { include: { cedante: true } } },
     });
 
     for (const traite of traites) {
-      // Check if a situation compilation task is needed based on periodicite
       const lastSituation = await this.prisma.situation.findFirst({
         where: { traiteId: traite.id },
         orderBy: { createdAt: 'desc' },
@@ -133,24 +275,24 @@ export class WorkflowEngineService {
         needsTask = true;
       } else {
         const daysSinceLast = Math.floor((now.getTime() - lastSituation.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-        if (traite.periodicite === 'TRIMESTRIELLE' && daysSinceLast >= 90) needsTask = true;
-        if (traite.periodicite === 'SEMESTRIELLE' && daysSinceLast >= 180) needsTask = true;
-        if (traite.periodicite === 'ANNUELLE' && daysSinceLast >= 365) needsTask = true;
+        if (traite.periodicite === Periodicite.TRIMESTRIELLE && daysSinceLast >= 90) needsTask = true;
+        if (traite.periodicite === Periodicite.SEMESTRIELLE && daysSinceLast >= 180) needsTask = true;
+        if (traite.periodicite === Periodicite.ANNUELLE && daysSinceLast >= 365) needsTask = true;
       }
 
       if (needsTask) {
         const existing = await this.prisma.workflowTask.findFirst({
           where: {
-            type: 'SITUATION_A_COMPILER',
+            type: WorkflowTaskType.SITUATION_A_COMPILER,
             affaireId: traite.affaireId,
-            statut: { in: ['EN_ATTENTE', 'EN_COURS'] },
+            statut: { in: [WorkflowTaskStatut.EN_ATTENTE, WorkflowTaskStatut.EN_COURS] },
           },
         });
 
         if (!existing) {
           await this.prisma.workflowTask.create({
             data: {
-              type: 'SITUATION_A_COMPILER',
+              type: WorkflowTaskType.SITUATION_A_COMPILER,
               statut: WorkflowTaskStatut.EN_ATTENTE,
               affaireId: traite.affaireId,
               description: `Situation ${traite.periodicite} à compiler — ${traite.affaire.numero} (${traite.affaire.cedante.raisonSociale})`,
@@ -167,6 +309,66 @@ export class WorkflowEngineService {
           );
         }
       }
+    }
+  }
+
+  /**
+   * FIX (Workflow pass, new): TraiteAffaire.renewalReminderSent — declared
+   * on the schema with the comment "re-param reminder at Jan 1" — was never
+   * read or written anywhere in the codebase. Dead field. Daily check that
+   * opens a RENOUVELLEMENT_TRAITE task 45 days ahead of a placed treaty's
+   * dateEcheance, using the flag as a one-shot guard so it doesn't refire.
+   *
+   * Deliberately does NOT touch dates, terms, or create a new Affaire —
+   * this is a reminder only. What "renewal" means operationally (extend
+   * dates on the same row vs. a fresh Affaire vs. a new
+   * TreatyParameterVersion) isn't fully specified by the CDC and is left to
+   * whoever actions the task — the new TreatyParameterVersion.renew()
+   * endpoint is available for the commercial-terms side of that decision.
+   */
+  @Cron('0 7 * * *')
+  async checkTreatyRenewals() {
+    const now = new Date();
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() + 45);
+
+    const traites = await this.prisma.traiteAffaire.findMany({
+      where: {
+        renewalReminderSent: false,
+        dateEcheance: { gte: now, lte: cutoff },
+        modeRenouvellement: { not: ModeRenouvellement.RESILIATION },
+        affaire: { isActive: true, statut: AffaireStatut.PLACEMENT_REALISE },
+      },
+      include: { affaire: { include: { cedante: true } } },
+    });
+
+    for (const traite of traites) {
+      await this.prisma.workflowTask.create({
+        data: {
+          type: WorkflowTaskType.RENOUVELLEMENT_TRAITE,
+          statut: WorkflowTaskStatut.EN_ATTENTE,
+          affaireId: traite.affaireId,
+          description: `Renouvellement à préparer — ${traite.affaire.numero} (${traite.affaire.cedante.raisonSociale}), échéance le ${traite.dateEcheance.toLocaleDateString('fr-FR')}`,
+          dueDate: traite.dateEcheance,
+        },
+      });
+
+      await this.prisma.traiteAffaire.update({
+        where: { id: traite.id },
+        data: { renewalReminderSent: true },
+      });
+
+      this.notification.notifyRole(
+        'DIRECTION_REASSURANCE',
+        'TREATY_RENEWAL_DUE',
+        `Renouvellement à préparer: ${traite.affaire.numero}`,
+        `Le traité ${traite.affaire.numero} arrive à échéance le ${traite.dateEcheance.toLocaleDateString('fr-FR')}.`,
+        { affaireId: traite.affaireId },
+      );
+    }
+
+    if (traites.length > 0) {
+      this.logger.log(`Treaty renewal tasks created for ${traites.length} treaties`);
     }
   }
 }

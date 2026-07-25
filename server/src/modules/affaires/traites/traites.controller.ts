@@ -24,6 +24,7 @@ import { TraitesService } from './traites.service';
 import {
   CreateTraiteDto,
   TreatyAccountRubriqueDto,
+  PmdInstalmentDto,
 } from './dto/create-traite.dto';
 import { UpdateTraiteDto } from './dto/update-traite.dto';
 import { LiquidationInput } from './treaty-calculator.service';
@@ -130,6 +131,24 @@ export class TraitesController {
   @ApiOperation({ summary: 'Calendrier de versement PMD' })
   getPmdInstalments(@Param('affaireId') affaireId: string) {
     return this.service.getPmdInstalments(affaireId);
+  }
+
+  // FIX (Traités pass): was entirely missing. account-rubriques already had
+  // a replace-all PUT; pmd-instalments only had regenerate (auto-derived
+  // from pmd/periodicite) and per-tranche pay — no way to hand-edit a
+  // custom schedule (e.g. an uneven split negotiated with the cedante).
+  // Mirrors the account-rubriques pattern exactly. Service-side guard
+  // blocks the replace if any tranche is already paid, since a full
+  // delete+recreate would orphan the Encaissement row markInstalmentPaid()
+  // already created.
+  @Put(':affaireId/pmd-instalments')
+  @RequirePermissions(Permission.AFFAIRES_UPDATE)
+  @ApiOperation({ summary: 'Remplacer intégralement le calendrier PMD (tranches personnalisées)' })
+  replacePmdInstalments(
+    @Param('affaireId') affaireId: string,
+    @Body() instalments: PmdInstalmentDto[],
+  ) {
+    return this.service.replacePmdInstalments(affaireId, instalments);
   }
 
   @Post(':affaireId/pmd-instalments/regenerate')

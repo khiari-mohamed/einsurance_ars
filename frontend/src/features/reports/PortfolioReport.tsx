@@ -1,10 +1,78 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Download, Filter, TrendingUp, TrendingDown, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid, Sector } from 'recharts';
 import { reportingApi } from '../../api/reporting.api';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4', '#EC4899', '#14B8A6'];
+
+// Light -> dark tint pairs for each COLORS entry, used to build the glossy gradients below.
+// Same hues as COLORS, just given depth - nothing in the palette itself has changed.
+const PIE_GRADIENTS: [string, string][] = [
+  ['#93C5FD', '#2563EB'], // blue
+  ['#6EE7B7', '#059669'], // green
+  ['#FCD34D', '#D97706'], // amber
+  ['#C4B5FD', '#7C3AED'], // violet
+  ['#FCA5A5', '#DC2626'], // red
+  ['#67E8F9', '#0891B2'], // cyan
+  ['#F9A8D4', '#DB2777'], // pink
+  ['#5EEAD4', '#0D9488'], // teal
+];
+
+// Flat colors for the bar-chart tooltip swatches (gradients aren't valid CSS colors on their own).
+const BAR_DOT_COLOR: Record<string, string> = {
+  primes: '#2563EB',
+  sinistres: '#DC2626',
+  commissions: '#059669',
+};
+
+const formatTND = (amount: number) =>
+  new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'TND' }).format(amount);
+
+/** Frosted-glass tooltip shared by the bar chart and the donut chart. */
+function GlassChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length) return null;
+  const title = label ?? payload[0]?.name ?? payload[0]?.payload?.name;
+  return (
+    <div className="backdrop-blur-xl bg-white/90 border border-white/70 rounded-xl shadow-2xl px-4 py-3 min-w-[170px]">
+      {title && (
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">{title}</p>
+      )}
+      <div className="space-y-1.5">
+        {payload.map((entry: any, i: number) => (
+          <div key={i} className="flex items-center justify-between gap-4 text-sm">
+            <span className="flex items-center gap-2 text-gray-600">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: BAR_DOT_COLOR[entry.dataKey] || entry.payload?.fill || '#9CA3AF' }}
+              />
+              {entry.name}
+            </span>
+            <span className="font-semibold text-gray-900">{formatTND(entry.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Active (hovered) donut slice - pops out slightly with a soft glow. */
+function renderActivePieShape(props: any) {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+  return (
+    <Sector
+      cx={cx}
+      cy={cy}
+      innerRadius={innerRadius}
+      outerRadius={outerRadius + 10}
+      startAngle={startAngle}
+      endAngle={endAngle}
+      fill={fill}
+      cornerRadius={8}
+      style={{ filter: 'drop-shadow(0px 8px 16px rgba(15,23,42,0.28))' }}
+    />
+  );
+}
 
 /** Convert backend response to the array format the UI expects */
 function toPerfArray(data: any): any[] {
@@ -66,6 +134,7 @@ function toConcArray(data: any): any {
 export default function PortfolioReport() {
   const [filters, setFilters] = useState({ startDate: '', endDate: '', groupBy: 'branche' });
   const [showFilters, setShowFilters] = useState(false);
+  const [activePieIndex, setActivePieIndex] = useState<number | undefined>(undefined);
 
   const { data: performance, isLoading } = useQuery({
     queryKey: ['portfolio-performance', filters],
@@ -112,6 +181,10 @@ export default function PortfolioReport() {
   const totalSinistres = perfArray.reduce((s: number, p: any) => s + (p.sinistres || 0), 0);
   const totalCommissions = perfArray.reduce((s: number, p: any) => s + (p.commissions || 0), 0);
   const avgSinistralite = totalPrimes > 0 ? (totalSinistres / totalPrimes) * 100 : 0;
+
+  // Same perfArray, just carrying a flat hex color per slice so the donut's tooltip
+  // swatch can show a real color even though the slice itself is filled with a gradient.
+  const perfArrayWithColor = perfArray.map((p: any, i: number) => ({ ...p, fill: COLORS[i % COLORS.length] }));
 
   return (
     <div className="p-4 lg:p-6 space-y-6">
@@ -200,41 +273,84 @@ export default function PortfolioReport() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl p-5 shadow-sm">
-          <h3 className="text-lg font-semibold mb-4">Performance par {filters.groupBy === 'branche' ? 'Branche' : filters.groupBy === 'cedante' ? 'Cédante' : 'Type'}</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={perfArray}>
-              <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
-              <YAxis />
-              <Tooltip formatter={(v: number) => formatCurrency(v)} />
-              <Legend />
-              <Bar dataKey="primes" fill="#3B82F6" name="Primes" />
-              <Bar dataKey="sinistres" fill="#EF4444" name="Sinistres" />
-              <Bar dataKey="commissions" fill="#10B981" name="Commissions" />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
+          <div className="absolute -top-16 -right-16 w-56 h-56 bg-blue-200/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -left-10 w-48 h-48 bg-emerald-200/20 rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-semibold mb-4">Performance par {filters.groupBy === 'branche' ? 'Branche' : filters.groupBy === 'cedante' ? 'Cédante' : 'Type'}</h3>
+          <div className="relative">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={perfArray} barGap={8} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="barGradPrimes" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#60A5FA" />
+                    <stop offset="100%" stopColor="#2563EB" />
+                  </linearGradient>
+                  <linearGradient id="barGradSinistres" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#F87171" />
+                    <stop offset="100%" stopColor="#DC2626" />
+                  </linearGradient>
+                  <linearGradient id="barGradCommissions" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#34D399" />
+                    <stop offset="100%" stopColor="#059669" />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="#E5E7EB" />
+                <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<GlassChartTooltip />} cursor={{ fill: 'rgba(59,130,246,0.05)', radius: 8 } as any} />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: 16 }} formatter={(value: string) => <span className="text-sm text-gray-600">{value}</span>} />
+                <Bar dataKey="primes" name="Primes" fill="url(#barGradPrimes)" radius={[8, 8, 0, 0]} maxBarSize={44} animationDuration={800} animationEasing="ease-out" />
+                <Bar dataKey="sinistres" name="Sinistres" fill="url(#barGradSinistres)" radius={[8, 8, 0, 0]} maxBarSize={44} animationDuration={800} animationBegin={100} animationEasing="ease-out" />
+                <Bar dataKey="commissions" name="Commissions" fill="url(#barGradCommissions)" radius={[8, 8, 0, 0]} maxBarSize={44} animationDuration={800} animationBegin={200} animationEasing="ease-out" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        <div className="bg-white rounded-xl p-5 shadow-sm">
-          <h3 className="text-lg font-semibold mb-4">Distribution des Primes</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie 
-                data={perfArray} 
-                dataKey="primes" 
-                nameKey="name" 
-                cx="50%" 
-                cy="50%" 
-                outerRadius={100}
-                label={({ name, primes }: any) => `${name}: ${totalPrimes > 0 ? ((primes / totalPrimes) * 100).toFixed(1) : 0}%`}
-              >
-                {perfArray.map((_: any, i: number) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v: number) => formatCurrency(v)} />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-5 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
+          <div className="absolute -top-16 -left-16 w-56 h-56 bg-purple-200/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-amber-200/20 rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-semibold mb-4">Distribution des Primes</h3>
+          <div className="relative">
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <defs>
+                  {PIE_GRADIENTS.map((g, i) => (
+                    <linearGradient key={i} id={`pieGrad${i}`} x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor={g[0]} />
+                      <stop offset="100%" stopColor={g[1]} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <Pie 
+                  data={perfArrayWithColor} 
+                  dataKey="primes" 
+                  nameKey="name" 
+                  cx="50%" 
+                  cy="50%" 
+                  innerRadius={64}
+                  outerRadius={104}
+                  paddingAngle={3}
+                  cornerRadius={6}
+                  activeIndex={activePieIndex}
+                  activeShape={renderActivePieShape}
+                  onMouseEnter={(_: any, i: number) => setActivePieIndex(i)}
+                  onMouseLeave={() => setActivePieIndex(undefined)}
+                  label={({ name, primes }: any) => `${name}: ${totalPrimes > 0 ? ((primes / totalPrimes) * 100).toFixed(1) : 0}%`}
+                  labelLine={{ stroke: '#D1D5DB' } as any}
+                >
+                  {perfArray.map((_: any, i: number) => (
+                    <Cell key={i} fill={`url(#pieGrad${i % PIE_GRADIENTS.length})`} stroke="#ffffff" strokeWidth={2} />
+                  ))}
+                </Pie>
+                <Tooltip content={<GlassChartTooltip />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wider">Total Primes</span>
+              <span className="text-lg font-bold text-gray-900 mt-0.5">{formatCurrency(totalPrimes)}</span>
+            </div>
+          </div>
         </div>
       </div>
 

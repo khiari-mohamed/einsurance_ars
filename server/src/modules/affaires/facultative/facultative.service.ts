@@ -155,6 +155,17 @@ export class FacultativeService {
   }
 
   // ── Create ───────────────────────────────────────────────────────
+  // NOTE (Affaires Pass 2): this endpoint requires an Affaire row of type
+  // FACULTATIVE that does NOT yet have facultativeData attached. As of the
+  // Pass 1 review, AffairesService.create() unconditionally requires
+  // facultativeData in the same call for type FACULTATIVE (throws
+  // BadRequestException otherwise) — so that state can currently never be
+  // reached through the normal API. This method is correct and safe to keep,
+  // but is presently unreachable in practice. Flagged for a product decision:
+  // either relax AffairesService.create() to allow a bare FACULTATIVE shell
+  // (enabling a real two-step create-then-attach flow this endpoint would
+  // serve), or treat this as a defensive/import-only path. Not changed here
+  // since it's a cross-module behavioral decision, not a bug in this file.
 
   async create(dto: CreateFacultativeDto) {
     const affaire = await this.prisma.affaire.findUnique({
@@ -179,6 +190,16 @@ export class FacultativeService {
         'Des données facultatives existent déjà pour cette affaire',
       );
     }
+
+    // FIX (Affaires Pass 2): assureId was never checked against the Assure
+    // table — a bad/inactive id would previously surface as a raw Prisma
+    // FK-violation error instead of a clean 404/400.
+    const assure = await this.prisma.assure.findUnique({ where: { id: dto.assureId } });
+    if (!assure || !assure.isActive) {
+      throw new BadRequestException('Assuré introuvable ou inactif');
+    }
+
+    this.assertDateOrder(dto.dateEffet, dto.dateEcheance);
 
     const primeCedee = this.round3(dto.prime100Pct * (dto.tauxCession / 100));
     const commissionCedante = dto.tauxCommissionCedante
@@ -242,6 +263,24 @@ export class FacultativeService {
       );
     }
 
+    // FIX (Affaires Pass 2): assureId reassignment was never checked.
+    if (dto.assureId !== undefined && dto.assureId !== fac.assureId) {
+      const assure = await this.prisma.assure.findUnique({ where: { id: dto.assureId } });
+      if (!assure || !assure.isActive) {
+        throw new BadRequestException('Assuré introuvable ou inactif');
+      }
+    }
+
+    // FIX (Affaires Pass 2): dateEffet/dateEcheance order was never
+    // re-validated on update — moving only one of the two dates could
+    // silently invert the period. Mirrors AffairesService's own guard.
+    if (dto.dateEffet !== undefined || dto.dateEcheance !== undefined) {
+      this.assertDateOrder(
+        dto.dateEffet ?? fac.dateEffet.toISOString(),
+        dto.dateEcheance ?? fac.dateEcheance.toISOString(),
+      );
+    }
+
     const prime100 =
       dto.prime100Pct !== undefined ? dto.prime100Pct : Number(fac.prime100Pct);
     const tauxCession =
@@ -299,7 +338,19 @@ export class FacultativeService {
       },
     });
 
-    await this.recalculateCommissions(affaireId);
+    // FIX (Affaires Pass 2): previously recalculated commissions on every
+    // update call unconditionally — even edits touching only e.g. `branche`
+    // or `paysAssure` triggered a full commission recompute + N reinsurer
+    // writes. Now gated the same way AffairesService.update() gates it:
+    // only when a field that actually affects the commission math changed.
+    const needsRecalc =
+      dto.prime100Pct !== undefined ||
+      dto.tauxCession !== undefined ||
+      dto.tauxCommissionCedante !== undefined;
+    if (needsRecalc) {
+      await this.recalculateCommissions(affaireId);
+    }
+
     return updated;
   }
 
@@ -476,11 +527,7 @@ export class FacultativeService {
       },
     });
 
-    const grouped: Record<
-  string,
-  { count: number; totalPrime: number; totalCommission: number }
-> = {};
-
+    const grouped: Record<string, { count: number; totalPrime: number; totalCommission: number }> = {};
 
     for (const item of items) {
       const key = item.branche ?? 'Non définie';
@@ -525,5 +572,15 @@ export class FacultativeService {
 
   private round3(n: number): number {
     return Math.round(n * 1000) / 1000;
+  }
+
+  /** FIX (Affaires Pass 2): mirrors AffairesService's own guard — kept local
+   * to this service rather than extracted to a shared util, to avoid
+   * touching files outside this pass's reviewed scope. */
+  private assertDateOrder(effet?: string, echeance?: string): void {
+    if (!effet || !echeance) return;
+    if (new Date(effet) >= new Date(echeance)) {
+      throw new BadRequestException('La date d\'effet doit être antérieure à la date d\'échéance');
+    }
   }
 }

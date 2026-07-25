@@ -1,19 +1,43 @@
+// FIX (Affaires pass): removed getStatistics/sendToCotation/receiveSlip/
+// generateBordereauCedante/generateBordereauReassureur/
+// generateAccountingEntries — none of these routes exist on
+// AffairesController (only GET/, GET/:id, POST/, PUT/:id, PATCH/:id/status,
+// POST/:id/recalculate-commissions, DELETE/:id do). Every removed call was
+// a guaranteed 404. updateStatus now uses PATCH (matches controller) and
+// sends `statut` (French field name the DTO actually expects), not `status`.
 import api from '../lib/api';
-import { CreateAffaireData, AffaireStatus } from '../types/affaire.types';
+import { CreateAffaireDto, UpdateAffaireDto, Affaire, AffaireStatut, AffairesListResponse } from '../types/affaire.types';
+
+interface AffaireFilters {
+  cedanteId?: string;
+  statut?: AffaireStatut;
+  type?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}
 
 export const affairesApi = {
-  getAll: (filters?: any) => api.get('/affaires', { params: filters }),
-  getOne: (id: string) => api.get(`/affaires/${id}`),
-  getStatistics: (filters?: any) => api.get('/affaires/statistics/summary', { params: filters }),
-  create: (data: CreateAffaireData) => api.post('/affaires', data),
-  update: (id: string, data: any) => api.put(`/affaires/${id}`, data),
-  updateStatus: (id: string, status: AffaireStatus) => api.put(`/affaires/${id}/status`, { status }),
-  delete: (id: string) => api.delete(`/affaires/${id}`),
-  sendToCotation: (id: string) => api.post(`/affaires/${id}/send-cotation`),
-  receiveSlip: (id: string, data: { slipReference: string; signedReinsurers: string[] }) => 
-    api.post(`/affaires/${id}/receive-slip`, data),
-  generateBordereauCedante: (id: string) => api.get(`/affaires/${id}/bordereau/cedante`),
-  generateBordereauReassureur: (id: string, reassureurId: string) =>
-    api.get(`/affaires/${id}/bordereau/reassureur/${reassureurId}`),
-  generateAccountingEntries: (id: string) => api.get(`/affaires/${id}/accounting-entries`),
+  getAll: (filters?: AffaireFilters) =>
+    api.get<AffairesListResponse>('/affaires', { params: filters }),
+
+  getOne: (id: string) =>
+    api.get<Affaire>(`/affaires/${id}`),
+
+  create: (data: CreateAffaireDto) =>
+    api.post<Affaire>('/affaires', data),
+
+  update: (id: string, data: UpdateAffaireDto) =>
+    api.put<Affaire>(`/affaires/${id}`, data),
+
+  changeStatus: (id: string, statut: AffaireStatut) =>
+    api.patch<Affaire>(`/affaires/${id}/status`, { statut }),
+
+  recalculateCommissions: (id: string) =>
+    api.post<void>(`/affaires/${id}/recalculate-commissions`),
+
+  delete: (id: string) =>
+    api.delete<void>(`/affaires/${id}`),
 };
+
+export default affairesApi;

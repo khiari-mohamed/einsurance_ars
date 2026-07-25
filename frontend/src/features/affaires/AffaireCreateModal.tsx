@@ -1,154 +1,177 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { X, ChevronRight, ChevronLeft, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, ChevronRight, ChevronLeft, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import masterDataApi from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
-import { CreateAffaireData, AffaireCategory, AffaireType, PaymentMode, CommissionCalculMode, CreateAffaireReinsurer, TreatyType, PeriodiciteComptes } from '../../types/affaire.types';
+import {
+  CreateAffaireDto, AffaireType, ModePaiement, ReassuranceType, FormeCouverture,
+  ModeRenouvellement, Periodicite, CommissionMode, AffaireReassureurInput,
+  GuaranteeLineInput, TreatyAccountRubriqueInput, PmdInstalmentInput,
+  typeLabels, reassuranceTypeLabels, formeCouvertureLabels, periodiciteLabels,
+  modeRenouvellementLabels,
+} from '../../types/affaire.types';
 
 interface Props {
   onClose: () => void;
-  initialCategory?: AffaireCategory;
 }
 
-export default function AffaireCreateModal({ onClose, initialCategory }: Props) {
-  const [step, setStep] = useState(1);
-  const queryClient = useQueryClient();
+const CURRENCIES = ['TND', 'EUR', 'USD', 'GBP'];
 
-  const [formData, setFormData] = useState<CreateAffaireData>({
-    category: initialCategory ?? AffaireCategory.FACULTATIVE,
-    type: AffaireType.PROPORTIONNEL,
+const emptyReassureur = (): AffaireReassureurInput => ({
+  reassureurId: '',
+  partPct: 0,
+  isLeader: false,
+  commissionMode: CommissionMode.CALCULABLE,
+  tauxCommissionArs: 0,
+});
+
+export default function AffaireCreateModal({ onClose }: Props) {
+  const [step, setStep] = useState(1);
+  const [errors, setErrors] = useState<string[]>([]);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const [type, setType] = useState<AffaireType>(AffaireType.FACULTATIVE);
+  const [cedanteId, setCedanteId] = useState('');
+  const [modePaiement, setModePaiement] = useState<ModePaiement>(ModePaiement.PAR_AFFAIRE);
+  const [currency, setCurrency] = useState('TND');
+
+  const [fac, setFac] = useState<Partial<import('../../types/affaire.types').FacultativeDataInput>>({
+    reassuranceType: ReassuranceType.PROPORTIONNEL,
     assureId: '',
-    cedanteId: '',
     dateEffet: '',
     dateEcheance: '',
-    devise: 'TND',
-    capitalAssure100: 0,
-    prime100: 0,
+    prime100Pct: 0,
     tauxCession: 0,
     tauxCommissionCedante: 0,
-    modeCalculCommissionCedante: CommissionCalculMode.AUTO,
-    tauxCommissionARS: 0,
-    modeCalculCommissionARS: CommissionCalculMode.AUTO,
-    paymentMode: PaymentMode.INCLUS_SITUATION,
-    reinsurers: [],
   });
+  const [guaranteeLines, setGuaranteeLines] = useState<GuaranteeLineInput[]>([]);
+
+  const [traite, setTraite] = useState<Partial<import('../../types/affaire.types').TraiteDataInput>>({
+    reassuranceType: ReassuranceType.PROPORTIONNEL,
+    periodicite: Periodicite.TRIMESTRIELLE,
+    dateEffet: '',
+    dateEcheance: '',
+  });
+  const [accountRubriques, setAccountRubriques] = useState<TreatyAccountRubriqueInput[]>([]);
+  const [pmdInstalments, setPmdInstalments] = useState<PmdInstalmentInput[]>([]);
+
+  const [reassureurs, setReassureurs] = useState<AffaireReassureurInput[]>([emptyReassureur()]);
 
   const { data: assures = [] } = useQuery({
     queryKey: ['assures'],
-    queryFn: async () => {
-      const { data } = await masterDataApi.assures.getAll();
-      return data.data;
-    },
+    queryFn: async () => (await masterDataApi.assures.getAll({ limit: 500 })).data.data,
   });
-
   const { data: cedantes = [] } = useQuery({
     queryKey: ['cedantes'],
-    queryFn: async () => {
-      const { data } = await masterDataApi.cedantes.getAll();
-      return data.data;
-    },
+    queryFn: async () => (await masterDataApi.cedantes.getAll({ limit: 500 })).data.data,
   });
-
-  const { data: reassureurs = [] } = useQuery({
+  const { data: reassureursOptions = [] } = useQuery({
     queryKey: ['reassureurs'],
-    queryFn: async () => {
-      const { data } = await masterDataApi.reassureurs.getAll();
-      return data.data;
-    },
+    queryFn: async () => (await masterDataApi.reassureurs.getAll({ limit: 500 })).data.data,
   });
 
   const mutation = useMutation({
-    mutationFn: (data: CreateAffaireData) => affairesApi.create(data),
-    onSuccess: () => {
+    mutationFn: (data: CreateAffaireDto) => affairesApi.create(data),
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['affaires'] });
-      queryClient.invalidateQueries({ queryKey: ['affaires-stats'] });
       onClose();
+      const newId = (res as any)?.data?.id;
+      if (newId) navigate(`/affaires/${newId}`);
     },
     onError: (error: any) => {
       const message = error.response?.data?.message || 'Erreur lors de la création';
-      setErrors([message]);
+      setErrors([Array.isArray(message) ? message.join(', ') : message]);
     },
   });
 
-  const primeCedee = formData.category === AffaireCategory.TRAITEE 
-    ? (formData.primePrevisionnelle || 0)
-    : (formData.prime100 * formData.tauxCession) / 100;
-  
-  const commissionCedante = formData.modeCalculCommissionCedante === CommissionCalculMode.MANUEL
-    ? (formData.montantCommissionCedante || 0)
-    : (primeCedee * (formData.tauxCommissionCedante || 0)) / 100;
-  
-  const commissionARS = formData.modeCalculCommissionARS === CommissionCalculMode.MANUEL
-    ? (formData.montantCommissionARS || 0)
-    : (primeCedee * (formData.tauxCommissionARS || 0)) / 100;
+  const primeCedeeCalc =
+    type === AffaireType.FACULTATIVE
+      ? Number(fac.prime100Pct || 0) * (Number(fac.tauxCession || 0) / 100)
+      : Number(traite.primePrevisionnelle || 0);
 
-  const totalReinsurerShare = formData.reinsurers.reduce((sum, r) => sum + r.share, 0);
+  const totalShare = reassureurs.reduce((sum, r) => sum + (r.partPct || 0), 0);
 
-  const [errors, setErrors] = useState<string[]>([]);
+  const validateStep1 = () => !!cedanteId;
+  const validateStep2 = () => {
+    if (type === AffaireType.FACULTATIVE) {
+      return !!fac.assureId && !!fac.dateEffet && !!fac.dateEcheance && (fac.prime100Pct ?? 0) > 0 && (fac.tauxCession ?? 0) > 0;
+    }
+    return !!traite.dateEffet && !!traite.dateEcheance && !!traite.periodicite;
+  };
 
-  const validateForm = (): boolean => {
+  const validateFinal = (): boolean => {
     const errs: string[] = [];
-    
-    if (totalReinsurerShare !== 100) {
-      errs.push('La somme des parts des réassureurs doit être égale à 100%');
-    }
-    
-    if (commissionARS > commissionCedante) {
-      errs.push('Commission ARS ne peut pas dépasser la commission cédante');
-    }
-    
-    if (commissionARS > primeCedee) {
-      errs.push('Commission ARS ne peut pas dépasser la prime cédée');
-    }
-    
-    if (new Date(formData.dateEffet) >= new Date(formData.dateEcheance)) {
-      errs.push('Date effet doit être avant date échéance');
-    }
-    
-    if (formData.category === AffaireCategory.TRAITEE) {
-      if (!formData.treatyType) errs.push('Type de traité requis pour les affaires traitées');
-      if (!formData.periodiciteComptes) errs.push('Périodicité des comptes requise');
-      if (!formData.primePrevisionnelle || formData.primePrevisionnelle <= 0) {
-        errs.push('Prime prévisionnelle requise pour les affaires traitées');
+    if (Math.abs(totalShare - 100) > 0.001) errs.push('La somme des participations des réassureurs doit être 100%');
+    const seen = new Set<string>();
+    for (const r of reassureurs) {
+      if (!r.reassureurId) errs.push('Chaque ligne doit avoir un réassureur sélectionné');
+      if (seen.has(r.reassureurId)) errs.push('Un même réassureur ne peut apparaître qu\'une seule fois');
+      seen.add(r.reassureurId);
+      if (r.commissionMode === CommissionMode.CALCULABLE && (r.tauxCommissionArs === undefined || r.tauxCommissionArs === null)) {
+        errs.push('Taux de commission ARS requis en mode Calculable');
       }
-      if (formData.pmd && formData.primePrevisionnelle && formData.primePrevisionnelle < formData.pmd) {
-        errs.push('Prime prévisionnelle doit être ≥ PMD');
+      if (r.commissionMode === CommissionMode.FORFAITAIRE && (r.commissionForfait === undefined || r.commissionForfait === null)) {
+        errs.push('Montant forfaitaire requis en mode Forfaitaire');
       }
     }
-    
-    if (formData.reinsurers.length === 0) {
-      errs.push('Au moins un réassureur est requis');
+    const dateEffet = type === AffaireType.FACULTATIVE ? fac.dateEffet : traite.dateEffet;
+    const dateEcheance = type === AffaireType.FACULTATIVE ? fac.dateEcheance : traite.dateEcheance;
+    if (dateEffet && dateEcheance && new Date(dateEffet) >= new Date(dateEcheance)) {
+      errs.push('La date d\'effet doit être antérieure à la date d\'échéance');
     }
-    
     setErrors(errs);
     return errs.length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-    mutation.mutate(formData);
+  const handleSubmit = () => {
+    if (!validateFinal()) return;
+
+    const dto: CreateAffaireDto = {
+      type,
+      cedanteId,
+      modePaiement,
+      currency,
+      reassureurs,
+      ...(type === AffaireType.FACULTATIVE
+        ? {
+            facultativeData: {
+              ...(fac as any),
+              guaranteeLines: guaranteeLines.length ? guaranteeLines : undefined,
+            },
+          }
+        : {
+            traiteData: {
+              ...(traite as any),
+              accountRubriques: accountRubriques.length ? accountRubriques : undefined,
+              pmdInstalments: pmdInstalments.length ? pmdInstalments : undefined,
+            },
+          }),
+    };
+    mutation.mutate(dto);
   };
 
-  const addReinsurer = () => {
-    setFormData({
-      ...formData,
-      reinsurers: [...formData.reinsurers, { reassureurId: '', share: 0, role: 'FOLLOWER' }],
-    });
-  };
+  const addReassureur = () => setReassureurs((prev) => [...prev, emptyReassureur()]);
+  const updateReassureur = (idx: number, patch: Partial<AffaireReassureurInput>) =>
+    setReassureurs((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const removeReassureur = (idx: number) => setReassureurs((prev) => prev.filter((_, i) => i !== idx));
 
-  const updateReinsurer = (index: number, field: keyof CreateAffaireReinsurer, value: any) => {
-    const updated = [...formData.reinsurers];
-    updated[index] = { ...updated[index], [field]: value };
-    setFormData({ ...formData, reinsurers: updated });
-  };
+  const addGuaranteeLine = () => setGuaranteeLines((prev) => [...prev, { garantie: '', capitauxAssures100: 0 }]);
+  const updateGuaranteeLine = (idx: number, patch: Partial<GuaranteeLineInput>) =>
+    setGuaranteeLines((prev) => prev.map((g, i) => (i === idx ? { ...g, ...patch } : g)));
+  const removeGuaranteeLine = (idx: number) => setGuaranteeLines((prev) => prev.filter((_, i) => i !== idx));
 
-  const removeReinsurer = (index: number) => {
-    setFormData({
-      ...formData,
-      reinsurers: formData.reinsurers.filter((_, i) => i !== index),
-    });
-  };
+  const addRubrique = () => setAccountRubriques((prev) => [...prev, { rubrique: '', compteReference: '' }]);
+  const updateRubrique = (idx: number, patch: Partial<TreatyAccountRubriqueInput>) =>
+    setAccountRubriques((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  const removeRubrique = (idx: number) => setAccountRubriques((prev) => prev.filter((_, i) => i !== idx));
+
+  const addInstalment = () =>
+    setPmdInstalments((prev) => [...prev, { numeroTranche: prev.length + 1, dateEcheance: '', montant: 0 }]);
+  const updateInstalment = (idx: number, patch: Partial<PmdInstalmentInput>) =>
+    setPmdInstalments((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
+  const removeInstalment = (idx: number) => setPmdInstalments((prev) => prev.filter((_, i) => i !== idx));
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -163,440 +186,376 @@ export default function AffaireCreateModal({ onClose, initialCategory }: Props) 
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
+        <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
           {step === 1 && (
             <div className="space-y-4">
               <h3 className="text-[15px] font-semibold text-gray-900 mb-4">Informations Générales</h3>
-              
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Catégorie *</label>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Type d'affaire *</label>
                   <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value as AffaireCategory })}
-                    required
+                    value={type}
+                    onChange={(e) => setType(e.target.value as AffaireType)}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value={AffaireCategory.FACULTATIVE}>Facultative</option>
-                    <option value={AffaireCategory.TRAITEE}>Traitée</option>
+                    {Object.entries(typeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Type *</label>
-                  <select
-                    value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value as AffaireType })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={AffaireType.PROPORTIONNEL}>Proportionnel</option>
-                    <option value={AffaireType.NON_PROPORTIONNEL}>Non Proportionnel</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Assuré *</label>
-                  <select
-                    value={formData.assureId}
-                    onChange={(e) => setFormData({ ...formData, assureId: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Sélectionner un assuré</option>
-                    {assures.map((a: any) => (
-                      <option key={a.id} value={a.id}>{a.raisonSociale}</option>
-                    ))}
-                  </select>
-                </div>
-
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Cédante *</label>
                   <select
-                    value={formData.cedanteId}
-                    onChange={(e) => setFormData({ ...formData, cedanteId: e.target.value })}
+                    value={cedanteId}
+                    onChange={(e) => setCedanteId(e.target.value)}
                     required
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Sélectionner une cédante</option>
-                    {cedantes.map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.raisonSociale}</option>
-                    ))}
+                    {cedantes.map((c: any) => <option key={c.id} value={c.id}>{c.raisonSociale}</option>)}
                   </select>
                 </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">N° Police</label>
-                  <input
-                    type="text"
-                    value={formData.numeroPolice || ''}
-                    onChange={(e) => setFormData({ ...formData, numeroPolice: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Branche</label>
-                  <input
-                    type="text"
-                    value={formData.branche || ''}
-                    onChange={(e) => setFormData({ ...formData, branche: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Effet *</label>
-                  <input
-                    type="date"
-                    value={formData.dateEffet}
-                    onChange={(e) => setFormData({ ...formData, dateEffet: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Échéance *</label>
-                  <input
-                    type="date"
-                    value={formData.dateEcheance}
-                    onChange={(e) => setFormData({ ...formData, dateEcheance: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise</label>
                   <select
-                    value={formData.devise}
-                    onChange={(e) => setFormData({ ...formData, devise: e.target.value })}
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="TND">TND</option>
-                    <option value="EUR">EUR</option>
-                    <option value="USD">USD</option>
+                    {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Garantie</label>
-                  <input
-                    type="text"
-                    value={formData.garantie || ''}
-                    onChange={(e) => setFormData({ ...formData, garantie: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode Paiement</label>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de paiement</label>
                   <select
-                    value={formData.paymentMode}
-                    onChange={(e) => setFormData({ ...formData, paymentMode: e.target.value as PaymentMode })}
+                    value={modePaiement}
+                    onChange={(e) => setModePaiement(e.target.value as ModePaiement)}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value={PaymentMode.INCLUS_SITUATION}>Inclus Situation</option>
-                    <option value={PaymentMode.PAYE_HORS_SITUATION}>Payé Hors Situation</option>
+                    <option value={ModePaiement.PAR_AFFAIRE}>Par Affaire (hors situation)</option>
+                    <option value={ModePaiement.PAR_SITUATION}>Par Situation (inclus)</option>
                   </select>
                 </div>
               </div>
-
-              {formData.category === AffaireCategory.TRAITEE && (
-                <div className="mt-6 p-4 bg-purple-50 rounded-lg space-y-4">
-                  <h4 className="text-[13px] font-semibold text-purple-900">Paramètres Traité</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Type de Traité *</label>
-                      <select
-                        value={formData.treatyType || ''}
-                        onChange={(e) => setFormData({ ...formData, treatyType: e.target.value as TreatyType })}
-                        required={formData.category === AffaireCategory.TRAITEE}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Sélectionner</option>
-                        <option value={TreatyType.QP}>Quote-Part (QP)</option>
-                        <option value={TreatyType.XOL}>Excédent de Perte (XOL)</option>
-                        <option value={TreatyType.SURPLUS}>Surplus</option>
-                        <option value={TreatyType.STOP_LOSS}>Stop Loss</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Périodicité Comptes *</label>
-                      <select
-                        value={formData.periodiciteComptes || ''}
-                        onChange={(e) => setFormData({ ...formData, periodiciteComptes: e.target.value as PeriodiciteComptes })}
-                        required={formData.category === AffaireCategory.TRAITEE}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Sélectionner</option>
-                        <option value={PeriodiciteComptes.TRIMESTRIEL}>Trimestriel</option>
-                        <option value={PeriodiciteComptes.SEMESTRIEL}>Semestriel</option>
-                        <option value={PeriodiciteComptes.ANNUEL}>Annuel</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
-          {step === 2 && (
+          {step === 2 && type === AffaireType.FACULTATIVE && (
             <div className="space-y-4">
-              <h3 className="text-[15px] font-semibold text-gray-900 mb-4">Données Financières</h3>
-              
-              {formData.category === AffaireCategory.TRAITEE ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime Prévisionnelle *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.primePrevisionnelle || 0}
-                      onChange={(e) => setFormData({ ...formData, primePrevisionnelle: parseFloat(e.target.value) || 0 })}
-                      required
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">PMD (Prime Minimum Déposée)</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.pmd || 0}
-                      onChange={(e) => setFormData({ ...formData, pmd: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Capital Assuré 100% *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.capitalAssure100}
-                      onChange={(e) => setFormData({ ...formData, capitalAssure100: parseFloat(e.target.value) || 0 })}
-                      required
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime 100% *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.prime100}
-                      onChange={(e) => setFormData({ ...formData, prime100: parseFloat(e.target.value) || 0 })}
-                      required
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Cession (%) *</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
-                      value={formData.tauxCession}
-                      onChange={(e) => setFormData({ ...formData, tauxCession: parseFloat(e.target.value) || 0 })}
-                      required
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime Cédée (calculée)</label>
-                    <input
-                      type="text"
-                      value={primeCedee.toFixed(2)}
-                      disabled
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] bg-gray-50 text-gray-700"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4 mt-4">
-
-                <div className="col-span-2">
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode Calcul Commission Cédante</label>
+              <h3 className="text-[15px] font-semibold text-gray-900 mb-4">Facultative — Données Contractuelles &amp; Financières</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Assuré *</label>
                   <select
-                    value={formData.modeCalculCommissionCedante}
-                    onChange={(e) => setFormData({ ...formData, modeCalculCommissionCedante: e.target.value as CommissionCalculMode })}
+                    value={fac.assureId || ''}
+                    onChange={(e) => setFac({ ...fac, assureId: e.target.value })}
+                    required
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value={CommissionCalculMode.AUTO}>Automatique</option>
-                    <option value={CommissionCalculMode.MANUEL}>Manuel</option>
+                    <option value="">Sélectionner</option>
+                    {assures.map((a: any) => <option key={a.id} value={a.id}>{a.raisonSociale}</option>)}
                   </select>
                 </div>
-
-                {formData.modeCalculCommissionCedante === CommissionCalculMode.AUTO ? (
-                  <>
-                    <div>
-                      <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission Cédante (%)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        value={formData.tauxCommissionCedante}
-                        onChange={(e) => setFormData({ ...formData, tauxCommissionCedante: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Montant (calculé)</label>
-                      <input
-                        type="text"
-                        value={commissionCedante.toFixed(2)}
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] bg-gray-50 text-gray-700"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <div className="col-span-2">
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Montant Commission Cédante</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.montantCommissionCedante || 0}
-                      onChange={(e) => setFormData({ ...formData, montantCommissionCedante: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                )}
-
-                <div className="col-span-2">
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode Calcul Commission ARS</label>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Type de réassurance</label>
                   <select
-                    value={formData.modeCalculCommissionARS}
-                    onChange={(e) => setFormData({ ...formData, modeCalculCommissionARS: e.target.value as CommissionCalculMode })}
+                    value={fac.reassuranceType}
+                    onChange={(e) => setFac({ ...fac, reassuranceType: e.target.value as ReassuranceType })}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value={CommissionCalculMode.AUTO}>Automatique</option>
-                    <option value={CommissionCalculMode.MANUEL}>Manuel</option>
+                    {Object.entries(reassuranceTypeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
-
-                {formData.modeCalculCommissionARS === CommissionCalculMode.AUTO ? (
-                  <>
-                    <div>
-                      <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission ARS (%)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        value={formData.tauxCommissionARS}
-                        onChange={(e) => setFormData({ ...formData, tauxCommissionARS: parseFloat(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Montant (calculé)</label>
-                      <input
-                        type="text"
-                        value={commissionARS.toFixed(2)}
-                        disabled
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] bg-green-50 text-green-700 font-medium"
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <div className="col-span-2">
-                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Montant Commission ARS</label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={formData.montantCommissionARS || 0}
-                      onChange={(e) => setFormData({ ...formData, montantCommissionARS: parseFloat(e.target.value) || 0 })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] bg-green-50 focus:outline-none focus:ring-2 focus:ring-green-500"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">N° Police cédante</label>
+                  <input
+                    type="text"
+                    value={fac.numeroPoliceCedante || ''}
+                    onChange={(e) => setFac({ ...fac, numeroPoliceCedante: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de renouvellement</label>
+                  <select
+                    value={fac.modeRenouvellement || ''}
+                    onChange={(e) => setFac({ ...fac, modeRenouvellement: (e.target.value || undefined) as ModeRenouvellement })}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">—</option>
+                    {Object.entries(modeRenouvellementLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Effet *</label>
+                  <input type="date" value={fac.dateEffet || ''} onChange={(e) => setFac({ ...fac, dateEffet: e.target.value })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Échéance *</label>
+                  <input type="date" value={fac.dateEcheance || ''} onChange={(e) => setFac({ ...fac, dateEcheance: e.target.value })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays de l'assuré</label>
+                  <input type="text" value={fac.paysAssure || ''} onChange={(e) => setFac({ ...fac, paysAssure: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Branche</label>
+                  <input type="text" value={fac.branche || ''} onChange={(e) => setFac({ ...fac, branche: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Produit</label>
+                  <input type="text" value={fac.produit || ''} onChange={(e) => setFac({ ...fac, produit: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Garantie</label>
+                  <input type="text" value={fac.garantie || ''} onChange={(e) => setFac({ ...fac, garantie: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
               </div>
 
-              {commissionARS > commissionCedante && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded text-[11px] text-red-700 flex items-center gap-1">
-                  <AlertCircle size={12} />
-                  Commission ARS ne peut pas dépasser commission cédante
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100 mt-2">
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime 100% *</label>
+                  <input type="number" step="0.001" value={fac.prime100Pct || 0} onChange={(e) => setFac({ ...fac, prime100Pct: parseFloat(e.target.value) || 0 })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-              )}
-              {commissionARS > primeCedee && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded text-[11px] text-red-700 flex items-center gap-1">
-                  <AlertCircle size={12} />
-                  Commission ARS ne peut pas dépasser prime cédée
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Prime (%)</label>
+                  <input type="number" step="0.0001" value={fac.tauxPrime || 0} onChange={(e) => setFac({ ...fac, tauxPrime: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-              )}
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Cession (%) *</label>
+                  <input type="number" step="0.0001" min="0" max="100" value={fac.tauxCession || 0} onChange={(e) => setFac({ ...fac, tauxCession: parseFloat(e.target.value) || 0 })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime Cédée (calculée)</label>
+                  <input type="text" value={primeCedeeCalc.toFixed(3)} disabled className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] bg-gray-50 text-gray-700" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission Cédante (%)</label>
+                  <input type="number" step="0.0001" value={fac.tauxCommissionCedante || 0} onChange={(e) => setFac({ ...fac, tauxCommissionCedante: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[13px] font-semibold text-gray-900">Capitaux assurés par garantie</h4>
+                  <button type="button" onClick={addGuaranteeLine} className="flex items-center gap-1 text-[12px] text-blue-600 hover:text-blue-700 font-medium">
+                    <Plus size={13} /> Ajouter une ligne
+                  </button>
+                </div>
+                {guaranteeLines.map((g, idx) => (
+                  <div key={idx} className="flex items-center gap-2 mb-2">
+                    <input placeholder="Garantie" value={g.garantie} onChange={(e) => updateGuaranteeLine(idx, { garantie: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <input type="number" step="0.001" placeholder="Capitaux 100%" value={g.capitauxAssures100} onChange={(e) => updateGuaranteeLine(idx, { capitauxAssures100: parseFloat(e.target.value) || 0 })} className="w-40 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <button type="button" onClick={() => removeGuaranteeLine(idx)} className="p-2 rounded-lg hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === 2 && type === AffaireType.TRAITE && (
+            <div className="space-y-4">
+              <h3 className="text-[15px] font-semibold text-gray-900 mb-4">Traité — Données Contractuelles &amp; Financières</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Référence traité</label>
+                  <input type="text" value={traite.referenceTraite || ''} onChange={(e) => setTraite({ ...traite, referenceTraite: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Type de réassurance</label>
+                  <select value={traite.reassuranceType} onChange={(e) => setTraite({ ...traite, reassuranceType: e.target.value as ReassuranceType })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {Object.entries(reassuranceTypeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Forme de couverture</label>
+                  <select value={traite.formeCouverture || ''} onChange={(e) => setTraite({ ...traite, formeCouverture: (e.target.value || undefined) as FormeCouverture })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">—</option>
+                    {Object.entries(formeCouvertureLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Périodicité *</label>
+                  <select value={traite.periodicite} onChange={(e) => setTraite({ ...traite, periodicite: e.target.value as Periodicite })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {Object.entries(periodiciteLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Effet *</label>
+                  <input type="date" value={traite.dateEffet || ''} onChange={(e) => setTraite({ ...traite, dateEffet: e.target.value })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Échéance *</label>
+                  <input type="date" value={traite.dateEcheance || ''} onChange={(e) => setTraite({ ...traite, dateEcheance: e.target.value })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de renouvellement</label>
+                  <select value={traite.modeRenouvellement || ''} onChange={(e) => setTraite({ ...traite, modeRenouvellement: (e.target.value || undefined) as ModeRenouvellement })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">—</option>
+                    {Object.entries(modeRenouvellementLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date avis résiliation</label>
+                  <input type="date" value={traite.dateAvisResiliation || ''} onChange={(e) => setTraite({ ...traite, dateAvisResiliation: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Zone géographique</label>
+                  <input type="text" value={traite.zoneGeographique || ''} onChange={(e) => setTraite({ ...traite, zoneGeographique: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Branche</label>
+                  <input type="text" value={traite.branche || ''} onChange={(e) => setTraite({ ...traite, branche: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Produit</label>
+                  <input type="text" value={traite.produit || ''} onChange={(e) => setTraite({ ...traite, produit: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Garantie</label>
+                  <input type="text" value={traite.garantie || ''} onChange={(e) => setTraite({ ...traite, garantie: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-100 mt-2">
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime Prévisionnelle</label>
+                  <input type="number" step="0.001" value={traite.primePrevisionnelle || 0} onChange={(e) => setTraite({ ...traite, primePrevisionnelle: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">PMD (Prime Minimum et Dépôt)</label>
+                  <input type="number" step="0.001" value={traite.pmd || 0} onChange={(e) => setTraite({ ...traite, pmd: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission Cédante (%)</label>
+                  <input type="number" step="0.0001" value={traite.tauxCommissionCedante || 0} onChange={(e) => setTraite({ ...traite, tauxCommissionCedante: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Commission Liquidation ARS</label>
+                  <input type="number" step="0.001" value={traite.commissionLiquidationArs || 0} onChange={(e) => setTraite({ ...traite, commissionLiquidationArs: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Seuil de notification sinistre</label>
+                  <input type="number" step="0.001" value={traite.seuilNotification || 0} onChange={(e) => setTraite({ ...traite, seuilNotification: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <p className="mt-1 text-[11px] text-gray-400">Montant au-delà duquel les réassureurs proportionnels doivent être notifiés (avis de sinistre)</p>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[13px] font-semibold text-gray-900">Rubriques comptables</h4>
+                  <button type="button" onClick={addRubrique} className="flex items-center gap-1 text-[12px] text-blue-600 hover:text-blue-700 font-medium">
+                    <Plus size={13} /> Ajouter une rubrique
+                  </button>
+                </div>
+                {accountRubriques.map((r, idx) => (
+                  <div key={idx} className="flex items-center gap-2 mb-2">
+                    <input placeholder="Rubrique (ex: Incendie)" value={r.rubrique} onChange={(e) => updateRubrique(idx, { rubrique: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <input placeholder="Compte de référence" value={r.compteReference} onChange={(e) => updateRubrique(idx, { compteReference: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px] font-mono" />
+                    <button type="button" onClick={() => removeRubrique(idx)} className="p-2 rounded-lg hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[13px] font-semibold text-gray-900">Échéancier PMD</h4>
+                  <button type="button" onClick={addInstalment} className="flex items-center gap-1 text-[12px] text-blue-600 hover:text-blue-700 font-medium">
+                    <Plus size={13} /> Ajouter une tranche
+                  </button>
+                </div>
+                {pmdInstalments.map((p, idx) => (
+                  <div key={idx} className="flex items-center gap-2 mb-2">
+                    <input type="number" placeholder="N° tranche" value={p.numeroTranche} onChange={(e) => updateInstalment(idx, { numeroTranche: parseInt(e.target.value) || 1 })} className="w-24 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <input type="date" value={p.dateEcheance} onChange={(e) => updateInstalment(idx, { dateEcheance: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <input type="number" step="0.001" placeholder="Montant" value={p.montant} onChange={(e) => updateInstalment(idx, { montant: parseFloat(e.target.value) || 0 })} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <input type="number" step="0.0001" placeholder="Taux déduction %" value={p.tauxDeduction || ''} onChange={(e) => updateInstalment(idx, { tauxDeduction: parseFloat(e.target.value) || undefined })} className="w-32 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <button type="button" onClick={() => removeInstalment(idx)} className="p-2 rounded-lg hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
           {step === 3 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[15px] font-semibold text-gray-900">Réassureurs</h3>
-                <button
-                  type="button"
-                  onClick={addReinsurer}
-                  className="text-[13px] text-blue-600 hover:text-blue-700 font-medium"
-                >
+                <h3 className="text-[15px] font-semibold text-gray-900">Table de participation des Réassureurs</h3>
+                <button type="button" onClick={addReassureur} className="text-[13px] text-blue-600 hover:text-blue-700 font-medium">
                   + Ajouter un réassureur
                 </button>
               </div>
 
-              {formData.reinsurers.map((reinsurer, index) => (
-                <div key={index} className="p-4 border border-gray-200 rounded-lg space-y-3">
+              {reassureurs.map((r, idx) => (
+                <div key={idx} className="p-4 border border-gray-200 rounded-lg space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-[13px] font-medium text-gray-700">Réassureur {index + 1}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeReinsurer(index)}
-                      className="text-[12px] text-red-600 hover:text-red-700"
-                    >
-                      Supprimer
-                    </button>
+                    <span className="text-[13px] font-medium text-gray-700">Ligne {idx + 1}</span>
+                    <button type="button" onClick={() => removeReassureur(idx)} className="text-[12px] text-red-600 hover:text-red-700">Supprimer</button>
                   </div>
-                  <div className="grid grid-cols-3 gap-3">
+                  <div className="grid grid-cols-4 gap-3">
                     <div className="col-span-2">
                       <select
-                        value={reinsurer.reassureurId}
-                        onChange={(e) => updateReinsurer(index, 'reassureurId', e.target.value)}
+                        value={r.reassureurId}
+                        onChange={(e) => updateReassureur(idx, { reassureurId: e.target.value })}
                         required
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        <option value="">Sélectionner</option>
-                        {reassureurs.map((r: any) => (
-                          <option key={r.id} value={r.id}>{r.raisonSociale}</option>
-                        ))}
+                        <option value="">Sélectionner un réassureur</option>
+                        {reassureursOptions.map((ro: any) => <option key={ro.id} value={ro.id}>{ro.raisonSociale}</option>)}
                       </select>
                     </div>
                     <div>
                       <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        max="100"
-                        placeholder="Part %"
-                        value={reinsurer.share}
-                        onChange={(e) => updateReinsurer(index, 'share', parseFloat(e.target.value) || 0)}
+                        type="number" step="0.0001" min="0" max="100" placeholder="Part %"
+                        value={r.partPct}
+                        onChange={(e) => updateReassureur(idx, { partPct: parseFloat(e.target.value) || 0 })}
                         required
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" checked={!!r.isLeader} onChange={(e) => updateReassureur(idx, { isLeader: e.target.checked })} className="w-4 h-4 text-blue-600 rounded border-gray-300" />
+                      <span className="text-[12px] text-gray-700">Leader / Apériteur</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] text-gray-500 mb-1">Mode de commission</label>
+                      <select
+                        value={r.commissionMode}
+                        onChange={(e) => updateReassureur(idx, { commissionMode: e.target.value as CommissionMode })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value={CommissionMode.CALCULABLE}>Calculable (taux × prime)</option>
+                        <option value={CommissionMode.FORFAITAIRE}>Forfaitaire (montant fixe)</option>
+                      </select>
+                    </div>
+                    {r.commissionMode === CommissionMode.CALCULABLE ? (
+                      <div className="col-span-2">
+                        <label className="block text-[11px] text-gray-500 mb-1">Taux commission ARS (%)</label>
+                        <input
+                          type="number" step="0.0001" min="0" max="100"
+                          value={r.tauxCommissionArs || 0}
+                          onChange={(e) => updateReassureur(idx, { tauxCommissionArs: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    ) : (
+                      <div className="col-span-2">
+                        <label className="block text-[11px] text-gray-500 mb-1">Commission forfaitaire (montant)</label>
+                        <input
+                          type="number" step="0.001"
+                          value={r.commissionForfait || 0}
+                          onChange={(e) => updateReassureur(idx, { commissionForfait: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
 
-              <div className={`p-3 rounded-lg ${totalReinsurerShare === 100 ? 'bg-green-50' : 'bg-yellow-50'}`}>
-                <p className={`text-[13px] font-medium ${totalReinsurerShare === 100 ? 'text-green-700' : 'text-yellow-700'}`}>
-                  Total des parts: {totalReinsurerShare.toFixed(2)}% {totalReinsurerShare === 100 ? '✓' : '(doit être 100%)'}
+              <div className={`p-3 rounded-lg ${Math.abs(totalShare - 100) < 0.001 ? 'bg-green-50' : 'bg-yellow-50'}`}>
+                <p className={`text-[13px] font-medium ${Math.abs(totalShare - 100) < 0.001 ? 'text-green-700' : 'text-yellow-700'}`}>
+                  Total des parts: {totalShare.toFixed(4)}% {Math.abs(totalShare - 100) < 0.001 ? '✓' : '(doit être 100%)'}
                 </p>
               </div>
 
@@ -615,23 +574,23 @@ export default function AffaireCreateModal({ onClose, initialCategory }: Props) 
               )}
             </div>
           )}
-        </form>
+        </div>
 
         <div className="flex items-center justify-between p-6 border-t border-gray-100">
           <button
             type="button"
-            onClick={() => step > 1 ? setStep(step - 1) : onClose()}
+            onClick={() => (step > 1 ? setStep(step - 1) : onClose())}
             className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
             <ChevronLeft size={16} />
             {step > 1 ? 'Précédent' : 'Annuler'}
           </button>
-          
+
           {step < 3 ? (
             <button
               type="button"
               onClick={() => setStep(step + 1)}
-              disabled={step === 1 && (!formData.assureId || !formData.cedanteId || !formData.dateEffet || !formData.dateEcheance)}
+              disabled={step === 1 ? !validateStep1() : !validateStep2()}
               className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Suivant
@@ -639,12 +598,12 @@ export default function AffaireCreateModal({ onClose, initialCategory }: Props) 
             </button>
           ) : (
             <button
-              type="submit"
+              type="button"
               onClick={handleSubmit}
-              disabled={mutation.isPending || totalReinsurerShare !== 100}
+              disabled={mutation.isPending}
               className="px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {mutation.isPending ? 'Création...' : 'Créer l\'affaire'}
+              {mutation.isPending ? 'Création...' : "Créer l'affaire"}
             </button>
           )}
         </div>

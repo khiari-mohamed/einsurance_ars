@@ -183,6 +183,10 @@ export class TraitesService {
       );
     }
 
+    // FIX (Traités pass): dateEffet/dateEcheance order was never validated —
+    // mirrors the guard AffairesService and FacultativeService both have.
+    this.assertDateOrder(dto.dateEffet, dto.dateEcheance);
+
     const dateEffet = new Date(dto.dateEffet);
 
     // Auto-generate PMD instalments if PMD set but no custom schedule provided
@@ -265,12 +269,22 @@ export class TraitesService {
     const traite = await this.findOne(affaireId);
 
     if (traite.affaire.statut === AffaireStatut.PLACEMENT_REALISE) {
-      // Allow updates to operational fields (seuil, periodicite) even when placed
+      // Allow updates to purely operational fields (seuil, periodicite,
+      // modeRenouvellement...) even when placed.
+      // FIX (Traités pass): the error message below says "les champs
+      // financiers et dates" but the guard previously only checked
+      // formeCouverture/dateEffet/dateEcheance/pmd — primePrevisionnelle,
+      // tauxCommissionCedante and commissionLiquidationArs (all financial
+      // fields) were silently editable post-placement, contradicting the
+      // method's own stated rule. Added them.
       const restrictedFields: (keyof UpdateTraiteDto)[] = [
         'formeCouverture',
         'dateEffet',
         'dateEcheance',
         'pmd',
+        'primePrevisionnelle',
+        'tauxCommissionCedante',
+        'commissionLiquidationArs',
       ];
       const hasRestricted = restrictedFields.some(
         (f) => (dto as Record<string, unknown>)[f] !== undefined,
@@ -280,6 +294,18 @@ export class TraitesService {
           'Les champs financiers et dates ne peuvent plus être modifiés sur un traité placé',
         );
       }
+    }
+
+    // FIX (Traités pass): date order was never re-validated on update —
+    // moving only one of dateEffet/dateEcheance could silently invert the
+    // period. Note this branch is effectively only reachable pre-placement
+    // given the guard above, but validated regardless for defense in depth
+    // (e.g. a future relaxation of the placement guard).
+    if (dto.dateEffet !== undefined || dto.dateEcheance !== undefined) {
+      this.assertDateOrder(
+        dto.dateEffet ?? traite.dateEffet.toISOString(),
+        dto.dateEcheance ?? traite.dateEcheance.toISOString(),
+      );
     }
 
     return this.prisma.traiteAffaire.update({
@@ -380,6 +406,53 @@ export class TraitesService {
     return this.prisma.pmdInstalment.findMany({
       where: { traiteId: traite.id },
       orderBy: { numeroTranche: 'asc' },
+    });
+  }
+
+  /**
+   * FIX (Traités pass, new): full-array replace for a hand-edited PMD
+   * schedule — mirrors replaceAccountRubriques()/replaceGuaranteeLines()
+   * exactly. Was entirely missing; the only prior write paths were the
+   * initial CreateTraiteDto.pmdInstalments and regeneratePmdInstalments()
+   * (which only knows how to derive an even split from pmd/periodicite).
+   * Blocks the replace if any existing tranche is already paid, since a
+   * delete+recreate would orphan the Encaissement row created by
+   * markInstalmentPaid() for that tranche.
+   */
+  async replacePmdInstalments(affaireId: string, instalments: PmdInstalmentDto[]) {
+    const traite = await this.prisma.traiteAffaire.findUnique({
+      where: { affaireId },
+      select: { id: true },
+    });
+    if (!traite) throw new NotFoundException('Traité introuvable');
+
+    const existing = await this.prisma.pmdInstalment.findMany({
+      where: { traiteId: traite.id },
+      select: { isPaid: true },
+    });
+    if (existing.some((i) => i.isPaid)) {
+      throw new BadRequestException(
+        'Impossible de remplacer intégralement le calendrier : au moins une tranche est déjà payée.',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.pmdInstalment.deleteMany({ where: { traiteId: traite.id } });
+
+      return tx.traiteAffaire.update({
+        where: { affaireId },
+        data: {
+          pmdInstalments: {
+            create: instalments.map((p) => ({
+              numeroTranche: p.numeroTranche,
+              dateEcheance: new Date(p.dateEcheance),
+              montant: p.montant,
+              tauxDeduction: p.tauxDeduction,
+            })),
+          },
+        },
+        include: { pmdInstalments: { orderBy: { numeroTranche: 'asc' } } },
+      });
     });
   }
 
@@ -601,5 +674,17 @@ export class TraitesService {
       company,
       generatedAt: new Date().toLocaleDateString('fr-TN'),
     });
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────
+
+  /** FIX (Traités pass): mirrors AffairesService/FacultativeService's own
+   * guard — kept local to this service, consistent with how the same
+   * duplication was handled in Pass 2. */
+  private assertDateOrder(effet?: string, echeance?: string): void {
+    if (!effet || !echeance) return;
+    if (new Date(effet) >= new Date(echeance)) {
+      throw new BadRequestException('La date d\'effet doit être antérieure à la date d\'échéance');
+    }
   }
 }

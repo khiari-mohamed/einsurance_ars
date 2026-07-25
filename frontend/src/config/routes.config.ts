@@ -11,6 +11,11 @@ export const routes = {
   finances: '/finances',
   comptabilite: '/comptabilite',
   reporting: '/reporting',
+  workflow: {
+    history: '/workflow/history',
+    tasks: '/workflow/tasks',
+    notifications: '/workflow/notifications',
+  },
   admin: {
     users: '/admin/users',
     settings: '/admin/settings',

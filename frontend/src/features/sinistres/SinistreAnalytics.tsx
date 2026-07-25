@@ -1,9 +1,65 @@
 import { useQuery } from '@tanstack/react-query';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, ComposedChart, Line, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Sector } from 'recharts';
 import { sinistresApi } from '../../api/sinistres.api';
 import { formatCurrency } from '../../lib/currency';
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+
+// Light -> dark tint pairs for each COLORS entry, used to build the glossy pie gradients below.
+// Same hues as COLORS, just given depth - the palette itself hasn't changed.
+const PIE_GRADIENTS: [string, string][] = [
+  ['#66B2FF', '#0066CC'], // blue
+  ['#6EE7C9', '#00997A'], // teal/green
+  ['#FFD666', '#D99A00'], // amber
+  ['#FFA873', '#E8630A'], // orange
+  ['#B4B0F0', '#6C63C7'], // purple
+];
+
+/** Frosted-glass tooltip shared across all four charts on this page. */
+function GlassChartTooltip({ active, payload, label, dotColors, formatValue }: any) {
+  if (!active || !payload || !payload.length) return null;
+  const title = label ?? payload[0]?.payload?.status ?? payload[0]?.name ?? payload[0]?.payload?.name;
+  const fmt = (v: any) => (formatValue ? formatValue(v) : (typeof v === 'number' ? v.toLocaleString('fr-FR') : v));
+  return (
+    <div className="backdrop-blur-xl bg-white/90 border border-white/70 rounded-xl shadow-2xl px-4 py-3 min-w-[170px]">
+      {title && (
+        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">{title}</p>
+      )}
+      <div className="space-y-1.5">
+        {payload.map((entry: any, i: number) => (
+          <div key={i} className="flex items-center justify-between gap-4 text-sm">
+            <span className="flex items-center gap-2 text-gray-600">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0"
+                style={{ backgroundColor: dotColors?.[entry.dataKey] || entry.payload?.fill || entry.color || '#9CA3AF' }}
+              />
+              {entry.name || entry.payload?.status}
+            </span>
+            <span className="font-semibold text-gray-900">{fmt(entry.value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Active (hovered) donut slice on the "Par Statut" chart - pops out slightly with a soft glow. */
+function renderActivePieShape(props: any) {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+  return (
+    <Sector
+      cx={cx}
+      cy={cy}
+      innerRadius={innerRadius}
+      outerRadius={outerRadius + 10}
+      startAngle={startAngle}
+      endAngle={endAngle}
+      fill={fill}
+      cornerRadius={8}
+      style={{ filter: 'drop-shadow(0px 8px 16px rgba(15,23,42,0.28))' }}
+    />
+  );
+}
 
 export default function SinistreAnalytics() {
   const { data: evolution } = useQuery({
@@ -52,6 +108,10 @@ export default function SinistreAnalytics() {
     amount: value.amount,
   })) : [];
 
+  // Same byCedante data, just capped to top 10 the way the chart already did - kept as its own
+  // variable purely so the gradient-filled bars have a stable dataset reference.
+  const topCedantesData = byCedante?.slice(0, 10);
+
   return (
     <div className="p-8 space-y-6">
       <h1 className="text-3xl font-bold text-gray-800">Analytiques Sinistres</h1>
@@ -78,68 +138,121 @@ export default function SinistreAnalytics() {
       )}
 
       <div className="grid grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4">Évolution (12 mois)</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={evolution}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="period" />
-              <YAxis />
-              <Tooltip formatter={(value: any) => formatCurrency(value)} />
-              <Legend />
-              <Line type="monotone" dataKey="amount" stroke="#1976d2" name="Montant" />
-              <Line type="monotone" dataKey="count" stroke="#ff9800" name="Nombre" />
-            </LineChart>
-          </ResponsiveContainer>
+        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
+          <div className="absolute -top-16 -right-16 w-56 h-56 bg-blue-200/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -left-10 w-48 h-48 bg-orange-200/20 rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-semibold mb-4">Évolution (12 mois)</h3>
+          <div className="relative">
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={evolution}>
+                <defs>
+                  <linearGradient id="areaGradAmount" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#1976d2" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#1976d2" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="areaGradCount" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ff9800" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="#ff9800" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="#E5E7EB" />
+                <XAxis dataKey="period" tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<GlassChartTooltip formatValue={formatCurrency} dotColors={{ amount: '#1976d2', count: '#ff9800' }} />} cursor={{ stroke: '#CBD5E1', strokeDasharray: '4 4' }} />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: 12 }} formatter={(value: string) => <span className="text-sm text-gray-600">{value}</span>} />
+                <Area type="monotone" dataKey="amount" stroke="none" fill="url(#areaGradAmount)" isAnimationActive={true} animationDuration={900} />
+                <Area type="monotone" dataKey="count" stroke="none" fill="url(#areaGradCount)" isAnimationActive={true} animationDuration={900} />
+                <Line type="monotone" dataKey="amount" stroke="#1976d2" name="Montant" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#1976d2' }} activeDot={{ r: 6, style: { filter: 'drop-shadow(0 2px 6px rgba(25,118,210,0.6))' } }} animationDuration={900} />
+                <Line type="monotone" dataKey="count" stroke="#ff9800" name="Nombre" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#ff9800' }} activeDot={{ r: 6, style: { filter: 'drop-shadow(0 2px 6px rgba(255,152,0,0.6))' } }} animationDuration={900} animationBegin={120} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4">Par Statut</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={byStatus}
-                dataKey="count"
-                nameKey="status"
-                cx="50%"
-                cy="50%"
-                outerRadius={100}
-                label
-              >
-                {byStatus?.map((_entry: any, index: number) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
+          <div className="absolute -top-16 -left-16 w-56 h-56 bg-purple-200/20 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-teal-200/20 rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-semibold mb-4">Par Statut</h3>
+          <div className="relative">
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <defs>
+                  {PIE_GRADIENTS.map((g, i) => (
+                    <linearGradient key={i} id={`sinistrePieGrad${i}`} x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor={g[0]} />
+                      <stop offset="100%" stopColor={g[1]} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <Pie
+                  data={byStatus}
+                  dataKey="count"
+                  nameKey="status"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={64}
+                  outerRadius={104}
+                  paddingAngle={3}
+                  cornerRadius={6}
+                  activeShape={renderActivePieShape}
+                  label={({ name, percent }: any) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`}
+                  labelLine={{ stroke: '#D1D5DB' } as any}
+                >
+                  {byStatus?.map((_entry: any, index: number) => (
+                    <Cell key={`cell-${index}`} fill={`url(#sinistrePieGrad${index % PIE_GRADIENTS.length})`} stroke="#ffffff" strokeWidth={2} />
+                  ))}
+                </Pie>
+                <Tooltip content={<GlassChartTooltip />} />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: 12 }} formatter={(value: string) => <span className="text-sm text-gray-600">{value}</span>} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4">Top Cédantes</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={byCedante?.slice(0, 10)}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="cedante" angle={-45} textAnchor="end" height={100} />
-              <YAxis />
-              <Tooltip formatter={(value: any) => formatCurrency(value)} />
-              <Bar dataKey="amount" fill="#1976d2" name="Montant" />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
+          <div className="absolute -top-16 -right-16 w-56 h-56 bg-blue-200/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -left-10 w-48 h-48 bg-blue-100/25 rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-semibold mb-4">Top Cédantes</h3>
+          <div className="relative">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={topCedantesData}>
+                <defs>
+                  <linearGradient id="barGradCedante" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#64B5F6" />
+                    <stop offset="100%" stopColor="#1565C0" />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="#E5E7EB" />
+                <XAxis dataKey="cedante" angle={-45} textAnchor="end" height={100} tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<GlassChartTooltip formatValue={formatCurrency} dotColors={{ amount: '#1565C0' }} />} cursor={{ fill: 'rgba(25,118,210,0.05)', radius: 8 } as any} />
+                <Bar dataKey="amount" name="Montant" fill="url(#barGradCedante)" radius={[8, 8, 0, 0]} maxBarSize={44} animationDuration={800} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
 
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4">Analyse d'Âge</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={agingData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip formatter={(value: any) => formatCurrency(value)} />
-              <Bar dataKey="amount" fill="#ff9800" name="Montant" />
-            </BarChart>
-          </ResponsiveContainer>
+        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
+          <div className="absolute -top-16 -left-16 w-56 h-56 bg-orange-200/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-amber-100/25 rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-semibold mb-4">Analyse d'Âge</h3>
+          <div className="relative">
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={agingData}>
+                <defs>
+                  <linearGradient id="barGradAge" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#FFB74D" />
+                    <stop offset="100%" stopColor="#EF6C00" />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="#E5E7EB" />
+                <XAxis dataKey="name" tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
+                <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<GlassChartTooltip formatValue={formatCurrency} dotColors={{ amount: '#EF6C00' }} />} cursor={{ fill: 'rgba(255,152,0,0.06)', radius: 8 } as any} />
+                <Bar dataKey="amount" name="Montant" fill="url(#barGradAge)" radius={[8, 8, 0, 0]} maxBarSize={44} animationDuration={800} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
     </div>

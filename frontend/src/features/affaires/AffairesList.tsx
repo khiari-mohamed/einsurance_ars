@@ -4,28 +4,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Eye } from 'lucide-react';
 import { affairesApi } from '../../api/affaires.api';
 import { formatCurrency } from '../../lib/currency';
-import { Affaire, AffaireStatus, AffaireCategory } from '../../types/affaire.types';
+import {
+  Affaire, AffaireStatut, AffaireType, statutColors, statutLabels, typeLabels,
+} from '../../types/affaire.types';
 import AffaireCreateModal from './AffaireCreateModal';
 
-const statusColors: Record<AffaireStatus, string> = {
-  [AffaireStatus.DRAFT]: 'bg-gray-100 text-gray-800',
-  [AffaireStatus.COTATION]: 'bg-blue-100 text-blue-800',
-  [AffaireStatus.PREVISION]: 'bg-yellow-100 text-yellow-800',
-  [AffaireStatus.PLACEMENT_REALISE]: 'bg-purple-100 text-purple-800',
-  [AffaireStatus.ACTIVE]: 'bg-green-100 text-green-800',
-  [AffaireStatus.TERMINE]: 'bg-gray-100 text-gray-600',
-  [AffaireStatus.ANNULE]: 'bg-red-100 text-red-800',
-};
-
-const statusLabels: Record<AffaireStatus, string> = {
-  [AffaireStatus.DRAFT]: 'Brouillon',
-  [AffaireStatus.COTATION]: 'Cotation',
-  [AffaireStatus.PREVISION]: 'Prévision',
-  [AffaireStatus.PLACEMENT_REALISE]: 'Placement Réalisé',
-  [AffaireStatus.ACTIVE]: 'Active',
-  [AffaireStatus.TERMINE]: 'Terminée',
-  [AffaireStatus.ANNULE]: 'Annulée',
-};
+const LIMIT = 20;
 
 export default function AffairesList() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -33,45 +17,65 @@ export default function AffairesList() {
   const navigate = useNavigate();
 
   const searchTerm = searchParams.get('search') || '';
-  const statusFilter = (searchParams.get('status') as AffaireStatus) || '';
-  const categoryFilter = (searchParams.get('category') as AffaireCategory) || '';
+  const statutFilter = (searchParams.get('statut') as AffaireStatut) || '';
+  const typeFilter = (searchParams.get('type') as AffaireType) || '';
+  const page = Number(searchParams.get('page') || '1');
 
   const updateFilter = (key: string, value: string) => {
     const params = new URLSearchParams(searchParams);
-    if (value) {
-      params.set(key, value);
-    } else {
-      params.delete(key);
-    }
+    if (value) params.set(key, value);
+    else params.delete(key);
+    if (key !== 'page') params.delete('page');
     setSearchParams(params);
   };
 
-  const { data: affaires = [], isLoading } = useQuery({
-    queryKey: ['affaires', searchTerm, statusFilter, categoryFilter],
+  const { data, isLoading } = useQuery({
+    queryKey: ['affaires', searchTerm, statutFilter, typeFilter, page],
     queryFn: async () => {
       const { data } = await affairesApi.getAll({
         search: searchTerm || undefined,
-        status: statusFilter || undefined,
-        category: categoryFilter || undefined,
+        statut: statutFilter || undefined,
+        type: typeFilter || undefined,
+        page,
+        limit: LIMIT,
       });
-      return data.data || data;
+      return data;
     },
+    placeholderData: (prev) => prev,
   });
 
-  const { data: stats } = useQuery({
-    queryKey: ['affaires-stats'],
+  // FIX (Affaires pass): there is no /affaires/statistics/summary endpoint on
+  // the backend — the old stats bar called a route that 404'd every time.
+  // Rather than fabricate a backend endpoint that wasn't reviewed/requested,
+  // this derives a lightweight, honest summary from pagination metadata
+  // (total count) plus per-statut counts via three cheap filtered calls.
+  const { data: statutCounts } = useQuery({
+    queryKey: ['affaires-statut-counts'],
     queryFn: async () => {
-      try {
-        const { data } = await affairesApi.getStatistics();
-        return (data as any)?.data || data;
-      } catch {
-        return null;
-      }
+      const [enCotation, prevision, placement] = await Promise.all([
+        affairesApi.getAll({ statut: AffaireStatut.EN_COTATION, limit: 1 }),
+        affairesApi.getAll({ statut: AffaireStatut.PREVISION, limit: 1 }),
+        affairesApi.getAll({ statut: AffaireStatut.PLACEMENT_REALISE, limit: 1 }),
+      ]);
+      return {
+        enCotation: enCotation.data.total,
+        prevision: prevision.data.total,
+        placement: placement.data.total,
+      };
     },
-    retry: false,
   });
 
+  const affaires = data?.data ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
 
+  const commissionTotal = (affaire: Affaire) =>
+    affaire.reassureurs.reduce((sum, r) => sum + (r.commissionArs ?? 0), 0);
+
+  const primeAffichee = (affaire: Affaire) =>
+    affaire.type === AffaireType.FACULTATIVE
+      ? affaire.facultativeData?.primeCedee ?? 0
+      : affaire.traiteData?.primePrevisionnelle ?? 0;
 
   return (
     <div className="p-4 lg:p-6">
@@ -79,11 +83,12 @@ export default function AffairesList() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <div>
             <h1 className="text-[24px] font-semibold text-gray-900">Affaires</h1>
-            {stats && (
-              <p className="text-[13px] text-gray-600 mt-1">
-                {stats.total} affaires • {stats.byStatus.active} actives • CA: {formatCurrency(stats.financials.totalPrimeCedee, 'TND')}
-              </p>
-            )}
+            <p className="text-[13px] text-gray-600 mt-1">
+              {total} affaire{total !== 1 ? 's' : ''}
+              {statutCounts && (
+                <> • {statutCounts.enCotation} en cotation • {statutCounts.prevision} en prévision • {statutCounts.placement} placées</>
+              )}
+            </p>
           </div>
           <button
             onClick={() => setIsCreateModalOpen(true)}
@@ -93,28 +98,28 @@ export default function AffairesList() {
             Nouvelle Affaire
           </button>
         </div>
-        
+
         <div className="flex gap-2">
           <button
-            onClick={() => updateFilter('category', '')}
+            onClick={() => updateFilter('type', '')}
             className={`px-4 py-2 text-[13px] font-medium rounded-lg transition-colors ${
-              !categoryFilter ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+              !typeFilter ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
             Tous
           </button>
           <button
-            onClick={() => updateFilter('category', 'facultative')}
+            onClick={() => updateFilter('type', AffaireType.FACULTATIVE)}
             className={`px-4 py-2 text-[13px] font-medium rounded-lg transition-colors ${
-              categoryFilter === 'facultative' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+              typeFilter === AffaireType.FACULTATIVE ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
             Facultatives
           </button>
           <button
-            onClick={() => updateFilter('category', 'traitee')}
+            onClick={() => updateFilter('type', AffaireType.TRAITE)}
             className={`px-4 py-2 text-[13px] font-medium rounded-lg transition-colors ${
-              categoryFilter === 'traitee' ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+              typeFilter === AffaireType.TRAITE ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
             }`}
           >
             Traités
@@ -128,7 +133,7 @@ export default function AffairesList() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <input
               type="text"
-              placeholder="Rechercher par numéro, assuré, cédante..."
+              placeholder="Rechercher par numéro, assuré, cédante, référence traité..."
               value={searchTerm}
               onChange={(e) => updateFilter('search', e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -136,23 +141,14 @@ export default function AffairesList() {
           </div>
           <div className="flex gap-3">
             <select
-              value={statusFilter}
-              onChange={(e) => updateFilter('status', e.target.value)}
+              value={statutFilter}
+              onChange={(e) => updateFilter('statut', e.target.value)}
               className="px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Tous les statuts</option>
-              {Object.entries(statusLabels).map(([value, label]) => (
+              {Object.entries(statutLabels).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
-            </select>
-            <select
-              value={categoryFilter}
-              onChange={(e) => updateFilter('category', e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Toutes les catégories</option>
-              <option value={AffaireCategory.FACULTATIVE}>Facultative</option>
-              <option value={AffaireCategory.TRAITEE}>Traitée</option>
             </select>
           </div>
         </div>
@@ -167,10 +163,10 @@ export default function AffairesList() {
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">N° Affaire</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Catégorie</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Assuré</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Type</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Assuré / Traité</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Cédante</th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Prime Cédée</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Prime</th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Commission ARS</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Statut</th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
@@ -179,49 +175,64 @@ export default function AffairesList() {
               <tbody className="divide-y divide-gray-100">
                 {affaires.map((affaire: Affaire) => (
                   <tr key={affaire.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-[13px] font-medium text-gray-900">{affaire.numeroAffaire}</td>
-                    <td className="px-4 py-3 text-[13px] text-gray-600">
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 text-[11px] rounded-full ${
-                          affaire.category === AffaireCategory.FACULTATIVE 
-                            ? 'bg-blue-100 text-blue-700' 
-                            : 'bg-purple-100 text-purple-700'
-                        }`}>
-                          {affaire.category === AffaireCategory.FACULTATIVE ? 'Facultative' : 'Traitée'}
-                        </span>
-                        {affaire.category === AffaireCategory.TRAITEE && affaire.treatyType && (
-                          <span className="text-[10px] text-gray-500">({affaire.treatyType.toUpperCase()})</span>
-                        )}
-                      </div>
+                    <td className="px-4 py-3 text-[13px] font-medium text-gray-900 font-mono">{affaire.numero}</td>
+                    <td className="px-4 py-3 text-[13px]">
+                      <span className={`px-2 py-1 text-[11px] rounded-full ${
+                        affaire.type === AffaireType.FACULTATIVE ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                      }`}>
+                        {typeLabels[affaire.type]}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-gray-900">{affaire.assure?.raisonSociale || '-'}</td>
+                    <td className="px-4 py-3 text-[13px] text-gray-900">
+                      {affaire.type === AffaireType.FACULTATIVE
+                        ? affaire.facultativeData?.assure?.raisonSociale || '-'
+                        : affaire.traiteData?.referenceTraite || <span className="text-gray-400">Sans référence</span>}
+                    </td>
                     <td className="px-4 py-3 text-[13px] text-gray-900">{affaire.cedante?.raisonSociale || '-'}</td>
                     <td className="px-4 py-3 text-[13px] text-right font-medium text-gray-900">
-                      {formatCurrency(affaire.primeCedee, affaire.devise)}
+                      {formatCurrency(primeAffichee(affaire), affaire.currency)}
                     </td>
                     <td className="px-4 py-3 text-[13px] text-right font-medium text-green-600">
-                      {formatCurrency(affaire.montantCommissionARS, affaire.devise)}
+                      {formatCurrency(commissionTotal(affaire), affaire.currency)}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-[11px] rounded-full ${statusColors[affaire.status]}`}>
-                        {statusLabels[affaire.status]}
+                      <span className={`px-2 py-1 text-[11px] rounded-full ${statutColors[affaire.statut]}`}>
+                        {statutLabels[affaire.statut]}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => navigate(`/affaires/${affaire.id}`)}
-                          className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
-                          title="Voir détails"
-                        >
-                          <Eye size={16} />
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => navigate(`/affaires/${affaire.id}`)}
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+                        title="Voir détails"
+                      >
+                        <Eye size={16} />
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+              <p className="text-[12px] text-gray-500">Page {page} / {totalPages}</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => updateFilter('page', String(Math.max(1, page - 1)))}
+                  disabled={page <= 1}
+                  className="px-3 py-1.5 text-[12px] rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Précédent
+                </button>
+                <button
+                  onClick={() => updateFilter('page', String(Math.min(totalPages, page + 1)))}
+                  disabled={page >= totalPages}
+                  className="px-3 py-1.5 text-[12px] rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                >
+                  Suivant
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
