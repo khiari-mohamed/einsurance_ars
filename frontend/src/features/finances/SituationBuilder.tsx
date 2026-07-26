@@ -1,309 +1,190 @@
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Calculator, FileText, Download } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Calculator, AlertCircle } from 'lucide-react';
+import masterDataApi from '@/api/master-data.api';
+import traitesApi from '@/api/traites.api';
+import { financesApi } from '@/api/finances.api';
+import { CreateSituationInput, Situation, soldeDirectionLabels } from '@/types/finance.types';
 import { toast } from 'sonner';
+import { formatCurrency } from '@/lib/currency';
 
-interface Deal {
-  id: string;
-  numeroAffaire: string;
-  cedante: { id: string; raisonSociale: string };
-  primeCedee: number;
-  sinistresTotal: number;
-  devise: string;
-  dateEffet: string;
+interface Props {
+  onCreated?: (situation: Situation) => void;
 }
 
-export default function SituationBuilder() {
+// FIX (Finances pass): full rewrite. This was a manual "browse and pick
+// individual affaires" builder posting to a nonexistent /api/affaires and
+// /api/finances/situations REST-style endpoint. The real
+// POST /finances/situations does the affaire selection automatically —
+// it queries every PLACEMENT_REALISE affaire for the given cedante (and
+// traité, if scoped) with modePaiement=PAR_SITUATION and compiles the
+// netting itself. The frontend's job is just to specify the scope
+// (cedante, période, traité optionnel) and show the compiled result.
+export default function SituationBuilder({ onCreated }: Props) {
+  const queryClient = useQueryClient();
   const [cedanteId, setCedanteId] = useState('');
-  const [cedantes, setCedantes] = useState<any[]>([]);
-  const [availableDeals, setAvailableDeals] = useState<Deal[]>([]);
-  const [selectedDeals, setSelectedDeals] = useState<Deal[]>([]);
+  const [traiteId, setTraiteId] = useState('');
   const [dateDebut, setDateDebut] = useState('');
   const [dateFin, setDateFin] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [currency, setCurrency] = useState('TND');
+  const [result, setResult] = useState<Situation | null>(null);
 
-  useEffect(() => {
-    fetchCedantes();
-  }, []);
+  const { data: cedantes = [] } = useQuery({
+    queryKey: ['cedantes-lite'],
+    queryFn: async () => (await masterDataApi.cedantes.getAll({ limit: 500 })).data.data,
+  });
 
-  useEffect(() => {
-    if (cedanteId && dateDebut && dateFin) {
-      fetchDeals();
-    }
-  }, [cedanteId, dateDebut, dateFin]);
+  const { data: traites = [] } = useQuery({
+    queryKey: ['traites-for-cedante', cedanteId],
+    queryFn: async () => (await traitesApi.getAll({ cedanteId, limit: 100 })).data.data,
+    enabled: !!cedanteId,
+  });
 
-  const fetchCedantes = async () => {
-    try {
-      const res = await fetch('/api/cedantes');
-      if (!res.ok) {
-        setCedantes([]);
-        return;
-      }
-      const data = await res.json();
-      setCedantes(Array.isArray(data) ? data : []);
-    } catch (error) {
-      setCedantes([]);
-      toast.error('Erreur lors du chargement des cédantes');
-    }
-  };
+  const compileMutation = useMutation({
+    mutationFn: (data: CreateSituationInput) => financesApi.createSituation(data),
+    onSuccess: ({ data }) => {
+      toast.success(`Situation ${data.reference} compilée avec succès`);
+      setResult(data);
+      queryClient.invalidateQueries({ queryKey: ['situations'] });
+      onCreated?.(data);
+    },
+    onError: (error: any) => toast.error(error.response?.data?.message || 'Erreur lors de la compilation'),
+  });
 
-  const fetchDeals = async () => {
-    try {
-      const res = await fetch(
-        `/api/affaires?cedanteId=${cedanteId}&dateDebut=${dateDebut}&dateFin=${dateFin}&paymentMode=inclus_situation`
-      );
-      if (!res.ok) {
-        setAvailableDeals([]);
-        return;
-      }
-      const data = await res.json();
-      setAvailableDeals(Array.isArray(data) ? data : []);
-    } catch (error) {
-      setAvailableDeals([]);
-      toast.error('Erreur lors du chargement des affaires');
-    }
-  };
-
-  const addDeal = (deal: Deal) => {
-    if (!selectedDeals.find((d) => d.id === deal.id)) {
-      setSelectedDeals([...selectedDeals, deal]);
-    }
-  };
-
-  const removeDeal = (dealId: string) => {
-    setSelectedDeals(selectedDeals.filter((d) => d.id !== dealId));
-  };
-
-  const calculateTotals = () => {
-    const totalPrimes = selectedDeals.reduce((sum, d) => sum + d.primeCedee, 0);
-    const totalSinistres = selectedDeals.reduce((sum, d) => sum + d.sinistresTotal, 0);
-    const solde = totalPrimes - totalSinistres;
-    return { totalPrimes, totalSinistres, solde };
-  };
-
-  const generateSituation = async () => {
-    if (selectedDeals.length === 0) {
-      toast.error('Veuillez sélectionner au moins une affaire');
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cedanteId || !dateDebut || !dateFin) {
+      toast.error('Cédante et période requises');
       return;
     }
-
-    setLoading(true);
-    try {
-      const { totalPrimes, totalSinistres, solde } = calculateTotals();
-      const res = await fetch('/api/finances/situations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cedanteId,
-          dateDebut,
-          dateFin,
-          affaireIds: selectedDeals.map((d) => d.id),
-          totalPrimes,
-          totalSinistres,
-          solde,
-          devise: selectedDeals[0]?.devise || 'TND',
-        }),
-      });
-
-      if (res.ok) {
-        await res.json();
-        toast.success('Situation créée avec succès');
-        // Reset
-        setSelectedDeals([]);
-      } else {
-        toast.error('Erreur lors de la création');
-      }
-    } catch (error) {
-      toast.error('Erreur lors de la création');
-    } finally {
-      setLoading(false);
-    }
+    compileMutation.mutate({
+      cedanteId,
+      traiteId: traiteId || undefined,
+      dateDebut,
+      dateFin,
+      currency,
+    });
   };
 
-  const { totalPrimes, totalSinistres, solde } = calculateTotals();
-  const cedanteName = Array.isArray(cedantes) ? cedantes.find((c) => c.id === cedanteId)?.raisonSociale || '' : '';
-
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold">Générateur de Situation</h1>
-            <p className="text-gray-600">Regroupement et compensation des affaires</p>
-          </div>
-          <FileText size={32} className="text-blue-600" />
-        </div>
-
-        {/* Filters */}
-        <div className="grid grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg">
-          <div>
-            <label className="block text-sm font-medium mb-1">Cédante</label>
-            <select
-              value={cedanteId}
-              onChange={(e) => setCedanteId(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg"
-            >
-              <option value="">Sélectionner...</option>
-              {cedantes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.raisonSociale}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Date Début</label>
-            <input
-              type="date"
-              value={dateDebut}
-              onChange={(e) => setDateDebut(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Date Fin</label>
-            <input
-              type="date"
-              value={dateFin}
-              onChange={(e) => setDateFin(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg"
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-6">
-          {/* Available Deals */}
-          <div>
-            <h3 className="font-semibold mb-3">Affaires Disponibles ({availableDeals.length})</h3>
-            <div className="border rounded-lg max-h-96 overflow-y-auto">
-              {availableDeals.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">
-                  <p>Aucune affaire disponible</p>
-                  <p className="text-sm">Sélectionnez une cédante et une période</p>
-                </div>
-              ) : (
-                availableDeals.map((deal) => (
-                  <div
-                    key={deal.id}
-                    className="p-3 border-b hover:bg-gray-50 flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="font-medium">{deal.numeroAffaire}</p>
-                      <p className="text-sm text-gray-600">
-                        Prime: {deal.primeCedee.toFixed(2)} {deal.devise}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Sinistres: {deal.sinistresTotal.toFixed(2)} {deal.devise}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => addDeal(deal)}
-                      disabled={selectedDeals.find((d) => d.id === deal.id) !== undefined}
-                      className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                ))
-              )}
+    <Card>
+      <CardContent className="pt-6 space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label>Cédante *</Label>
+              <Select value={cedanteId} onValueChange={(v) => { setCedanteId(v); setTraiteId(''); }}>
+                <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                <SelectContent>
+                  {cedantes.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.raisonSociale}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Traité (optionnel — restreint aux affaires de ce traité)</Label>
+              <Select value={traiteId} onValueChange={setTraiteId} disabled={!cedanteId}>
+                <SelectTrigger><SelectValue placeholder="Tous les traités" /></SelectTrigger>
+                <SelectContent>
+                  {traites.map((t: any) => (
+                    <SelectItem key={t.affaireId} value={t.affaireId}>{t.referenceTraite || t.affaire?.numero}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Date Début *</Label>
+              <input type="date" value={dateDebut} onChange={(e) => setDateDebut(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" required />
+            </div>
+            <div>
+              <Label>Date Fin *</Label>
+              <input type="date" value={dateFin} onChange={(e) => setDateFin(e.target.value)} className="w-full border rounded-lg px-3 py-2 text-sm" required />
+            </div>
+            <div>
+              <Label>Devise</Label>
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {['TND', 'EUR', 'USD', 'GBP'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
-          {/* Selected Deals */}
-          <div>
-            <h3 className="font-semibold mb-3">Affaires Sélectionnées ({selectedDeals.length})</h3>
-            <div className="border rounded-lg max-h-96 overflow-y-auto">
-              {selectedDeals.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">
-                  <p>Aucune affaire sélectionnée</p>
-                </div>
-              ) : (
-                selectedDeals.map((deal) => (
-                  <div key={deal.id} className="p-3 border-b hover:bg-gray-50 flex items-center justify-between">
-                    <div>
-                      <p className="font-medium">{deal.numeroAffaire}</p>
-                      <p className="text-sm text-gray-600">
-                        Prime: {deal.primeCedee.toFixed(2)} {deal.devise}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Sinistres: {deal.sinistresTotal.toFixed(2)} {deal.devise}
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => removeDeal(deal.id)}
-                      className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
+          <p className="text-[11px] text-gray-400">
+            Seules les affaires placées, au mode de paiement "Par Situation", sont éligibles. La compilation calcule
+            automatiquement le débit (primes cédées nettes de commission) et le crédit (sinistres réglés) par affaire.
+          </p>
 
-        {/* Calculation Summary */}
-        {selectedDeals.length > 0 && (
-          <div className="mt-6 p-6 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
-            <div className="flex items-center gap-2 mb-4">
-              <Calculator className="text-blue-600" size={24} />
-              <h3 className="text-lg font-bold">Calcul de la Situation</h3>
+          <div className="flex justify-end">
+            <Button type="submit" disabled={compileMutation.isPending}>
+              <Calculator className="mr-2 h-4 w-4" />
+              {compileMutation.isPending ? 'Compilation...' : 'Compiler la Situation'}
+            </Button>
+          </div>
+        </form>
+
+        {result && (
+          <div className="border-t pt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold">Situation {result.reference}</h3>
+              <span className="text-sm text-gray-500">{result.lines.length} affaire(s)</span>
             </div>
+
             <div className="grid grid-cols-3 gap-4">
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">DÉBIT (Primes)</p>
-                <p className="text-2xl font-bold text-green-600">
-                  {totalPrimes.toFixed(2)} {selectedDeals[0]?.devise}
-                </p>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600">DÉBIT (Primes)</p>
+                <p className="text-xl font-bold text-green-700">{formatCurrency(result.totalDebit ?? 0, result.currency)}</p>
               </div>
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">CRÉDIT (Sinistres)</p>
-                <p className="text-2xl font-bold text-red-600">
-                  {totalSinistres.toFixed(2)} {selectedDeals[0]?.devise}
-                </p>
+              <div className="bg-red-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600">CRÉDIT (Sinistres)</p>
+                <p className="text-xl font-bold text-red-700">{formatCurrency(result.totalCredit ?? 0, result.currency)}</p>
               </div>
-              <div className="bg-white p-4 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">SOLDE NET</p>
-                <p className={`text-2xl font-bold ${solde >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                  {solde.toFixed(2)} {selectedDeals[0]?.devise}
-                </p>
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <p className="text-sm text-gray-600">SOLDE NET</p>
+                <p className="text-xl font-bold text-blue-700">{formatCurrency(result.soldeNet ?? 0, result.currency)}</p>
               </div>
             </div>
-            <div className="mt-4 p-3 bg-white rounded-lg">
-              <p className="text-sm font-medium">
-                {solde > 0 ? (
-                  <span className="text-green-600">
-                    ✓ {cedanteName} doit payer {solde.toFixed(2)} {selectedDeals[0]?.devise} à ARS
-                  </span>
-                ) : solde < 0 ? (
-                  <span className="text-orange-600">
-                    ⚠ ARS doit payer {Math.abs(solde).toFixed(2)} {selectedDeals[0]?.devise} à {cedanteName}
-                  </span>
-                ) : (
-                  <span className="text-gray-600">⚖ Situation équilibrée (solde nul)</span>
-                )}
-              </p>
+
+            {result.soldeDirection && (
+              <div className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg text-sm">
+                <AlertCircle size={16} className="text-gray-500" />
+                {soldeDirectionLabels[result.soldeDirection]}
+              </div>
+            )}
+
+            <div className="border rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Affaire</th>
+                    <th className="px-3 py-2 text-right">Débit</th>
+                    <th className="px-3 py-2 text-right">Crédit</th>
+                    <th className="px-3 py-2 text-right">Solde</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {result.lines.map((l) => (
+                    <tr key={l.id}>
+                      <td className="px-3 py-2 font-mono">{l.affaire?.numero || l.description}</td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(l.debit ?? 0, result.currency)}</td>
+                      <td className="px-3 py-2 text-right">{formatCurrency(l.credit ?? 0, result.currency)}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{formatCurrency(l.solde ?? 0, result.currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+
+            <p className="text-[11px] text-gray-400">
+              Une tâche de transfert vers la DAF a été créée automatiquement pour cette situation.
+            </p>
           </div>
         )}
-
-        {/* Actions */}
-        <div className="flex justify-end gap-3 mt-6">
-          <button
-            onClick={() => setSelectedDeals([])}
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-          >
-            Réinitialiser
-          </button>
-          <button
-            onClick={generateSituation}
-            disabled={loading || selectedDeals.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            <Download size={16} />
-            {loading ? 'Génération...' : 'Générer la Situation'}
-          </button>
-        </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

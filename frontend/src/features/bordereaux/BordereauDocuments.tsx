@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Upload, FileText, Download, Trash2 } from 'lucide-react';
+import { Upload, FileText, Trash2 } from 'lucide-react';
 import { bordereauxApi } from '../../api/bordereaux.api';
 import type { BordereauDocumentType } from '../../types/bordereau.types';
 import { Button } from '../../components/ui/button';

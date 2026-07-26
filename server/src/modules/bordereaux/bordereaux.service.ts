@@ -1,12 +1,11 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
-import type { File as MulterFile } from 'multer';
 import { BordereauStatut, BordereauType, PaymentMode, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../shared/services/sequence.service';
 import { AmountToWordsService } from '../../shared/services/amount-to-words.service';
-import { PdfService } from '../../shared/services/pdf.service';
 import { StorageService } from '../../shared/services/storage.service';
 import { EmailService } from '../../shared/services/email.service';
+import { PdfGeneratorService } from '../reporting/pdf-generator.service';
 import { AccountingEngineService } from '../comptabilite/accounting-engine.service';
 import { CreateBordereauDto } from './dto/create-bordereau.dto';
 import { UpdateBordereauDto } from './dto/update-bordereau.dto';
@@ -16,24 +15,64 @@ import { SendBordereauDto } from './dto/send-bordereau.dto';
 import { PayBordereauDto } from './dto/pay-bordereau.dto';
 import { AttachDocumentDto } from './dto/attach-document.dto';
 
-// Template mapping — only the four .hbs files that actually exist in
-// src/templates today are wired here (bordereau-cedante, bordereau-reassureur,
-// claim-bordereau, treaty-statement). Types without a dedicated template fall
-// back to the closest existing one. NOTE_DE_CREDIT / ETAT_DE_TRANSFERT /
-// SITUATION_FINANCIERE / the two FACTURE_PRIME_REASSURANCE_* variants do NOT
-// have dedicated templates yet (Section 9 of the CDC defines their column
-// layouts) — creating those .hbs files is a separate task, flagged here
-// rather than silently guessed.
-const TEMPLATE_MAP: Partial<Record<BordereauType, string>> = {
-  [BordereauType.CESSION_CEDANTE]: 'bordereau-cedante',
-  [BordereauType.CESSION_REASSUREUR]: 'bordereau-reassureur',
-  [BordereauType.SINISTRE_FACULTATIVE]: 'claim-bordereau',
-  [BordereauType.SITUATION_TRAITE]: 'treaty-statement',
-  [BordereauType.FACTURE_DEPOT_PRIME]: 'pmd-invoice',
-  [BordereauType.FACTURE_PRIME_REASSURANCE_DEPOT]: 'pmd-invoice',
+// CHANGED: PdfService swapped for PdfGeneratorService. PdfService never
+// registers Handlebars helpers (formatDate, ifCond, default, etc.) — every
+// bordereau template needs them. Relying on PdfService "working" depended on
+// PdfGeneratorService happening to be instantiated first elsewhere in the
+// app (global Handlebars singleton mutation) — fragile, and not something to
+// build new templates against. See turn notes for the same latent issue in
+// FacultativeService / OrdrePaiementService / TraitesService (not fixed here
+// — out of scope for this pass, flagged for its own fix).
+
+// CHANGED: TEMPLATE_MAP replaced by resolveTemplate(). The five legacy
+// templates (bordereau-cedante, bordereau-reassureur, claim-bordereau,
+// payment-order, pmd-invoice, treaty-statement) are NOT Bordereau-native —
+// they're built around Affaire/Sinistre/OrdrePaiement/TraiteAffaire context
+// owned by FacultativeService/SinistresService/OrdrePaiementService/
+// TraitesService respectively. Bordereaux gets its own three adaptive
+// templates, grouped by real structural similarity in BordereauLine's
+// column set rather than one-per-BordereauType:
+function resolveTemplate(type: BordereauType): 'bordereau-cession' | 'bordereau-traite' | 'bordereau-releve' {
+  switch (type) {
+    case BordereauType.CESSION_CEDANTE:
+    case BordereauType.CESSION_REASSUREUR:
+      return 'bordereau-cession';
+    case BordereauType.SITUATION_TRAITE:
+    case BordereauType.FACTURE_DEPOT_PRIME:
+    case BordereauType.FACTURE_PRIME_REASSURANCE_DEPOT:
+    case BordereauType.FACTURE_PRIME_REASSURANCE_AJUSTEMENT:
+    case BordereauType.ETAT_DE_TRANSFERT:
+      return 'bordereau-traite';
+    case BordereauType.NOTE_DE_CREDIT:
+    case BordereauType.SITUATION_FINANCIERE:
+    case BordereauType.SINISTRE_FACULTATIVE:
+      return 'bordereau-releve';
+    default:
+      return 'bordereau-cession';
+  }
+}
+
+const TYPE_TITLES: Record<BordereauType, string> = {
+  CESSION_CEDANTE: 'Bordereau de Cession — Cédante',
+  CESSION_REASSUREUR: 'Bordereau de Cession — Réassureur',
+  SINISTRE_FACULTATIVE: 'Bordereau Sinistre — Facultative',
+  SITUATION_TRAITE: 'Situation de Traité',
+  FACTURE_DEPOT_PRIME: 'Facture — Dépôt de Prime',
+  NOTE_DE_CREDIT: 'Note de Crédit',
+  ETAT_DE_TRANSFERT: 'État de Transfert',
+  SITUATION_FINANCIERE: 'Situation Financière',
+  FACTURE_PRIME_REASSURANCE_DEPOT: 'Facture Prime de Réassurance — Dépôt',
+  FACTURE_PRIME_REASSURANCE_AJUSTEMENT: 'Facture Prime de Réassurance — Ajustement',
 };
 
 const DEFAULT_PAYMENT_TERM_DAYS = 30;
+
+type UploadedFile = {
+  buffer: Buffer;
+  originalname: string;
+  mimetype: string;
+  size: number;
+};
 
 export interface BordereauQueryFilters {
   affaireId?: string;
@@ -44,7 +83,7 @@ export interface BordereauQueryFilters {
   search?: string;
   minAmount?: number;
   maxAmount?: number;
-  overdue?: string;       // 'true'
+  overdue?: string;
   currency?: string;
   createdByUserId?: string;
   sortBy?: string;
@@ -61,16 +100,12 @@ export class BordereauxService {
     private prisma: PrismaService,
     private sequence: SequenceService,
     private amountToWords: AmountToWordsService,
-    private pdf: PdfService,
+    private pdfGenerator: PdfGeneratorService,
     private storage: StorageService,
     private email: EmailService,
     private accounting: AccountingEngineService,
   ) {}
 
-  // ============================================================
-  // AUDIT HELPER — logs into the existing global AuditLog model
-  // rather than a bespoke `historique` column on Bordereau.
-  // ============================================================
   private async logAudit(userId: string | undefined, bordereauId: string, action: string, message?: string) {
     try {
       await this.prisma.auditLog.create({
@@ -83,7 +118,6 @@ export class BordereauxService {
         },
       });
     } catch (err: any) {
-      // Audit failures must never block the business transition.
       this.logger.warn(`Audit log write failed for bordereau ${bordereauId}: ${err.message}`);
     }
   }
@@ -172,9 +206,6 @@ export class BordereauxService {
     });
     if (!b) throw new NotFoundException('Bordereau introuvable');
 
-    // createdByUserId / validatedByUserId are intentionally bare FKs (no
-    // Prisma relation — same pattern as FiscalPeriod.closedByUserId
-    // elsewhere in this schema), so we resolve them manually for display.
     const userIds = [b.createdByUserId, b.validatedByUserId].filter(Boolean) as string[];
     const users = userIds.length
       ? await this.prisma.user.findMany({
@@ -184,8 +215,22 @@ export class BordereauxService {
       : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
 
+    // NEW: reassureurCode is a denormalized string, not a relation, so the
+    // reinsurer's display name has to be resolved separately — needed for
+    // the PDF header on CESSION_REASSUREUR bordereaux (raisonSociale, not
+    // just the raw code). Additive only; findOne()'s existing shape is
+    // unchanged for everyone who doesn't read this new field.
+    let reassureur: { raisonSociale: string; compteComptable: string } | null = null;
+    if (b.reassureurCode) {
+      reassureur = await this.prisma.reassureur.findFirst({
+        where: { code: b.reassureurCode },
+        select: { raisonSociale: true, compteComptable: true },
+      });
+    }
+
     return this.withDerived({
       ...b,
+      reassureur,
       createdBy: b.createdByUserId ? userMap.get(b.createdByUserId) ?? null : null,
       validatedBy: b.validatedByUserId ? userMap.get(b.validatedByUserId) ?? null : null,
     });
@@ -233,7 +278,6 @@ export class BordereauxService {
     return b;
   }
 
-  /** Only editable while BROUILLON. Lines, if provided, fully replace existing lines. */
   async update(id: string, dto: UpdateBordereauDto, userId?: string) {
     const existing = await this.findOne(id);
     if (existing.statut !== BordereauStatut.BROUILLON) {
@@ -299,7 +343,7 @@ export class BordereauxService {
   }
 
   // ============================================================
-  // GENERATION (unchanged business logic from the original service)
+  // GENERATION
   // ============================================================
 
   async generate(dto: GenerateBordereauDto, userId?: string) {
@@ -508,20 +552,11 @@ export class BordereauxService {
       },
     });
 
-    // ASSUMPTION: EmailService's real method signature wasn't provided to
-    // this review — verify `send(to, subject, html)` against the actual
-    // shared/services/email.service.ts and adjust if it differs. Failure
-    // here must not block the status transition (mirrors the accounting
-    // try/catch pattern already used in generate()).
-    try {
-      await this.email.send(
-        dto.recipients,
-        `ARS Tunisie — Bordereau ${b.numero}`,
-        `<p>Veuillez trouver ci-joint le bordereau ${b.numero}.</p>`,
-      );
-    } catch (err: any) {
-      this.logger.error(`Email send failed for bordereau ${id}: ${err.message}`);
-    }
+    await this.email.send(
+      dto.recipients,
+      `ARS Tunisie — Bordereau ${b.numero}`,
+      `<p>Veuillez trouver ci-joint le bordereau ${b.numero}.</p>`,
+    );
 
     await this.logAudit(userId, id, 'SEND', `Envoyé à ${dto.recipients.join(', ')}`);
     return this.withDerived(b);
@@ -532,16 +567,13 @@ export class BordereauxService {
     if (!b.recipients?.length) {
       throw new BadRequestException('Aucun destinataire enregistré pour ce bordereau');
     }
-    try {
-      await this.email.send(
-        b.recipients,
-        `RAPPEL — ARS Tunisie — Bordereau ${b.numero}`,
-        `<p>Rappel : le paiement du bordereau ${b.numero} est en attente.</p>`,
-      );
-    } catch (err: any) {
-      this.logger.error(`Reminder email failed for bordereau ${id}: ${err.message}`);
-      throw new BadRequestException('Échec de l\'envoi du rappel — voir les logs serveur');
-    }
+
+    await this.email.send(
+      b.recipients,
+      `RAPPEL — ARS Tunisie — Bordereau ${b.numero}`,
+      `<p>Rappel : le paiement du bordereau ${b.numero} est en attente.</p>`,
+    );
+
     await this.logAudit(userId, id, 'SEND_REMINDER', `Rappel envoyé à ${b.recipients.join(', ')}`);
     return { sent: true };
   }
@@ -626,11 +658,8 @@ export class BordereauxService {
     for (const id of ids) {
       try {
         const buffer = await this.generatePdf(id);
-        const fileName = `bordereau-${id}.pdf`;
-        // ASSUMPTION: StorageService's real method signature wasn't provided —
-        // verify against shared/services/storage.service.ts.
-        await this.storage.saveFile(buffer, fileName, 'application/pdf');
-        success.push({ id, fileName });
+        const stored = await this.storage.saveFile(buffer, `bordereau-${id}.pdf`, 'bordereaux-pdf');
+        success.push({ id, fileName: stored.fileName });
       } catch (err: any) {
         failed.push({ id, error: err.message ?? 'Erreur inconnue' });
       }
@@ -639,20 +668,24 @@ export class BordereauxService {
   }
 
   // ============================================================
-  // PDF
+  // PDF — rebuilt against Bordereaux' own templates
   // ============================================================
 
   async generatePdf(id: string): Promise<Buffer> {
     const b = await this.findOne(id);
     const company = await this.prisma.companyProfile.findFirst();
-    const template = TEMPLATE_MAP[b.type as BordereauType] ?? 'bordereau-cedante';
-    return this.pdf.generateFromTemplate(template, { bordereau: b, company });
+    const template = resolveTemplate(b.type as BordereauType);
+
+    return this.pdfGenerator.generate(template, {
+      bordereau: b,
+      company,
+      title: TYPE_TITLES[b.type as BordereauType],
+      generatedAt: new Date().toLocaleDateString('fr-TN'),
+    }, { landscape: template === 'bordereau-traite' });
   }
 
   // ============================================================
-  // DOCUMENTS — backed by the existing generic DocumentLink/Document
-  // models (DocumentEntityType.BORDEREAU already exists in the schema)
-  // rather than a bespoke bordereau-document table.
+  // DOCUMENTS
   // ============================================================
 
   async getDocuments(bordereauId: string) {
@@ -665,15 +698,13 @@ export class BordereauxService {
 
   async uploadDocument(
     bordereauId: string,
-    file: MulterFile,
+    file: UploadedFile,
     dto: AttachDocumentDto,
     userId?: string,
   ) {
-    await this.findOne(bordereauId); // 404s if missing
+    await this.findOne(bordereauId);
 
-    // ASSUMPTION: StorageService's real save signature wasn't provided —
-    // verify against shared/services/storage.service.ts and adjust.
-    const stored = await this.storage.saveFile(file.buffer, file.originalname, file.mimetype);
+    const stored = await this.storage.saveFile(file.buffer, file.originalname, 'bordereaux');
 
     const document = await this.prisma.document.create({
       data: {
@@ -708,13 +739,6 @@ export class BordereauxService {
     return { deleted: true };
   }
 
-  /**
-   * Simplified completeness check: complete = at least one document attached.
-   * ASSUMPTION: the CDC does not define a per-BordereauType mandatory-document
-   * checklist (unlike Affaire, which has a real DocumentChecklist model).
-   * Extend this with a proper per-type required-document map if/when that's
-   * specified — flagged rather than guessed.
-   */
   async validateDocuments(bordereauId: string) {
     const count = await this.prisma.documentLink.count({ where: { bordereauId } });
     return {
@@ -724,7 +748,7 @@ export class BordereauxService {
   }
 
   // ============================================================
-  // HISTORY — reads the existing global AuditLog model
+  // HISTORY
   // ============================================================
 
   async getHistory(bordereauId: string) {
@@ -833,7 +857,7 @@ export class BordereauxService {
 
     const avgProcessingTime = sentBordereaux.length
       ? sentBordereaux.reduce((s, b) => s + (b.dateEnvoi!.getTime() - b.createdAt.getTime()), 0) /
-        sentBordereaux.length / 86_400_000 // in days
+        sentBordereaux.length / 86_400_000
       : 0;
 
     return {

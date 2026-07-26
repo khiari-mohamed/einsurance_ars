@@ -1,5 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
-import { SituationSoldeDirection } from '@prisma/client';
+import { SituationSoldeDirection, WorkflowTaskStatut } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../shared/services/sequence.service';
 import { NotificationService } from '../../shared/services/notification.service';
@@ -53,25 +53,39 @@ export class SituationService {
     const cedante = await this.prisma.cedante.findUnique({ where: { id: dto.cedanteId } });
     if (!cedante) throw new NotFoundException('Cédante introuvable');
 
-    const reference = await this.sequence.next('SITUATION');
     const dateDebut = new Date(dto.dateDebut);
     const dateFin = new Date(dto.dateFin);
+    if (dateDebut >= dateFin) {
+      throw new BadRequestException('La date de début doit être antérieure à la date de fin');
+    }
 
-    // Gather all affaires for this cedante in the period with modePaiement = PAR_SITUATION
+    // FIX (Finances pass, new): nothing previously prevented compiling two
+    // overlapping situations for the same cedante(/traité) — the same
+    // affaires' primes/sinistres would then be double-counted across both.
+    const overlapping = await this.prisma.situation.findFirst({
+      where: {
+        cedanteId: dto.cedanteId,
+        ...(dto.traiteId ? { traiteId: dto.traiteId } : {}),
+        dateDebut: { lte: dateFin },
+        dateFin: { gte: dateDebut },
+      },
+    });
+    if (overlapping) {
+      throw new BadRequestException(
+        `Une situation existe déjà pour cette période (${overlapping.reference}, ${overlapping.dateDebut.toLocaleDateString('fr-FR')} → ${overlapping.dateFin.toLocaleDateString('fr-FR')})`,
+      );
+    }
+
+    const reference = await this.sequence.next('SITUATION');
+
     const whereClause: any = {
       cedanteId: dto.cedanteId,
       isActive: true,
       statut: 'PLACEMENT_REALISE',
       modePaiement: 'PAR_SITUATION',
     };
-
-    // If filtering by treaty, add the traiteData relation filter
     if (dto.traiteId) {
-      whereClause.traiteData = {
-        is: {
-          traiteId: dto.traiteId,
-        },
-      };
+      whereClause.traiteData = { is: { traiteId: dto.traiteId } };
     }
 
     const affaires = await this.prisma.affaire.findMany({
@@ -93,26 +107,30 @@ export class SituationService {
       throw new BadRequestException('Aucune affaire éligible pour cette situation (mode paiement: PAR_SITUATION)');
     }
 
-    // Compute DEBIT (primes) and CREDIT (sinistres) per affaire
     let totalDebit = 0;
     let totalCredit = 0;
 
     const lines = await Promise.all(affaires.map(async (a) => {
-      // Debit side: prime cédée nette de commission cedante
       const debit = a.facultativeData
         ? Number(a.facultativeData.primeCedee ?? 0) - Number(a.facultativeData.commissionCedante ?? 0)
         : await (async () => {
             if (!a.traiteData) return 0;
+            // FIX (Finances pass): PMD instalments due in the period were
+            // included regardless of isPaid — an instalment already paid
+            // via TraitesService.markInstalmentPaid() (which creates its
+            // own Encaissement directly) got folded into the situation's
+            // totalDebit a SECOND time, double-counting money that was
+            // already collected outside the situation flow.
             const dueInstalments = await this.prisma.pmdInstalment.findMany({
               where: {
                 traiteId: a.traiteData.id,
                 dateEcheance: { gte: dateDebut, lte: dateFin },
+                isPaid: false,
               },
             });
             return dueInstalments.reduce((s, inst) => s + Number(inst.montant), 0);
           })();
 
-      // Credit side: sum of sinistre reserves in period
       const credit = a.sinistres.reduce((s, sin) => s + Number(sin.partReassureurs ?? 0), 0);
 
       const solde = Math.round((debit - credit) * 1000) / 1000;
@@ -131,8 +149,8 @@ export class SituationService {
     const soldeNet = Math.round((totalDebit - totalCredit) * 1000) / 1000;
     let soldeDirection: SituationSoldeDirection;
     if (Math.abs(soldeNet) < 0.001) soldeDirection = SituationSoldeDirection.EQUILIBRE;
-    else if (soldeNet > 0) soldeDirection = SituationSoldeDirection.CEDANTE_DOIT; // cedante owes ARS
-    else soldeDirection = SituationSoldeDirection.ARS_DOIT; // ARS owes via reinsurers
+    else if (soldeNet > 0) soldeDirection = SituationSoldeDirection.CEDANTE_DOIT;
+    else soldeDirection = SituationSoldeDirection.ARS_DOIT;
 
     const situation = await this.prisma.situation.create({
       data: {
@@ -155,7 +173,6 @@ export class SituationService {
       },
     });
 
-    // Create inter-department handoff task (chargé de dossier → DAF)
     await this.prisma.workflowTask.create({
       data: {
         type: 'INTER_DEPARTEMENT_HANDOFF',
@@ -179,8 +196,25 @@ export class SituationService {
 
   async delete(id: string) {
     const s = await this.findOne(id);
+
     const settled = await this.prisma.settlement.count({ where: { situationId: id } });
     if (settled > 0) throw new BadRequestException('Impossible de supprimer une situation avec des règlements');
+
+    // FIX (Finances pass): bordereaux (Situation.bordereaux relation) were
+    // never checked — a situation with bordereaux already generated
+    // against it could be deleted, orphaning them.
+    const bordereauxCount = await this.prisma.bordereau.count({ where: { situationId: id } });
+    if (bordereauxCount > 0) throw new BadRequestException('Impossible de supprimer une situation avec des bordereaux générés');
+
+    // Pending handoff task becomes moot once the situation it references is
+    // gone — cancel it rather than leaving a dangling reference or blocking
+    // deletion outright (this is a legitimate "compiled by mistake, redo
+    // it" path with no money moved yet, unlike the two guards above).
+    await this.prisma.workflowTask.updateMany({
+      where: { situationId: id, statut: { in: [WorkflowTaskStatut.EN_ATTENTE, WorkflowTaskStatut.EN_COURS] } },
+      data: { statut: WorkflowTaskStatut.ANNULE },
+    });
+
     return this.prisma.situation.delete({ where: { id } });
   }
 }

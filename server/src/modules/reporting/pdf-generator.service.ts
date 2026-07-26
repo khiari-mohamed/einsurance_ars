@@ -10,7 +10,13 @@ export type ReportTemplate =
   | 'claim-bordereau'
   | 'payment-order'
   | 'pmd-invoice'
-  | 'treaty-statement';
+  | 'treaty-statement'
+  // NEW — Bordereaux module's own templates, built off Bordereau/BordereauLine/
+  // BordereauPayment (not to be confused with bordereau-cedante/bordereau-reassureur
+  // above, which belong to FacultativeService's Affaire-shaped "Slip de Cotation").
+  | 'bordereau-cession'
+  | 'bordereau-traite'
+  | 'bordereau-releve';
 
 @Injectable()
 export class PdfGeneratorService {
@@ -61,6 +67,19 @@ export class PdfGeneratorService {
     return this.generate('treaty-statement', data, { landscape: false });
   }
 
+  // NEW — Bordereaux module convenience wrappers
+  async generateBordereauCession(data: Record<string, unknown>): Promise<Buffer> {
+    return this.generate('bordereau-cession', data);
+  }
+
+  async generateBordereauTraite(data: Record<string, unknown>): Promise<Buffer> {
+    return this.generate('bordereau-traite', data, { landscape: true });
+  }
+
+  async generateBordereauReleve(data: Record<string, unknown>): Promise<Buffer> {
+    return this.generate('bordereau-releve', data);
+  }
+
   // ── Rendering ────────────────────────────────────────────────────
 
   render(templateName: string, data: Record<string, unknown>): string {
@@ -105,12 +124,10 @@ export class PdfGeneratorService {
     try {
       const page = await browser.newPage();
 
-      // Set viewport for consistent rendering
       await page.setViewport({ width: 1200, height: 900, deviceScaleFactor: 2 });
 
       await page.setContent(html, { waitUntil: 'networkidle0' });
 
-      // Wait for charts to finish rendering if any canvas elements exist
       await page
         .evaluate(
           () =>
@@ -121,12 +138,12 @@ export class PdfGeneratorService {
                 window.addEventListener('chartsReady', () => resolve(), {
                   once: true,
                 });
-                setTimeout(resolve, 3000); // fallback: 3s timeout
+                setTimeout(resolve, 3000);
               }
             }),
         )
         .catch(() => {
-          // Non-blocking — proceed even if event never fires
+          // Non-blocking
         });
 
       const buffer = await page.pdf({
@@ -158,7 +175,6 @@ export class PdfGeneratorService {
   // ── Handlebars helpers ────────────────────────────────────────────
 
   private registerHelpers(): void {
-    // Date formatting — Tunisian French locale
     Handlebars.registerHelper(
       'formatDate',
       (value: unknown, formatStr?: string) => {
@@ -176,7 +192,6 @@ export class PdfGeneratorService {
       },
     );
 
-    // Number formatting — 3 decimal places, space as thousand separator
     Handlebars.registerHelper(
       'formatNumber',
       (value: unknown, decimals?: number) => {
@@ -189,7 +204,6 @@ export class PdfGeneratorService {
       },
     );
 
-    // Currency formatting
     Handlebars.registerHelper(
       'formatCurrency',
       (value: unknown, currency?: string) => {
@@ -206,7 +220,6 @@ export class PdfGeneratorService {
       },
     );
 
-    // Percent formatting
     Handlebars.registerHelper('formatPercent', (value: unknown) => {
       const num = Number(value ?? 0);
       return `${num.toLocaleString('fr-TN', {
@@ -215,47 +228,24 @@ export class PdfGeneratorService {
       })} %`;
     });
 
-    // Comparison helpers
-    Handlebars.registerHelper(
-      'eq',
-      (a: unknown, b: unknown) => a === b,
-    );
-    Handlebars.registerHelper(
-      'ne',
-      (a: unknown, b: unknown) => a !== b,
-    );
-    Handlebars.registerHelper(
-      'gt',
-      (a: unknown, b: unknown) => Number(a) > Number(b),
-    );
-    Handlebars.registerHelper(
-      'lt',
-      (a: unknown, b: unknown) => Number(a) < Number(b),
-    );
-    Handlebars.registerHelper(
-      'gte',
-      (a: unknown, b: unknown) => Number(a) >= Number(b),
-    );
-    Handlebars.registerHelper(
-      'lte',
-      (a: unknown, b: unknown) => Number(a) <= Number(b),
-    );
+    Handlebars.registerHelper('eq', (a: unknown, b: unknown) => a === b);
+    Handlebars.registerHelper('ne', (a: unknown, b: unknown) => a !== b);
+    Handlebars.registerHelper('gt', (a: unknown, b: unknown) => Number(a) > Number(b));
+    Handlebars.registerHelper('lt', (a: unknown, b: unknown) => Number(a) < Number(b));
+    Handlebars.registerHelper('gte', (a: unknown, b: unknown) => Number(a) >= Number(b));
+    Handlebars.registerHelper('lte', (a: unknown, b: unknown) => Number(a) <= Number(b));
 
-    // Math helpers
     Handlebars.registerHelper(
       'add',
-      (a: unknown, b: unknown) =>
-        Math.round((Number(a) + Number(b)) * 1000) / 1000,
+      (a: unknown, b: unknown) => Math.round((Number(a) + Number(b)) * 1000) / 1000,
     );
     Handlebars.registerHelper(
       'subtract',
-      (a: unknown, b: unknown) =>
-        Math.round((Number(a) - Number(b)) * 1000) / 1000,
+      (a: unknown, b: unknown) => Math.round((Number(a) - Number(b)) * 1000) / 1000,
     );
     Handlebars.registerHelper(
       'multiply',
-      (a: unknown, b: unknown) =>
-        Math.round(Number(a) * Number(b) * 1000) / 1000,
+      (a: unknown, b: unknown) => Math.round(Number(a) * Number(b) * 1000) / 1000,
     );
     Handlebars.registerHelper('divide', (a: unknown, b: unknown) => {
       const divisor = Number(b);
@@ -264,7 +254,6 @@ export class PdfGeneratorService {
     });
     Handlebars.registerHelper('abs', (a: unknown) => Math.abs(Number(a)));
 
-    // Conditional block helper
     Handlebars.registerHelper(
       'ifCond',
       function (
@@ -276,69 +265,45 @@ export class PdfGeneratorService {
       ) {
         let result = false;
         switch (operator) {
-          case '==':
-            result = v1 == v2; // eslint-disable-line eqeqeq
-            break;
-          case '===':
-            result = v1 === v2;
-            break;
-          case '!=':
-            result = v1 != v2; // eslint-disable-line eqeqeq
-            break;
-          case '>':
-            result = Number(v1) > Number(v2);
-            break;
-          case '<':
-            result = Number(v1) < Number(v2);
-            break;
-          case '>=':
-            result = Number(v1) >= Number(v2);
-            break;
-          case '<=':
-            result = Number(v1) <= Number(v2);
-            break;
-          default:
-            result = false;
+          case '==': result = v1 == v2; break; // eslint-disable-line eqeqeq
+          case '===': result = v1 === v2; break;
+          case '!=': result = v1 != v2; break; // eslint-disable-line eqeqeq
+          case '>': result = Number(v1) > Number(v2); break;
+          case '<': result = Number(v1) < Number(v2); break;
+          case '>=': result = Number(v1) >= Number(v2); break;
+          case '<=': result = Number(v1) <= Number(v2); break;
+          default: result = false;
         }
         return result ? options.fn(this) : options.inverse(this);
       },
     );
 
-    // Default value
     Handlebars.registerHelper(
       'default',
       (value: unknown, fallback: unknown) =>
         value !== null && value !== undefined && value !== '' ? value : fallback,
     );
 
-    // JSON stringify for passing data to Chart.js
-    Handlebars.registerHelper('json', (value: unknown) =>
-      JSON.stringify(value),
-    );
+    Handlebars.registerHelper('json', (value: unknown) => JSON.stringify(value));
 
-    // Fixed decimals
     Handlebars.registerHelper(
       'toFixed',
       (value: unknown, decimals: unknown) =>
         Number(value ?? 0).toFixed(Number(decimals ?? 2)),
     );
 
-    // Length of array
     Handlebars.registerHelper(
       'length',
       (arr: unknown) => (Array.isArray(arr) ? arr.length : 0),
     );
 
-    // Current year helper
-    Handlebars.registerHelper(
-      'currentYear',
-      () => new Date().getFullYear(),
-    );
+    Handlebars.registerHelper('currentYear', () => new Date().getFullYear());
 
-    // Uppercase
-    Handlebars.registerHelper('upper', (value: unknown) =>
-      String(value ?? '').toUpperCase(),
-    );
+    Handlebars.registerHelper('upper', (value: unknown) => String(value ?? '').toUpperCase());
+
+    // NEW — needed by bordereau-cession.hbs for CSS class derivation
+    // (status-brouillon, status-en_validation, ...)
+    Handlebars.registerHelper('lower', (value: unknown) => String(value ?? '').toLowerCase());
 
     this.logger.log('Handlebars helpers registered');
   }

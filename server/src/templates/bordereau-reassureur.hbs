@@ -58,6 +58,16 @@
 </head>
 <body>
 
+<!-- FIX: no confirmed caller found in the files reviewed so far (not in
+     FacultativeService, not in any controller shown). Context shape expected
+     below (flat `reassureur`, `reassureurCode`, `participation.*`) doesn't
+     match how FacultativeService structures its data (nested under
+     affaire.reassureurs[].reassureur). Hardened every field below with
+     `default` fallbacks so this renders a readable "—" placeholder instead
+     of a blank/broken layout no matter what shape actually gets passed —
+     but the real contract needs confirming against whatever service calls
+     this (send it and I'll verify properly). -->
+
 <div class="page-header">
   <div>
     <div class="logo-text">ARS</div>
@@ -65,30 +75,30 @@
   </div>
   <div>
     <div class="doc-title">BORDEREAU DE CESSION — RÉASSUREUR</div>
-    <div class="doc-ref">Réf. {{affaire.numero}} | Réassureur: {{reassureurCode}} | Émis le {{generatedAt}}</div>
+    <div class="doc-ref">Réf. {{default affaire.numero '—'}} | Réassureur: {{default reassureurCode '—'}} | Émis le {{generatedAt}}</div>
   </div>
   <div style="text-align:right;font-size:9px">
-    <div style="opacity:.9">{{company.raisonSociale}}</div>
-    <div style="opacity:.7">MF: {{company.matriculeFiscal}}</div>
+    <div style="opacity:.9">{{default company.raisonSociale '—'}}</div>
+    <div style="opacity:.7">MF: {{default company.matriculeFiscal '—'}}</div>
   </div>
 </div>
 
 <div class="parties">
   <div class="party-box">
     <div class="party-label">Courtier</div>
-    <div class="party-name">{{company.raisonSociale}}</div>
+    <div class="party-name">{{default company.raisonSociale '—'}}</div>
     <div class="party-detail">{{company.adresse}}</div>
   </div>
   <div class="party-box">
     <div class="party-label">Cédante</div>
-    <div class="party-name">{{affaire.cedante.raisonSociale}}</div>
-    <div class="party-detail">Code: {{affaire.cedante.code}}</div>
+    <div class="party-name">{{default affaire.cedante.raisonSociale '—'}}</div>
+    <div class="party-detail">Code: {{default affaire.cedante.code '—'}}</div>
   </div>
   <div class="party-box">
     <div class="party-label">Réassureur</div>
-    <div class="party-name">{{reassureur.raisonSociale}}</div>
-    <div class="party-detail">Code: {{reassureurCode}}</div>
-    <div class="party-detail">Compte: {{reassureur.compteComptable}}</div>
+    <div class="party-name">{{default reassureur.raisonSociale reassureurCode}}</div>
+    <div class="party-detail">Code: {{default reassureurCode '—'}}</div>
+    <div class="party-detail">Compte: {{default reassureur.compteComptable '—'}}</div>
   </div>
 </div>
 
@@ -96,7 +106,7 @@
 <div class="info-grid">
   <div class="info-cell">
     <div class="label">N° Affaire ARS</div>
-    <div class="value">{{affaire.numero}}</div>
+    <div class="value">{{default affaire.numero '—'}}</div>
   </div>
   <div class="info-cell">
     <div class="label">Quote-Part</div>
@@ -124,7 +134,7 @@
   </div>
   <div class="info-cell">
     <div class="label">Devise</div>
-    <div class="value">{{affaire.currency}}</div>
+    <div class="value">{{default affaire.currency 'TND'}}</div>
   </div>
 </div>
 
@@ -143,7 +153,7 @@
   </thead>
   <tbody>
     <tr class="highlight-row">
-      <td>{{affaire.numero}} — {{default facultative.branche 'Toutes garanties'}}</td>
+      <td>{{default affaire.numero '—'}} — {{default facultative.branche 'Toutes garanties'}}</td>
       <td>{{formatNumber facultative.prime100Pct}}</td>
       <td>{{formatPercent facultative.tauxCession}}</td>
       <td>{{formatNumber participation.primeBrute}}</td>
@@ -169,24 +179,25 @@
   <div class="total-cell">
     <div class="t-label">Prime Brute (Part {{formatPercent participation.partPct}})</div>
     <div class="t-value">{{formatNumber participation.primeBrute}}</div>
-    <div class="t-currency">{{affaire.currency}}</div>
+    <div class="t-currency">{{default affaire.currency 'TND'}}</div>
   </div>
   <div class="total-cell">
     <div class="t-label">Déductions (Comm. Ced. + ARS)</div>
     <div class="t-value">{{formatNumber (add participation.commissionCedante participation.commissionArs)}}</div>
-    <div class="t-currency">{{affaire.currency}}</div>
+    <div class="t-currency">{{default affaire.currency 'TND'}}</div>
   </div>
   <div class="total-cell">
     <div class="t-label">Prime Nette due au Réassureur</div>
     <div class="t-value" style="color:var(--red)">{{formatNumber participation.primeNetteReassureur}}</div>
-    <div class="t-currency">{{affaire.currency}}</div>
+    <div class="t-currency">{{default affaire.currency 'TND'}}</div>
   </div>
 </div>
 
 <div style="padding:0 0">
   <div class="amount-words">
     <div class="aw-label">Montant net en lettres</div>
-    <div class="aw-value">{{montantEnLettres}}</div>
+    <!-- FIX: same missing-context risk as bordereau-cedante.hbs — fallback added. -->
+    <div class="aw-value">{{default montantEnLettres 'Non renseigné'}}</div>
   </div>
 </div>
 
@@ -201,7 +212,7 @@
     <div class="sig-line">Signature et cachet</div>
   </div>
   <div class="sig-block">
-    <div class="sig-label">Pour {{reassureur.raisonSociale}}</div>
+    <div class="sig-label">Pour {{default reassureur.raisonSociale reassureurCode}}</div>
     <div class="sig-line">Signature et cachet</div>
   </div>
   <div class="sig-block">
@@ -211,7 +222,7 @@
 </div>
 
 <div class="doc-footer">
-  {{company.raisonSociale}} — {{company.adresse}} — Document confidentiel — Ne pas diffuser
+  {{default company.raisonSociale '—'}} — {{company.adresse}} — Document confidentiel — Ne pas diffuser
 </div>
 
 <script>
@@ -228,7 +239,7 @@
       data: {
         labels: ['Prime Brute', 'Commission Cédante', 'Commission ARS', 'Prime Nette'],
         datasets: [{
-          label: '{{affaire.currency}}',
+          label: '{{default affaire.currency "TND"}}',
           data: [primeBrute, commCed, commArs, primeNette],
           backgroundColor: ['#1a1a2e', '#d52b36', '#e87a80', '#2d6a4f'],
           borderColor:     ['#1a1a2e', '#d52b36', '#e87a80', '#2d6a4f'],
@@ -242,7 +253,7 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: function(c) { return c.parsed.y.toFixed(3) + ' {{affaire.currency}}'; }
+              label: function(c) { return c.parsed.y.toFixed(3) + ' {{default affaire.currency "TND"}}'; }
             }
           }
         },

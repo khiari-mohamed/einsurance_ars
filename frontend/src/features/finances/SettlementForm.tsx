@@ -1,72 +1,43 @@
-import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useState } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { financesApi } from '@/api/finances.api';
-import { SettlementType } from '@/types/finance.types';
+import affairesApi from '@/api/affaires.api';
+import { SettlementMode, CreateSettlementInput } from '@/types/finance.types';
 import { toast } from 'sonner';
-import masterDataApi from '@/api/master-data.api';
 
-interface SettlementFormProps {
-  settlementId?: string;
-  onSuccess?: () => void;
-  onCancel?: () => void;
-}
+interface Props { onSuccess?: () => void; onCancel?: () => void }
 
-export default function SettlementForm({ settlementId, onSuccess, onCancel }: SettlementFormProps) {
+// FIX (Finances pass): full rewrite. Real Settlement is a simple
+// reconciliation record — mode (PAR_AFFAIRE/PAR_SITUATION), a single
+// montant, and FX rates. It has no cedanteId/type/dateDebut/dateFin — those
+// belong to Situation, not Settlement. Deliberately scoped to PAR_AFFAIRE
+// here (a standalone settlement not tied to a compiled situation); a
+// PAR_SITUATION settlement is created from within SituationsPage's detail
+// view once that reviewed workflow exists.
+export default function SettlementForm({ onSuccess, onCancel }: Props) {
   const [loading, setLoading] = useState(false);
-  const [cedantes, setCedantes] = useState<any[]>([]);
-  const [reassureurs, setReassureurs] = useState<any[]>([]);
-
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm({
-    defaultValues: {
-      type: SettlementType.TRIMESTRIELLE,
-      dateDebut: '',
-      dateFin: '',
-      cedanteId: '',
-      reassureurId: '',
-    },
+  const { register, handleSubmit, watch, control } = useForm<CreateSettlementInput>({
+    defaultValues: { mode: SettlementMode.PAR_AFFAIRE, montant: 0, currency: 'TND', dateSettlement: new Date().toISOString().split('T')[0] },
   });
 
-  useEffect(() => {
-    loadReferenceData();
-    if (settlementId) {
-      loadSettlement();
-    }
-  }, [settlementId]);
+  const currency = watch('currency');
 
-  const loadSettlement = async () => {
-    try {
-      const data = await financesApi.getSettlement(settlementId!);
-      Object.keys(data).forEach((key) => {
-        setValue(key as any, data[key as keyof typeof data]);
-      });
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
-    }
-  };
+  const { data: affaires = [] } = useQuery({
+    queryKey: ['affaires-lite'],
+    queryFn: async () => (await affairesApi.getAll({ limit: 100 })).data.data,
+  });
 
-  const loadReferenceData = async () => {
-    try {
-      const [cedantesRes, reassureursRes] = await Promise.all([
-        masterDataApi.cedantes.getAll(),
-        masterDataApi.reassureurs.getAll(),
-      ]);
-      setCedantes(cedantesRes.data.data);
-      setReassureurs(reassureursRes.data.data);
-    } catch (error) {
-      console.error('Error loading reference data:', error);
-    }
-  };
-
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: CreateSettlementInput) => {
     setLoading(true);
     try {
       await financesApi.createSettlement(data);
-      toast.success('Situation créée avec succès');
+      toast.success('Règlement créé avec succès');
       onSuccess?.();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erreur lors de l\'enregistrement');
@@ -81,76 +52,57 @@ export default function SettlementForm({ settlementId, onSuccess, onCancel }: Se
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Type de Situation *</Label>
-              <Select onValueChange={(v) => setValue('type', v as SettlementType)} defaultValue={SettlementType.TRIMESTRIELLE}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={SettlementType.MENSUELLE}>Mensuelle</SelectItem>
-                  <SelectItem value={SettlementType.TRIMESTRIELLE}>Trimestrielle</SelectItem>
-                  <SelectItem value={SettlementType.SEMESTRIELLE}>Semestrielle</SelectItem>
-                  <SelectItem value={SettlementType.ANNUELLE}>Annuelle</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Affaire *</Label>
+              <Controller
+                name="affaireId"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                    <SelectContent>
+                      {affaires.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.numero}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
-
             <div>
-              <Label>Cédante *</Label>
-              <Select onValueChange={(v) => setValue('cedanteId', v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionner..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {cedantes.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nom}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.cedanteId && <span className="text-red-500 text-sm">Requis</span>}
+              <Label>Date de règlement *</Label>
+              <Input type="date" {...register('dateSettlement', { required: true })} />
             </div>
-
             <div>
-              <Label>Date Début *</Label>
-              <Input type="date" {...register('dateDebut', { required: true })} />
-              {errors.dateDebut && <span className="text-red-500 text-sm">Requis</span>}
+              <Label>Montant *</Label>
+              <Input type="number" step="0.001" {...register('montant', { required: true, min: 0, valueAsNumber: true })} />
             </div>
-
             <div>
-              <Label>Date Fin *</Label>
-              <Input type="date" {...register('dateFin', { required: true })} />
-              {errors.dateFin && <span className="text-red-500 text-sm">Requis</span>}
+              <Label>Devise *</Label>
+              <Controller
+                name="currency"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{['TND', 'EUR', 'USD', 'GBP'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                  </Select>
+                )}
+              />
             </div>
-
-            <div>
-              <Label>Réassureur (optionnel)</Label>
-              <Select onValueChange={(v) => setValue('reassureurId', v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Tous les réassureurs" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Tous</SelectItem>
-                  {reassureurs.map((r) => (
-                    <SelectItem key={r.id} value={r.id}>
-                      {r.nom}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex gap-2 justify-end">
-            {onCancel && (
-              <Button type="button" variant="outline" onClick={onCancel}>
-                Annuler
-              </Button>
+            {currency !== 'TND' && (
+              <>
+                <div>
+                  <Label>Taux de réalisation</Label>
+                  <Input type="number" step="0.000001" {...register('tauxRealisation', { valueAsNumber: true })} placeholder="Auto BCT si vide" />
+                </div>
+                <div>
+                  <Label>Taux de règlement</Label>
+                  <Input type="number" step="0.000001" {...register('tauxReglement', { valueAsNumber: true })} placeholder="Auto BCT si vide" />
+                </div>
+              </>
             )}
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Création...' : 'Créer Situation'}
-            </Button>
+          </div>
+          <div className="flex gap-2 justify-end">
+            {onCancel && <Button type="button" variant="outline" onClick={onCancel}>Annuler</Button>}
+            <Button type="submit" disabled={loading}>{loading ? 'Création...' : 'Créer'}</Button>
           </div>
         </form>
       </CardContent>

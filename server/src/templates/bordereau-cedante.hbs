@@ -282,6 +282,8 @@
   .badge-placed { background: #d4edda; color: #155724; }
   .badge-preview { background: #fff3cd; color: #856404; }
   .badge-quote { background: #d1ecf1; color: #0c5460; }
+  /* NEW — empty-state row for the reassureurs table (see body) */
+  .empty-row td { text-align: center !important; color: var(--muted); font-style: italic; }
 
   @media print {
     body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -300,12 +302,12 @@
   </div>
   <div style="text-align:center">
     <div class="doc-title">{{#if title}}{{title}}{{else}}BORDEREAU DE CESSION{{/if}}</div>
-    <div class="doc-ref">N° {{affaire.numero}} — Émis le {{generatedAt}}</div>
+    <div class="doc-ref">N° {{default affaire.numero '—'}} — Émis le {{generatedAt}}</div>
   </div>
   <div style="text-align:right">
-    <div style="font-size:9px;opacity:0.85">{{company.raisonSociale}}</div>
+    <div style="font-size:9px;opacity:0.85">{{default company.raisonSociale '—'}}</div>
     <div style="font-size:8px;opacity:0.7">{{company.adresse}}</div>
-    <div style="font-size:8px;opacity:0.7">MF: {{company.matriculeFiscal}}</div>
+    <div style="font-size:8px;opacity:0.7">MF: {{default company.matriculeFiscal '—'}}</div>
   </div>
 </div>
 
@@ -313,20 +315,20 @@
 <div class="parties">
   <div class="party-box">
     <div class="party-label">Courtier / Réassureur</div>
-    <div class="party-name">{{company.raisonSociale}}</div>
+    <div class="party-name">{{default company.raisonSociale '—'}}</div>
     <div class="party-detail">{{company.adresse}}</div>
-    <div class="party-detail">MF: {{company.matriculeFiscal}}</div>
+    <div class="party-detail">MF: {{default company.matriculeFiscal '—'}}</div>
   </div>
   <div class="party-box">
     <div class="party-label">Cédante</div>
-    <div class="party-name">{{affaire.cedante.raisonSociale}}</div>
-    <div class="party-detail">Code: {{affaire.cedante.code}}</div>
-    <div class="party-detail">Compte: {{affaire.cedante.compteComptable}}</div>
+    <div class="party-name">{{default affaire.cedante.raisonSociale '—'}}</div>
+    <div class="party-detail">Code: {{default affaire.cedante.code '—'}}</div>
+    <div class="party-detail">Compte: {{default affaire.cedante.compteComptable '—'}}</div>
   </div>
   <div class="party-box">
     <div class="party-label">Assuré</div>
-    <div class="party-name">{{facultative.assure.raisonSociale}}</div>
-    <div class="party-detail">Code: {{facultative.assure.code}}</div>
+    <div class="party-name">{{default facultative.assure.raisonSociale '—'}}</div>
+    <div class="party-detail">Code: {{default facultative.assure.code '—'}}</div>
     {{#if facultative.assure.rne}}<div class="party-detail">RNE: {{facultative.assure.rne}}</div>{{/if}}
   </div>
 </div>
@@ -360,7 +362,7 @@
   </div>
   <div class="info-cell">
     <div class="label">Type de réassurance</div>
-    <div class="value">{{facultative.reassuranceType}}</div>
+    <div class="value">{{default facultative.reassuranceType '—'}}</div>
   </div>
   <div class="info-cell">
     <div class="label">Pays de l'assuré</div>
@@ -418,7 +420,7 @@
   <tbody>
     {{#each affaire.reassureurs}}
     <tr>
-      <td>{{../affaire.numero}} — Part {{reassureur.code}} ({{formatPercent partPct}})</td>
+      <td>{{../affaire.numero}} — Part {{default reassureur.code '—'}} ({{formatPercent partPct}})</td>
       <td>{{formatNumber ../facultative.prime100Pct}}</td>
       <td>{{formatPercent ../facultative.tauxCession}}</td>
       <td>{{formatNumber primeBrute}}</td>
@@ -426,6 +428,11 @@
       <td>{{formatNumber commissionArs}}</td>
       <td style="color:#155724;font-weight:700">{{formatNumber primeNetteReassureur}}</td>
     </tr>
+    {{else}}
+    <!-- FIX: empty-state row — an affaire mid-setup with no reinsurer participation
+         attached yet previously rendered a blank body under a populated totals
+         footer, which reads as a rendering error rather than "not yet placed". -->
+    <tr class="empty-row"><td colspan="7">Aucun réassureur participant enregistré</td></tr>
     {{/each}}
   </tbody>
   <tfoot>
@@ -471,7 +478,18 @@
 <div style="padding: 0 0 0 0">
   <div class="amount-words">
     <div class="aw-label">Montant en lettres (Prime nette)</div>
-    <div class="aw-value">{{montantEnLettres}}</div>
+    <!-- FIX: FacultativeService.generateSlip() does NOT currently pass
+         `montantEnLettres` in the template context — this rendered blank on
+         every real PDF. Template-side fallback added so the box is never
+         silently empty. Proper fix (outside this template's scope) is a
+         one-line addition to facultative.service.ts's generateSlip():
+           montantEnLettres: this.amountToWords.toWords(
+             Number(fac.primeCedee) - Number(fac.commissionCedante ?? 0),
+             fac.affaire.currency,
+           ),
+         (requires injecting AmountToWordsService into FacultativeService,
+         which it does not currently receive). -->
+    <div class="aw-value">{{default montantEnLettres 'Non renseigné'}}</div>
   </div>
 </div>
 
@@ -507,11 +525,11 @@
 <!-- ══ SIGNATURES ═══════════════════════════════════════════════════ -->
 <div class="signatures">
   <div class="sig-block">
-    <div class="sig-label">Pour la Cédante<br>{{affaire.cedante.raisonSociale}}</div>
+    <div class="sig-label">Pour la Cédante<br>{{default affaire.cedante.raisonSociale '—'}}</div>
     <div class="sig-line">Signature et cachet</div>
   </div>
   <div class="sig-block">
-    <div class="sig-label">Pour ARS Réassurance<br>{{company.raisonSociale}}</div>
+    <div class="sig-label">Pour ARS Réassurance<br>{{default company.raisonSociale '—'}}</div>
     <div class="sig-line">Signature et cachet</div>
   </div>
   <div class="sig-block">
@@ -522,7 +540,7 @@
 
 <!-- ══ FOOTER ═══════════════════════════════════════════════════════ -->
 <div class="doc-footer">
-  {{company.raisonSociale}} — {{company.adresse}} — MF: {{company.matriculeFiscal}} — Document confidentiel
+  {{default company.raisonSociale '—'}} — {{company.adresse}} — MF: {{default company.matriculeFiscal '—'}} — Document confidentiel
 </div>
 
 <script>

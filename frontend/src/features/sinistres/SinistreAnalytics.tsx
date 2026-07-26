@@ -3,8 +3,6 @@ import { BarChart, Bar, ComposedChart, Line, Area, PieChart, Pie, Cell, XAxis, Y
 import { sinistresApi } from '../../api/sinistres.api';
 import { formatCurrency } from '../../lib/currency';
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
-
 // Light -> dark tint pairs for each COLORS entry, used to build the glossy pie gradients below.
 // Same hues as COLORS, just given depth - the palette itself hasn't changed.
 const PIE_GRADIENTS: [string, string][] = [
@@ -62,10 +60,18 @@ function renderActivePieShape(props: any) {
 }
 
 export default function SinistreAnalytics() {
+  const analyticsApi = sinistresApi as {
+    getEvolution: (months?: number) => Promise<{ data: unknown }>;
+    getByCedante: (cedanteId?: string) => Promise<{ data: unknown }>;
+    getByStatus: (status?: string) => Promise<{ data: unknown }>;
+    getAging: (type?: string) => Promise<{ data: unknown }>;
+    getSAPAnalysis: (year?: number) => Promise<{ data: unknown }>;
+  };
+
   const { data: evolution } = useQuery({
     queryKey: ['sinistres-evolution'],
     queryFn: async () => {
-      const { data } = await sinistresApi.getEvolution(12);
+      const { data } = await analyticsApi.getEvolution(12);
       return (data as any)?.data || data;
     },
   });

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,119 +8,84 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { financesApi } from '@/api/finances.api';
-import { BeneficiaireType, ModePaiement } from '@/types/finance.types';
+import masterDataApi from '@/api/master-data.api';
+import affairesApi from '@/api/affaires.api';
+import { FinancialPartyType, partyTypeLabels, CreateDecaissementInput } from '@/types/finance.types';
 import { toast } from 'sonner';
 
-interface DecaissementFormProps {
+const CURRENCIES = ['TND', 'EUR', 'USD', 'GBP'];
+
+interface Props {
   decaissementId?: string;
   affaireId?: string;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
 
-export default function DecaissementForm({ decaissementId, affaireId, onSuccess, onCancel }: DecaissementFormProps) {
+// FIX (Finances pass): full rewrite. Real Decaissement has no `dateValeur`,
+// `fraisBancaires`, `banqueBeneficiaire` object, `commissionARS`,
+// `referenceSwift` fields — those belong to (or are derived from) the
+// affaire/OrdrePaiement, not entered manually here. reassureurCode (not
+// reassureurId — the schema denormalizes the reinsurer's `code` directly
+// onto Decaissement).
+export default function DecaissementForm({ decaissementId, affaireId, onSuccess, onCancel }: Props) {
   const [loading, setLoading] = useState(false);
-  const [reassureurs, setReassureurs] = useState<any[]>([]);
-  const [selectedReassureur, setSelectedReassureur] = useState<any>(null);
-  
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<any>({
+
+  const { register, handleSubmit, watch, control, reset, formState: { errors } } = useForm<CreateDecaissementInput>({
     defaultValues: {
-      dateDecaissement: new Date().toISOString().split('T')[0],
-      dateValeur: new Date().toISOString().split('T')[0],
+      partyType: FinancialPartyType.REASSUREUR,
       montant: 0,
-      devise: 'TND',
-      tauxChange: 1,
-      fraisBancaires: 0,
-      beneficiaireType: BeneficiaireType.REASSUREUR,
-      modePaiement: ModePaiement.SWIFT,
-      commissionARS: 0,
-      affaireId: affaireId || '',
-      reassureurId: '',
-      banqueBeneficiaire: {},
-      referenceSwift: '',
-      notes: '',
+      currency: 'TND',
+      affaireId: affaireId || undefined,
     },
   });
 
-  const beneficiaireType = watch('beneficiaireType');
-  const montant = watch('montant');
-  const tauxChange = watch('tauxChange');
-  const fraisBancaires = watch('fraisBancaires');
-  const commissionARS = watch('commissionARS');
-  const devise = watch('devise');
-  const reassureurId = watch('reassureurId');
+  const partyType = watch('partyType');
+  const currency = watch('currency');
+
+  const { data: reassureurs = [] } = useQuery({
+    queryKey: ['reassureurs-lite'],
+    queryFn: async () => (await masterDataApi.reassureurs.getAll({ limit: 500 })).data.data,
+  });
+  const { data: coCourtiers = [] } = useQuery({
+    queryKey: ['co-courtiers-lite'],
+    queryFn: async () => (await masterDataApi.coCourtiers.getAll({ limit: 500 })).data.data,
+  });
+  const { data: affaires = [] } = useQuery({
+    queryKey: ['affaires-lite'],
+    queryFn: async () => (await affairesApi.getAll({ limit: 100 })).data.data,
+  });
 
   useEffect(() => {
     if (decaissementId) {
-      loadDecaissement();
-    }
-    loadReassureurs();
-  }, [decaissementId]);
-
-  useEffect(() => {
-    if (devise !== 'TND') {
-      fetchExchangeRate(devise);
-    } else {
-      setValue('tauxChange', 1);
-    }
-  }, [devise]);
-
-  useEffect(() => {
-    if (reassureurId) {
-      const reass = reassureurs.find(r => r.id === reassureurId);
-      setSelectedReassureur(reass);
-      if (reass?.banque) {
-        setValue('banqueBeneficiaire', {
-          nom: reass.banque.nom || '',
-          swift: reass.banque.swift || '',
-          iban: reass.banque.iban || '',
-          adresse: reass.banque.adresse || '',
-          pays: reass.banque.pays || '',
+      financesApi.getDecaissement(decaissementId).then(({ data }) => {
+        reset({
+          affaireId: data.affaireId,
+          partyType: data.partyType,
+          reassureurCode: data.reassureurCode,
+          coCourtId: data.coCourtId,
+          montant: data.montant,
+          currency: data.currency,
+          tauxReglement: data.tauxReglement,
+          description: data.description,
+          stepNumber: data.stepNumber,
         });
-      }
-    }
-  }, [reassureurId, reassureurs]);
-
-  const loadDecaissement = async () => {
-    try {
-      const data = await financesApi.getDecaissement(decaissementId!);
-      Object.keys(data).forEach((key) => {
-        setValue(key as any, data[key as keyof typeof data]);
       });
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
     }
-  };
+  }, [decaissementId, reset]);
 
-  const loadReassureurs = async () => {
-    try {
-      const response = await fetch('/api/reassureurs');
-      const data = await response.json();
-      setReassureurs(data);
-    } catch (error) {
-      console.error('Error loading reassureurs:', error);
-    }
-  };
-
-  const fetchExchangeRate = async (currency: string) => {
-    try {
-      const response = await fetch(`/api/system/exchange-rates?devise=${currency}`);
-      const data = await response.json();
-      setValue('tauxChange', data.taux || 1);
-    } catch (error) {
-      console.error('Error fetching exchange rate:', error);
-    }
-  };
-
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: CreateDecaissementInput) => {
     setLoading(true);
     try {
       if (decaissementId) {
         await financesApi.updateDecaissement(decaissementId, data);
         toast.success('Décaissement modifié avec succès');
       } else {
-        await financesApi.createDecaissement(data);
-        toast.success('Décaissement créé avec succès');
+        const { data: created } = await financesApi.createDecaissement(data);
+        toast.success('Décaissement créé avec succès (brouillon)');
+        if ((created as any).amlFlagged) {
+          toast.warning((created as any).amlReason || 'Transaction signalée pour revue AML');
+        }
       }
       onSuccess?.();
     } catch (error: any) {
@@ -128,10 +94,6 @@ export default function DecaissementForm({ decaissementId, affaireId, onSuccess,
       setLoading(false);
     }
   };
-
-  const montantTND = Number(montant) * Number(tauxChange);
-  const montantTotal = Number(montant) + Number(fraisBancaires);
-  const montantNet = Number(montant) - Number(commissionARS);
 
   return (
     <Card>
@@ -142,155 +104,115 @@ export default function DecaissementForm({ decaissementId, affaireId, onSuccess,
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label>Date Décaissement *</Label>
-              <Input type="date" {...register('dateDecaissement', { required: true })} />
-              {errors.dateDecaissement && <span className="text-red-500 text-sm">Requis</span>}
+              <Label>Bénéficiaire *</Label>
+              <Controller
+                name="partyType"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={FinancialPartyType.REASSUREUR}>{partyTypeLabels[FinancialPartyType.REASSUREUR]}</SelectItem>
+                      <SelectItem value={FinancialPartyType.CEDANTE}>{partyTypeLabels[FinancialPartyType.CEDANTE]}</SelectItem>
+                      <SelectItem value={FinancialPartyType.CO_COURTIER}>{partyTypeLabels[FinancialPartyType.CO_COURTIER]}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
 
-            <div>
-              <Label>Date Valeur *</Label>
-              <Input type="date" {...register('dateValeur', { required: true })} />
-              {errors.dateValeur && <span className="text-red-500 text-sm">Requis</span>}
-            </div>
-
-            <div>
-              <Label>Type Bénéficiaire *</Label>
-              <Select onValueChange={(v) => setValue('beneficiaireType', v as BeneficiaireType)} defaultValue={BeneficiaireType.REASSUREUR}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={BeneficiaireType.REASSUREUR}>Réassureur</SelectItem>
-                  <SelectItem value={BeneficiaireType.CEDANTE}>Cédante</SelectItem>
-                  <SelectItem value={BeneficiaireType.COURTIER}>Courtier</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {beneficiaireType === BeneficiaireType.REASSUREUR && (
+            {partyType === FinancialPartyType.REASSUREUR && (
               <div>
                 <Label>Réassureur *</Label>
-                <Select onValueChange={(v) => setValue('reassureurId', v)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {reassureurs.map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.nom}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Controller
+                  name="reassureurCode"
+                  control={control}
+                  render={({ field }) => (
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                      <SelectContent>
+                        {reassureurs.map((r: any) => <SelectItem key={r.id} value={r.code}>{r.raisonSociale} ({r.code})</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+            )}
+
+            {partyType === FinancialPartyType.CO_COURTIER && (
+              <div>
+                <Label>Co-Courtier *</Label>
+                <Controller
+                  name="coCourtId"
+                  control={control}
+                  render={({ field }) => (
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <SelectTrigger><SelectValue placeholder="Sélectionner..." /></SelectTrigger>
+                      <SelectContent>
+                        {coCourtiers.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.raisonSociale}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
               </div>
             )}
 
             <div>
               <Label>Montant *</Label>
-              <Input
-                type="number"
-                step="0.01"
-                {...register('montant', { required: true, min: 0 })}
-              />
+              <Input type="number" step="0.001" {...register('montant', { required: true, min: 0, valueAsNumber: true })} />
               {errors.montant && <span className="text-red-500 text-sm">Requis</span>}
             </div>
 
             <div>
               <Label>Devise *</Label>
-              <Select onValueChange={(v) => setValue('devise', v)} defaultValue="TND">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="TND">TND</SelectItem>
-                  <SelectItem value="EUR">EUR</SelectItem>
-                  <SelectItem value="USD">USD</SelectItem>
-                  <SelectItem value="GBP">GBP</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Taux de Change</Label>
-              <Input
-                type="number"
-                step="0.000001"
-                {...register('tauxChange')}
-                readOnly={devise === 'TND'}
+              <Controller
+                name="currency"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
               />
             </div>
 
             <div>
-              <Label>Frais Bancaires</Label>
-              <Input type="number" step="0.01" {...register('fraisBancaires')} />
+              <Label>Taux de règlement {currency !== 'TND' && <span className="text-gray-400 text-xs">(optionnel — auto BCT si vide)</span>}</Label>
+              <Input type="number" step="0.000001" {...register('tauxReglement', { valueAsNumber: true })} disabled={currency === 'TND'} placeholder={currency === 'TND' ? '1' : 'Auto'} />
             </div>
-
-            <div>
-              <Label>Commission ARS</Label>
-              <Input type="number" step="0.01" {...register('commissionARS')} />
-            </div>
-
-            <div className="col-span-2 grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-md">
-              <div>
-                <p className="text-sm text-gray-600">Montant TND</p>
-                <p className="text-lg font-semibold">{montantTND.toFixed(2)} TND</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Montant Total</p>
-                <p className="text-lg font-semibold">{montantTotal.toFixed(2)} {devise}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600">Net Réassureur</p>
-                <p className="text-lg font-semibold text-green-600">{montantNet.toFixed(2)} {devise}</p>
-              </div>
-            </div>
-
-            <div>
-              <Label>Mode de Paiement *</Label>
-              <Select onValueChange={(v) => setValue('modePaiement', v as ModePaiement)} defaultValue={ModePaiement.SWIFT}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ModePaiement.SWIFT}>SWIFT</SelectItem>
-                  <SelectItem value={ModePaiement.VIREMENT}>Virement Local</SelectItem>
-                  <SelectItem value={ModePaiement.CHEQUE}>Chèque</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label>Référence SWIFT</Label>
-              <Input {...register('referenceSwift')} />
-            </div>
-
-            {selectedReassureur && (
-              <div className="col-span-2 p-4 bg-blue-50 rounded-md">
-                <h4 className="font-semibold mb-2">Informations Bancaires</h4>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div><span className="font-medium">Banque:</span> {selectedReassureur.banque?.nom}</div>
-                  <div><span className="font-medium">SWIFT:</span> {selectedReassureur.banque?.swift}</div>
-                  <div><span className="font-medium">IBAN:</span> {selectedReassureur.banque?.iban}</div>
-                  <div><span className="font-medium">Pays:</span> {selectedReassureur.banque?.pays}</div>
-                </div>
-              </div>
-            )}
 
             <div className="col-span-2">
-              <Label>Notes</Label>
-              <Textarea {...register('notes')} rows={3} />
+              <Label>Affaire liée (optionnel)</Label>
+              <Controller
+                name="affaireId"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger><SelectValue placeholder="Aucune" /></SelectTrigger>
+                    <SelectContent>
+                      {affaires.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.numero}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </div>
+
+            <div className="col-span-2">
+              <Label>Description</Label>
+              <Textarea {...register('description')} rows={3} />
             </div>
           </div>
 
+          <p className="text-[11px] text-gray-400">
+            Créé au statut Brouillon — l'approbation, l'exécution et le rattachement à un ordre de virement se font depuis la liste des décaissements.
+          </p>
+
           <div className="flex gap-2 justify-end">
-            {onCancel && (
-              <Button type="button" variant="outline" onClick={onCancel}>
-                Annuler
-              </Button>
-            )}
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Enregistrement...' : 'Enregistrer'}
-            </Button>
+            {onCancel && <Button type="button" variant="outline" onClick={onCancel}>Annuler</Button>}
+            <Button type="submit" disabled={loading}>{loading ? 'Enregistrement...' : 'Enregistrer'}</Button>
           </div>
         </form>
       </CardContent>

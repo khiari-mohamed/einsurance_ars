@@ -1,335 +1,127 @@
+// FIX (Finances pass): full rewrite. Removed every fictional route —
+// /finances/encaissements/:id/comptabilize, /finances/decaissements/:id/
+// ordonnancer, /finances/bank-movements, /finances/lettrage/auto,
+// /finances/ordres-paiement/:id/verify|sign|transmit,
+// /finances/accounting/*, /finances/aml/screen|report, /finances/tax/*
+// (no tax module exists at all), /finances/bank-reconciliation/*
+// (real prefix is /finances/reconciliation/*), /finances/lettrage/aging,
+// /finances/lettrage/unmatched — none of these exist on the real
+// FinancesController. Rebuilt against the exact route set reviewed.
 import api from '../lib/api';
-import { 
-  Encaissement, 
-  Decaissement, 
-  BankMovement, 
-  Lettrage, 
-  Commission,
-  Settlement,
-  OrdrePaiement,
-  EncaissementStatus, 
-  DecaissementStatus,
-  CommissionStatus,
-  SettlementStatus,
-  PaymentOrderStatus
+import {
+  Encaissement, Decaissement, CreateEncaissementInput, CreateDecaissementInput,
+  CommissionLine, CommissionStatement, Settlement, CreateSettlementInput,
+  Situation, CreateSituationInput, Lettrage, CreateLettrageInput,
+  OrdrePaiement, CreateOrdrePaiementInput, OrdreVirementStatut,
+  FourStepPaymentResult, CashFlowReport, AgingReport, AmlFlaggedEntry,
+  ImportBankMovementInput, PaginatedResponse, Encaissement as EncaissementT, Decaissement as DecaissementT,
 } from '../types/finance.types';
 
+interface ListParams { page?: number; limit?: number }
+
 export const financesApi = {
-  // ==================== ENCAISSEMENTS ====================
-  
-  createEncaissement: async (data: any): Promise<Encaissement> => {
-    const response = await api.post('/finances/encaissements', data);
-    return response.data;
-  },
+  // ── Encaissements ──────────────────────────────────────────────
+  getEncaissements: (params?: ListParams & { affaireId?: string; cedanteId?: string }) =>
+    api.get<PaginatedResponse<Encaissement>>('/finances/encaissements', { params }),
+  getEncaissement: (id: string) => api.get<Encaissement>(`/finances/encaissements/${id}`),
+  createEncaissement: (data: CreateEncaissementInput) =>
+    api.post<EncaissementT & { amlFlagged?: boolean; amlReason?: string }>('/finances/encaissements', data),
+  updateEncaissement: (id: string, data: Partial<CreateEncaissementInput>) =>
+    api.put<Encaissement>(`/finances/encaissements/${id}`, data),
+  validateEncaissement: (id: string) => api.put<Encaissement>(`/finances/encaissements/${id}/validate`),
+  deleteEncaissement: (id: string) => api.delete<void>(`/finances/encaissements/${id}`),
 
-  getEncaissements: async (filters?: {
-    startDate?: string;
-    endDate?: string;
-    sourceType?: string;
-    statut?: EncaissementStatus;
-    affaireId?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{ data: Encaissement[]; total: number; page: number; totalPages: number }> => {
-    const response = await api.get('/finances/encaissements', { params: filters });
-    return response.data;
-  },
+  // ── Décaissements ──────────────────────────────────────────────
+  getDecaissements: (params?: ListParams & { affaireId?: string }) =>
+    api.get<PaginatedResponse<Decaissement>>('/finances/decaissements', { params }),
+  getDecaissement: (id: string) => api.get<Decaissement>(`/finances/decaissements/${id}`),
+  createDecaissement: (data: CreateDecaissementInput) =>
+    api.post<DecaissementT & { amlFlagged?: boolean; amlReason?: string }>('/finances/decaissements', data),
+  updateDecaissement: (id: string, data: Partial<CreateDecaissementInput>) =>
+    api.put<Decaissement>(`/finances/decaissements/${id}`, data),
+  approveDecaissement: (id: string, niveau?: number, note?: string) =>
+    api.put<Decaissement>(`/finances/decaissements/${id}/approve`, { niveau, note }),
+  rejectDecaissement: (id: string, motif: string) =>
+    api.put<Decaissement>(`/finances/decaissements/${id}/reject`, { motif }),
+  executeDecaissement: (id: string) => api.put<Decaissement>(`/finances/decaissements/${id}/execute`),
+  deleteDecaissement: (id: string) => api.delete<void>(`/finances/decaissements/${id}`),
 
-  getEncaissement: async (id: string): Promise<Encaissement> => {
-    const response = await api.get(`/finances/encaissements/${id}`);
-    return response.data;
-  },
+  // ── Balance ────────────────────────────────────────────────────
+  getBalance: (affaireId: string) =>
+    api.get<{ affaireId: string; encaisse: number; decaisse: number; solde: number }>(`/finances/balance/${affaireId}`),
 
-  updateEncaissement: async (id: string, data: any): Promise<Encaissement> => {
-    const response = await api.put(`/finances/encaissements/${id}`, data);
-    return response.data;
-  },
+  // ── Commissions (read-only view onto AffaireReassureur + mark-paid) ──
+  getCommissions: (params?: ListParams & { affaireId?: string; reassureurId?: string; paid?: 'paid' | 'unpaid' }) =>
+    api.get<PaginatedResponse<CommissionLine>>('/finances/commissions', { params }),
+  getCommission: (id: string) => api.get<CommissionLine>(`/finances/commissions/${id}`),
+  markCommissionPaid: (id: string, decaissementId: string) =>
+    api.patch<CommissionLine>(`/finances/commissions/${id}/mark-paid`, { decaissementId }),
+  getCommissionStatement: (cedanteId: string, period: string) =>
+    api.get<CommissionStatement>(`/finances/commissions/statement/${cedanteId}/${period}`),
 
-  validateEncaissement: async (id: string): Promise<Encaissement> => {
-    const response = await api.put(`/finances/encaissements/${id}/validate`);
-    return response.data;
-  },
+  // ── Reports ────────────────────────────────────────────────────
+  getCashFlowReport: (startDate: string, endDate: string) =>
+    api.get<CashFlowReport>('/finances/reports/cash-flow', { params: { startDate, endDate } }),
+  getAgingReport: (type: 'creances' | 'dettes') =>
+    api.get<AgingReport>('/finances/reports/aging', { params: { type } }),
 
-  comptabilizeEncaissement: async (id: string, pieceComptable: string): Promise<Encaissement> => {
-    const response = await api.put(`/finances/encaissements/${id}/comptabilize`, { pieceComptable });
-    return response.data;
-  },
+  // ── Settlements ────────────────────────────────────────────────
+  getSettlements: (params?: ListParams & { affaireId?: string; situationId?: string }) =>
+    api.get<PaginatedResponse<Settlement>>('/finances/settlements', { params }),
+  getSettlement: (id: string) => api.get<Settlement>(`/finances/settlements/${id}`),
+  createSettlement: (data: CreateSettlementInput) => api.post<Settlement>('/finances/settlements', data),
+  calculateSettlement: (id: string) => api.patch<Settlement>(`/finances/settlements/${id}/calculate`),
+  validateSettlement: (id: string) => api.patch<Settlement>(`/finances/settlements/${id}/validate`),
+  deleteSettlement: (id: string) => api.delete<void>(`/finances/settlements/${id}`),
 
-  deleteEncaissement: async (id: string): Promise<void> => {
-    await api.delete(`/finances/encaissements/${id}`);
-  },
+  // ── Situations ─────────────────────────────────────────────────
+  getSituations: (params?: ListParams & { cedanteId?: string }) =>
+    api.get<PaginatedResponse<Situation>>('/finances/situations', { params }),
+  getSituation: (id: string) => api.get<Situation>(`/finances/situations/${id}`),
+  createSituation: (data: CreateSituationInput) => api.post<Situation>('/finances/situations', data),
+  deleteSituation: (id: string) => api.delete<void>(`/finances/situations/${id}`),
 
-  // ==================== DECAISSEMENTS ====================
+  // ── Lettrage ───────────────────────────────────────────────────
+  getOpenItems: (cedanteId: string) => api.get<any[]>(`/finances/lettrage/open-items/${cedanteId}`),
+  getLettrages: (params?: ListParams & { cedanteId?: string }) =>
+    api.get<PaginatedResponse<Lettrage>>('/finances/lettrage', { params }),
+  getLettrage: (id: string) => api.get<Lettrage>(`/finances/lettrage/${id}`),
+  createLettrage: (data: CreateLettrageInput) => api.post<Lettrage>('/finances/lettrage', data),
 
-  createDecaissement: async (data: any): Promise<Decaissement> => {
-    const response = await api.post('/finances/decaissements', data);
-    return response.data;
-  },
+  // ── Ordres de paiement ─────────────────────────────────────────
+  getOrdres: (params?: ListParams & { statut?: OrdreVirementStatut }) =>
+    api.get<PaginatedResponse<OrdrePaiement>>('/finances/ordres-paiement', { params }),
+  getOrdre: (id: string) => api.get<OrdrePaiement>(`/finances/ordres-paiement/${id}`),
+  createOrdre: (data: CreateOrdrePaiementInput) => api.post<OrdrePaiement>('/finances/ordres-paiement', data),
+  validateOrdre: (id: string) => api.patch<OrdrePaiement>(`/finances/ordres-paiement/${id}/validate`),
+  executeOrdre: (id: string) => api.patch<OrdrePaiement>(`/finances/ordres-paiement/${id}/execute`),
+  attachSwift: (id: string, swiftDocumentId: string) =>
+    api.patch<OrdrePaiement>(`/finances/ordres-paiement/${id}/swift`, { swiftDocumentId }),
+  downloadOrdrePdf: (id: string) => api.get(`/finances/ordres-paiement/${id}/pdf`, { responseType: 'blob' as const }),
 
-  getDecaissements: async (filters?: {
-    startDate?: string;
-    endDate?: string;
-    beneficiaireType?: string;
-    statut?: DecaissementStatus;
-    affaireId?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{ data: Decaissement[]; total: number; page: number; totalPages: number }> => {
-    const response = await api.get('/finances/decaissements', { params: filters });
-    return response.data;
-  },
+  // ── 4-step payment ─────────────────────────────────────────────
+  executeFourStepPayment: (affaireId: string) =>
+    api.post<FourStepPaymentResult>(`/finances/four-step/${affaireId}`),
 
-  getDecaissement: async (id: string): Promise<Decaissement> => {
-    const response = await api.get(`/finances/decaissements/${id}`);
-    return response.data;
-  },
+  // ── Bank reconciliation ────────────────────────────────────────
+  getUnreconciled: () =>
+    api.get<{ unreconciled: { encaissements: Encaissement[]; decaissements: Decaissement[] } }>(
+      '/finances/reconciliation/unreconciled',
+    ),
+  reconcileEncaissement: (encaissementId: string, bankMovementId: string) =>
+    api.post<{ message: string }>('/finances/reconciliation/encaissement', { encaissementId, bankMovementId }),
+  reconcileDecaissement: (decaissementId: string, bankMovementId: string) =>
+    api.post<{ message: string }>('/finances/reconciliation/decaissement', { decaissementId, bankMovementId }),
+  unreconcile: (bankMovementId: string) =>
+    api.post<{ message: string }>(`/finances/reconciliation/${bankMovementId}/unreconcile`),
+  importBankMovements: (movements: ImportBankMovementInput[]) =>
+    api.post<{ total: number; imported: number; failed: number; results: any[] }>(
+      '/finances/reconciliation/import', movements,
+    ),
 
-  updateDecaissement: async (id: string, data: any): Promise<Decaissement> => {
-    const response = await api.put(`/finances/decaissements/${id}`, data);
-    return response.data;
-  },
-
-  approveDecaissement: async (id: string, niveau: number, commentaire?: string): Promise<Decaissement> => {
-    const response = await api.put(`/finances/decaissements/${id}/approve`, { niveau, commentaire });
-    return response.data;
-  },
-
-  ordonnancerDecaissement: async (id: string): Promise<Decaissement> => {
-    const response = await api.put(`/finances/decaissements/${id}/ordonnancer`);
-    return response.data;
-  },
-
-  executeDecaissement: async (id: string): Promise<Decaissement> => {
-    const response = await api.put(`/finances/decaissements/${id}/execute`);
-    return response.data;
-  },
-
-  deleteDecaissement: async (id: string): Promise<void> => {
-    await api.delete(`/finances/decaissements/${id}`);
-  },
-
-  // ==================== BANK MOVEMENTS ====================
-
-  getBankMovements: async (compteBancaire?: string): Promise<BankMovement[]> => {
-    const response = await api.get('/finances/bank-movements', { params: { compteBancaire } });
-    return response.data;
-  },
-
-  // ==================== LETTRAGE ====================
-
-  runAutoLettrage: async (): Promise<{ matched: number; unmatched: number }> => {
-    const response = await api.post('/finances/lettrage/auto');
-    return response.data;
-  },
-
-  getLettrages: async (filters?: { type?: string; entityId?: string }): Promise<Lettrage[]> => {
-    const response = await api.get('/finances/lettrage', { params: filters });
-    return response.data;
-  },
-
-  getLettrage: async (id: string): Promise<Lettrage> => {
-    const response = await api.get(`/finances/lettrage/${id}`);
-    return response.data;
-  },
-
-  // ==================== REPORTS ====================
-
-  getCashFlowReport: async (startDate: string, endDate: string): Promise<any> => {
-    const response = await api.get('/finances/reports/cash-flow', {
-      params: { startDate, endDate },
-    });
-    return response.data;
-  },
-
-  getAgingReport: async (type: 'creances' | 'dettes'): Promise<any> => {
-    const response = await api.get('/finances/reports/aging', { params: { type } });
-    return response.data;
-  },
-
-  // ==================== COMMISSIONS ====================
-
-  createCommission: async (data: any): Promise<Commission> => {
-    const response = await api.post('/finances/commissions', data);
-    return response.data;
-  },
-
-  getCommissions: async (filters?: {
-    affaireId?: string;
-    type?: string;
-    statut?: CommissionStatus;
-    startDate?: string;
-    endDate?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{ data: Commission[]; total: number; page: number; totalPages: number }> => {
-    const response = await api.get('/finances/commissions', { params: filters });
-    return response.data;
-  },
-
-  getCommission: async (id: string): Promise<Commission> => {
-    const response = await api.get(`/finances/commissions/${id}`);
-    return response.data;
-  },
-
-  markCommissionAsPaid: async (id: string, decaissementId: string): Promise<Commission> => {
-    const response = await api.patch(`/finances/commissions/${id}/mark-paid`, { decaissementId });
-    return response.data;
-  },
-
-  getCommissionStatement: async (cedanteId: string, period: string): Promise<any> => {
-    const response = await api.get(`/finances/commissions/statement/${cedanteId}/${period}`);
-    return response.data;
-  },
-
-  // ==================== SETTLEMENTS ====================
-
-  createSettlement: async (data: any): Promise<Settlement> => {
-    const response = await api.post('/finances/settlements', data);
-    return response.data;
-  },
-
-  getSettlements: async (filters?: {
-    cedanteId?: string;
-    statut?: SettlementStatus;
-    startDate?: string;
-    endDate?: string;
-    page?: number;
-    limit?: number;
-  }): Promise<{ data: Settlement[]; total: number; page: number; totalPages: number }> => {
-    const response = await api.get('/finances/settlements', { params: filters });
-    return response.data;
-  },
-
-  getSettlement: async (id: string): Promise<Settlement> => {
-    const response = await api.get(`/finances/settlements/${id}`);
-    return response.data;
-  },
-
-  calculateSettlement: async (id: string): Promise<Settlement> => {
-    const response = await api.patch(`/finances/settlements/${id}/calculate`);
-    return response.data;
-  },
-
-  validateSettlement: async (id: string): Promise<Settlement> => {
-    const response = await api.patch(`/finances/settlements/${id}/validate`);
-    return response.data;
-  },
-
-  // ==================== ORDRES DE PAIEMENT ====================
-
-  createOrdrePaiement: async (data: any): Promise<OrdrePaiement> => {
-    const response = await api.post('/finances/ordres-paiement', data);
-    return response.data;
-  },
-
-  getOrdresPaiement: async (filters?: {
-    statut?: PaymentOrderStatus;
-  }): Promise<OrdrePaiement[]> => {
-    const response = await api.get('/finances/ordres-paiement', { params: filters });
-    return response.data;
-  },
-
-  getOrdrePaiement: async (id: string): Promise<OrdrePaiement> => {
-    const response = await api.get(`/finances/ordres-paiement/${id}`);
-    return response.data;
-  },
-
-  verifyOrdrePaiement: async (id: string): Promise<OrdrePaiement> => {
-    const response = await api.patch(`/finances/ordres-paiement/${id}/verify`);
-    return response.data;
-  },
-
-  signOrdrePaiement: async (id: string, commentaire?: string): Promise<OrdrePaiement> => {
-    const response = await api.patch(`/finances/ordres-paiement/${id}/sign`, { commentaire });
-    return response.data;
-  },
-
-  transmitOrdrePaiement: async (id: string, referenceBank: string): Promise<OrdrePaiement> => {
-    const response = await api.patch(`/finances/ordres-paiement/${id}/transmit`, { referenceBank });
-    return response.data;
-  },
-
-  // ==================== ACCOUNTING ====================
-
-  getAccountingEntries: async (filters?: {
-    journalCode?: string;
-    compteDebit?: string;
-    statut?: string;
-    startDate?: string;
-    endDate?: string;
-  }): Promise<{ data: any[]; total: number }> => {
-    const response = await api.get('/finances/accounting', { params: filters });
-    return response.data;
-  },
-
-  validateAccountingEntry: async (id: string): Promise<any> => {
-    const response = await api.patch(`/finances/accounting/${id}/validate`);
-    return response.data;
-  },
-
-  getTrialBalance: async (period: string): Promise<any> => {
-    const response = await api.get(`/finances/accounting/trial-balance/${period}`);
-    return response.data;
-  },
-
-  // ==================== AML & TAX ====================
-
-  screenPayment: async (encaissementId?: string, decaissementId?: string): Promise<any> => {
-    const response = await api.post('/finances/aml/screen', { encaissementId, decaissementId });
-    return response.data;
-  },
-
-  getAMLReport: async (startDate: string, endDate: string): Promise<any> => {
-    const response = await api.get(`/finances/aml/report/${startDate}/${endDate}`);
-    return response.data;
-  },
-
-  getTaxObligation: async (startDate: string, endDate: string, type: string): Promise<any> => {
-    const response = await api.get(`/finances/tax/obligation/${startDate}/${endDate}/${type}`);
-    return response.data;
-  },
-
-  getWithholdingTaxReport: async (period: string): Promise<any> => {
-    const response = await api.get(`/finances/tax/withholding/${period}`);
-    return response.data;
-  },
-
-  getTaxComplianceStatus: async (): Promise<any> => {
-    const response = await api.get('/finances/tax/compliance');
-    return response.data;
-  },
-
-  // ==================== BANK RECONCILIATION ====================
-
-  importBankStatement: async (compteBancaire: string, statement: any[]): Promise<any> => {
-    const response = await api.post('/finances/bank-reconciliation/import', { compteBancaire, statement });
-    return response.data;
-  },
-
-  reconcileAccount: async (compteBancaire: string, soldeBank: string): Promise<any> => {
-    const response = await api.patch('/finances/bank-reconciliation/reconcile', { compteBancaire, soldeBank });
-    return response.data;
-  },
-
-  getUnreconciledReport: async (compteBancaire: string): Promise<any> => {
-    const response = await api.get(`/finances/bank-reconciliation/unreconciled/${compteBancaire}`);
-    return response.data;
-  },
-
-  getReconciliationHistory: async (compteBancaire: string): Promise<any> => {
-    const response = await api.get(`/finances/bank-reconciliation/history/${compteBancaire}`);
-    return response.data;
-  },
-
-  // ==================== ADVANCED LETTRAGE ====================
-
-  getAgingAnalysis: async (type: 'creances' | 'dettes', cedanteId?: string): Promise<any> => {
-    const response = await api.get(`/finances/lettrage/aging/${type}`, { params: { cedanteId } });
-    return response.data;
-  },
-
-  getUnmatchedItems: async (days?: number, minMontant?: number): Promise<any> => {
-    const response = await api.get('/finances/lettrage/unmatched/items', { params: { days, minMontant } });
-    return response.data;
-  },
+  // ── AML ────────────────────────────────────────────────────────
+  getFlagged: (params?: ListParams) =>
+    api.get<PaginatedResponse<AmlFlaggedEntry>>('/finances/aml/flagged', { params }),
 };
+
+export default financesApi;

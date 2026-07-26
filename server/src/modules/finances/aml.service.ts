@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 
-// AML (Anti-Money Laundering) threshold — transactions above this threshold
-// must be flagged for manual review (configurable, default 10,000 TND equivalent)
 const AML_THRESHOLD_TND = 10_000;
 
 @Injectable()
@@ -34,10 +32,46 @@ export class AmlService {
     return { flagged: false };
   }
 
-  async getFlaggedTransactions() {
-    return this.prisma.auditLog.findMany({
-      where: { action: 'AML_FLAG' },
-      orderBy: { createdAt: 'desc' },
-    });
+  /**
+   * FIX (Finances pass): the AML check only ever ran on Encaissement.
+   * Decaissements (wires OUT to reinsurers/co-courtiers) can be equally
+   * large and were never screened at all — a real anti-money-laundering
+   * gap, not just an inconsistency.
+   */
+  async checkDecaissement(decaissementId: string): Promise<{ flagged: boolean; reason?: string }> {
+    const dec = await this.prisma.decaissement.findUnique({ where: { id: decaissementId } });
+    if (!dec) return { flagged: false };
+
+    const montantTnd = dec.montantTnd ? Number(dec.montantTnd) : Number(dec.montant);
+    if (montantTnd >= AML_THRESHOLD_TND) {
+      this.logger.warn(`AML flag: Decaissement ${dec.reference} — ${montantTnd} TND (seuil: ${AML_THRESHOLD_TND})`);
+
+      await this.prisma.auditLog.create({
+        data: {
+          action: 'AML_FLAG',
+          entityType: 'Decaissement',
+          entityId: decaissementId,
+          after: { montantTnd, threshold: AML_THRESHOLD_TND, reason: 'Montant supérieur au seuil AML' },
+        },
+      });
+
+      return { flagged: true, reason: `Montant ${montantTnd} TND dépasse le seuil AML de ${AML_THRESHOLD_TND} TND` };
+    }
+
+    return { flagged: false };
+  }
+
+  // FIX (Finances pass): unbounded — this list only grows. Paginated now.
+  async getFlaggedTransactions(page = 1, limit = 30) {
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.prisma.auditLog.findMany({
+        where: { action: 'AML_FLAG' },
+        orderBy: { createdAt: 'desc' },
+        skip, take: limit,
+      }),
+      this.prisma.auditLog.count({ where: { action: 'AML_FLAG' } }),
+    ]);
+    return { data, total, page, limit };
   }
 }

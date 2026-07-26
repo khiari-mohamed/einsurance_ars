@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { UploadCloud, FileText, X, Loader2, AlertCircle } from 'lucide-react';
+import { UploadCloud, Loader2, AlertCircle } from 'lucide-react';
 import { useFileUpload } from '../../hooks/useFileUpload';
 import { ACCEPT_ATTRIBUTE, isAllowedFile, MAX_FILE_SIZE_MB } from '../../lib/upload.config';
 import type { EntityType } from '../../types/ged.types';

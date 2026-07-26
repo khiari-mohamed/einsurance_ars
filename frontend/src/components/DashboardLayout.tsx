@@ -58,6 +58,7 @@ export default function DashboardLayout() {
   const layout = useThemeStore((s) => s.layout);
 
   const pageTitle = t(getPageTitleKey(location.pathname));
+  const userDisplayName = user ? `${user.prenom} ${user.nom}`.trim() : '';
 
   const handleLogout = () => {
     logout();
@@ -106,13 +107,13 @@ export default function DashboardLayout() {
               >
                 <User size={20} className="text-gray-600 dark:text-gray-400" />
                 <span className="text-[13px] text-gray-700 dark:text-gray-300 hidden md:block">
-                  {user?.firstName} {user?.lastName}
+                  {userDisplayName}
                 </span>
               </button>
               {userMenuOpen && (
                 <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-[#16161f] rounded-lg shadow-lg border border-gray-200 dark:border-[#262636] py-1 z-50">
                   <div className="px-4 py-2 border-b border-gray-100 dark:border-[#1e1e2c]">
-                    <p className="text-[12px] font-medium text-gray-900 dark:text-white">{user?.firstName} {user?.lastName}</p>
+                    <p className="text-[12px] font-medium text-gray-900 dark:text-white">{userDisplayName}</p>
                     <p className="text-[11px] text-gray-500 dark:text-gray-400">{user?.email}</p>
                     <p className="text-[10px] text-blue-600 dark:text-blue-400 mt-1 uppercase">{user?.role}</p>
                   </div>

@@ -3,12 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit2, Trash2, Plus, Mail, Phone, Building2, CreditCard, FileText,
-  FileCheck, Shield, Globe, Paperclip, Folder, Sliders, Download as DownloadIcon,
+  FileCheck, Shield, Globe, Paperclip, Folder, Sliders,
 } from 'lucide-react';
 import { cedantesApi, conventionsApi } from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
 import {
-  Cedante, CedanteContact, CedanteBankAccount,
+  CedanteContact, CedanteBankAccount,
   CreateCedanteContactDto, CreateCedanteBankAccountDto,
 } from '../../types/cedante.types';
 import { Convention } from '../../types/convention.types';

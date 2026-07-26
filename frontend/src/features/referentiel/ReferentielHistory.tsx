@@ -36,16 +36,6 @@ export default function ReferentielHistory() {
     return routes[entityType] || '#';
   };
 
-  const entityTypeLabel = (type: string): string => {
-    const labels: Record<string, string> = {
-      ASSURE: 'Client',
-      CEDANTE: "Compagnie d'assurances",
-      REASSUREUR: 'Réassureur',
-      CO_COURTIER: 'Courtier en réassurance',
-    };
-    return labels[type] || type;
-  };
-
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString('fr-FR', {
       year: 'numeric',

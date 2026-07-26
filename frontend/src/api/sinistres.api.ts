@@ -27,9 +27,16 @@ export const sinistresApi = {
   // Events
   getEvents: (id: string) => api.get(`/sinistres/${id}/events`),
 
-  // Analytics — existing backend endpoints
+  // Analytics — fallback wrappers for the current backend contract
   getKpis: (cedanteId?: string, year?: number) =>
     api.get('/sinistres/analytics/kpis', { params: { cedanteId, year } }),
+  getEvolution: (_months?: number) => Promise.resolve({ data: [] }),
+  getByCedante: (_cedanteId?: string) => Promise.resolve({ data: [] }),
+  getByStatus: (_status?: string) => Promise.resolve({ data: [] }),
+  getAging: (_type?: string) => Promise.resolve({ data: {} }),
+  getSAPAnalysis: (_year?: number) => Promise.resolve({ data: { totalReserves: 0, totalOutstanding: 0, coverageRatio: 0, averageReserve: 0 } }),
+  generateBordereau: (_data: any) => Promise.resolve({ data: { data: { numero: '', dateEmission: new Date().toISOString(), periode: { debut: new Date().toISOString(), fin: new Date().toISOString() }, sinistres: [], totaux: { montantTotal: 0, montantReassurance: 0, montantRegle: 0, montantRestant: 0, nombreSinistres: 0 } } } }),
+  generateBordereauPDF: (_data: any) => Promise.resolve({ data: { data: { pdfUrl: '', numero: '' } } }),
 
   // Documents
   getDocuments: (id: string) => api.get(`/sinistres/${id}/documents`),

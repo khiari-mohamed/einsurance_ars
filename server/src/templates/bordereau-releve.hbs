@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<title>{{title}} — {{bordereau.numero}}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root { --red:#d52b36; --dark:#1a1a2e; --light:#f8f9fa; --border:#dee2e6; --muted:#6c757d; --green:#2d6a4f; --orange:#d68910; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10.5px;color:#212529;background:#fff;line-height:1.4}
+  .page-header{background:var(--red);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #a51e28}
+  .logo-text{font-size:20px;font-weight:700;letter-spacing:1px}
+  .logo-sub{font-size:9px;opacity:.85}
+  .doc-title{font-size:13px;font-weight:700;letter-spacing:.5px;text-align:center}
+  .doc-ref{font-size:9px;opacity:.85;margin-top:3px;text-align:center}
+  .parties{display:flex;border-bottom:1px solid var(--border)}
+  .party-box{flex:1;padding:12px 16px;border-right:1px solid var(--border)}
+  .party-box:last-child{border-right:none}
+  .party-label{font-size:8px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+  .party-name{font-size:12px;font-weight:700}
+  .party-detail{font-size:9px;color:var(--muted);margin-top:2px}
+  .section-header{background:var(--light);border-left:4px solid var(--red);padding:6px 12px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark)}
+  .overdue-banner{background:#f8d7da;color:#721c24;padding:8px 16px;font-size:10px;font-weight:700;text-align:center;border-bottom:2px solid #f5c2c7}
+  .rejected-banner{background:#fff3cd;color:#856404;padding:8px 16px;font-size:10px;text-align:center;border-bottom:2px solid #ffe69c}
+  table{width:100%;border-collapse:collapse;font-size:9.5px}
+  thead tr{background:var(--red);color:#fff}
+  thead th{padding:7px 8px;text-align:right;font-weight:600;font-size:8.5px;text-transform:uppercase;border-right:1px solid rgba(255,255,255,.2)}
+  thead th:first-child{text-align:left}
+  tbody tr:nth-child(even){background:#fafafa}
+  tbody td{padding:6px 8px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:right}
+  tbody td:first-child{text-align:left;font-weight:500}
+  tfoot tr{background:var(--dark);color:#fff}
+  tfoot td{padding:8px;font-weight:700;text-align:right;font-size:10px}
+  tfoot td:first-child{text-align:left}
+  .amounts-summary{display:flex;border:1px solid var(--border);border-radius:4px;overflow:hidden;margin:10px 16px}
+  .amount-box{flex:1;padding:10px 14px;text-align:center;border-right:1px solid var(--border)}
+  .amount-box:last-child{border-right:none}
+  .ab-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .ab-value{font-size:13px;font-weight:700;margin-top:3px}
+  .payment-history{padding:10px 16px}
+  .payment-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dotted var(--border);font-size:9.5px}
+  .payment-row:last-child{border-bottom:none}
+  .amount-words{background:#fff8f8;border:1px solid #fcc;border-left:4px solid var(--red);padding:10px 14px;margin:10px 16px}
+  .aw-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+  .aw-value{font-size:11px;font-weight:700;color:var(--dark);text-transform:uppercase}
+  .chart-section{padding:12px 16px;border-top:1px solid var(--border)}
+  .chart-title{font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .chart-row{display:flex;gap:20px}
+  .chart-col{flex:1}
+  .doc-footer{background:var(--dark);color:rgba(255,255,255,.7);text-align:center;font-size:8px;padding:8px}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div><div class="logo-text">ARS</div><div class="logo-sub">Réassurance Tunisie</div></div>
+  <div>
+    <div class="doc-title">{{upper title}}</div>
+    <div class="doc-ref">N° {{bordereau.numero}} — {{generatedAt}}</div>
+  </div>
+  <div style="text-align:right;font-size:9px">
+    <div style="opacity:.9">{{company.raisonSociale}}</div>
+    <div style="opacity:.7">MF: {{company.matriculeFiscal}}</div>
+  </div>
+</div>
+
+{{#if bordereau.isOverdue}}
+<div class="overdue-banner">⚠ Paiement en retard — date limite dépassée le {{formatDate bordereau.dateLimitePaiement}}</div>
+{{/if}}
+{{#if bordereau.rejectionReason}}
+<div class="rejected-banner">Rejeté précédemment : {{bordereau.rejectionReason}}</div>
+{{/if}}
+
+<div class="parties">
+  <div class="party-box">
+    <div class="party-label">Émetteur</div>
+    <div class="party-name">{{company.raisonSociale}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Cédante</div>
+    <div class="party-name">{{default bordereau.cedante.raisonSociale bordereau.affaire.cedante.raisonSociale '—'}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">{{#if bordereau.reassureurCode}}Réassureur{{else}}Affaire liée{{/if}}</div>
+    <div class="party-name">{{default bordereau.reassureur.raisonSociale (default bordereau.affaire.numero '—')}}</div>
+  </div>
+</div>
+
+<div class="amounts-summary">
+  <div class="amount-box">
+    <div class="ab-label">Montant Total</div>
+    <div class="ab-value">{{formatNumber bordereau.montantTotal}}</div>
+  </div>
+  <div class="amount-box">
+    <div class="ab-label">Réglé</div>
+    <div class="ab-value" style="color:var(--green)">{{formatNumber bordereau.montantRegle}}</div>
+  </div>
+  <div class="amount-box">
+    <div class="ab-label">Solde</div>
+    <div class="ab-value" style="color:{{#if (gt bordereau.solde 0)}}var(--red){{else}}var(--green){{/if}}">{{formatNumber bordereau.solde}}</div>
+  </div>
+  <div class="amount-box">
+    <div class="ab-label">Devise</div>
+    <div class="ab-value">{{bordereau.currency}}</div>
+  </div>
+</div>
+
+<div class="section-header" style="margin-top:6px">Détail</div>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Libellé</th>
+      <th>Prime Nette</th>
+      <th>Sinistres Payés</th>
+      <th>Réserves</th>
+      <th>SAP</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each bordereau.lines}}
+    <tr>
+      <td>{{libelle}}</td>
+      <td>{{formatNumber primeNette}}</td>
+      <td>{{formatNumber sinistresPayes}}</td>
+      <td>{{formatNumber recConstitues}}</td>
+      <td>{{formatNumber sapConstitues}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="5" style="text-align:center;color:var(--muted)">Aucune ligne</td></tr>
+    {{/each}}
+  </tbody>
+  <tfoot>
+    <tr><td>TOTAL</td><td>{{formatNumber bordereau.montantTotal}}</td><td colspan="3"></td></tr>
+  </tfoot>
+</table>
+
+{{#if bordereau.payments.length}}
+<div class="section-header" style="margin-top:6px">Historique des Règlements</div>
+<div class="payment-history">
+  {{#each bordereau.payments}}
+  <div class="payment-row">
+    <span>{{formatDate datePaiement}} — {{modePaiement}}{{#if referenceBancaire}} (Réf. {{referenceBancaire}}){{/if}}</span>
+    <span style="font-weight:700;color:var(--green)">{{formatNumber montant}} {{../bordereau.currency}}</span>
+  </div>
+  {{/each}}
+</div>
+{{/if}}
+
+{{#if bordereau.montantEnLettres}}
+<div class="amount-words">
+  <div class="aw-label">Montant en lettres</div>
+  <div class="aw-value">{{bordereau.montantEnLettres}}</div>
+</div>
+{{/if}}
+
+<div class="chart-section">
+  <div class="chart-title">Progression du Règlement</div>
+  <div class="chart-row">
+    <div class="chart-col"><canvas id="progressChart" height="120"></canvas></div>
+  </div>
+</div>
+
+<div class="doc-footer">
+  {{company.raisonSociale}} — Document confidentiel — {{bordereau.numero}} — {{generatedAt}}
+</div>
+
+<script>
+(function() {
+  var total = {{default bordereau.montantTotal 0}};
+  var regle = {{default bordereau.montantRegle 0}};
+  var solde = Math.max(total - regle, 0);
+
+  var ctx = document.getElementById('progressChart');
+  if (ctx && total > 0) {
+    new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Réglé', 'Solde restant'],
+        datasets: [{ data: [regle, solde], backgroundColor: ['#2d6a4f', '#d52b36'], borderColor: ['#fff', '#fff'], borderWidth: 2 }]
+      },
+      options: {
+        responsive: true,
+        cutout: '60%',
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { size: 9 }, boxWidth: 10 } },
+          tooltip: { callbacks: { label: function(c) { return c.label + ': ' + c.parsed.toFixed(3); } } }
+        }
+      }
+    });
+  }
+  window.__chartsReady = true;
+  window.dispatchEvent(new Event('chartsReady'));
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<title>{{title}} — {{bordereau.numero}}</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root { --red:#d52b36; --dark:#1a1a2e; --light:#f8f9fa; --border:#dee2e6; --muted:#6c757d; --green:#2d6a4f; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#212529;background:#fff;line-height:1.4}
+  .page-header{background:var(--red);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:4px solid #a51e28}
+  .logo-text{font-size:20px;font-weight:700;letter-spacing:1px}
+  .logo-sub{font-size:9px;opacity:.85}
+  .doc-title{font-size:13px;font-weight:700;letter-spacing:.5px;text-align:center}
+  .doc-ref{font-size:9px;opacity:.85;margin-top:3px;text-align:center}
+  .parties{display:flex;border-bottom:1px solid var(--border)}
+  .party-box{flex:1;padding:12px 16px;border-right:1px solid var(--border)}
+  .party-box:last-child{border-right:none}
+  .party-label{font-size:8px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+  .party-name{font-size:12px;font-weight:700}
+  .party-detail{font-size:9px;color:var(--muted);margin-top:2px}
+  .section-header{background:var(--light);border-left:4px solid var(--red);padding:6px 12px;font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--dark)}
+  .info-grid{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--border)}
+  .info-cell{padding:8px 12px;border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .info-cell:nth-child(4n){border-right:none}
+  .info-cell .label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .info-cell .value{font-weight:600;font-size:10.5px}
+  table{width:100%;border-collapse:collapse;font-size:9px}
+  thead tr{background:var(--dark);color:#fff}
+  thead th{padding:6px 7px;text-align:right;font-weight:600;font-size:8px;text-transform:uppercase;border-right:1px solid rgba(255,255,255,.2)}
+  thead th:first-child{text-align:left}
+  tbody tr:nth-child(even){background:#fafafa}
+  tbody td{padding:5px 7px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);text-align:right}
+  tbody td:first-child{text-align:left;font-weight:500}
+  .debit-col{color:var(--red)}
+  .credit-col{color:var(--green)}
+  tfoot tr{background:var(--red);color:#fff}
+  tfoot td{padding:7px;font-weight:700;text-align:right;font-size:9.5px}
+  tfoot td:first-child{text-align:left}
+  .solde-block{padding:14px 20px;border-top:2px solid var(--red);border-bottom:2px solid var(--red);display:flex;justify-content:space-between;align-items:center}
+  .solde-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .solde-amount{font-size:20px;font-weight:700}
+  .amount-words{background:#fff8f8;border:1px solid #fcc;border-left:4px solid var(--red);padding:10px 14px;margin:10px 0}
+  .aw-label{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+  .aw-value{font-size:11px;font-weight:700;color:var(--dark);text-transform:uppercase}
+  .chart-section{padding:12px 16px;border-top:1px solid var(--border)}
+  .chart-title{font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+  .doc-footer{background:var(--dark);color:rgba(255,255,255,.7);text-align:center;font-size:8px;padding:8px}
+  @media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div><div class="logo-text">ARS</div><div class="logo-sub">Réassurance Tunisie</div></div>
+  <div>
+    <div class="doc-title">{{upper title}}</div>
+    <div class="doc-ref">{{bordereau.numero}} — Émis le {{generatedAt}}</div>
+  </div>
+  <div style="text-align:right;font-size:9px">
+    <div style="opacity:.9">{{company.raisonSociale}}</div>
+    <div style="opacity:.7">MF: {{company.matriculeFiscal}}</div>
+  </div>
+</div>
+
+<div class="parties">
+  <div class="party-box">
+    <div class="party-label">Courtier</div>
+    <div class="party-name">{{company.raisonSociale}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Cédante</div>
+    <div class="party-name">{{default bordereau.cedante.raisonSociale bordereau.affaire.cedante.raisonSociale}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Réassureur</div>
+    <div class="party-name">{{default bordereau.reassureur.raisonSociale bordereau.reassureurCode '—'}}</div>
+  </div>
+  <div class="party-box">
+    <div class="party-label">Affaire / Traité</div>
+    <div class="party-name">{{default bordereau.affaire.numero '—'}}</div>
+  </div>
+</div>
+
+<div class="section-header">Période</div>
+<div class="info-grid">
+  <div class="info-cell"><div class="label">Période Début</div><div class="value">{{formatDate bordereau.datePeriodeDebut}}</div></div>
+  <div class="info-cell"><div class="label">Période Fin</div><div class="value">{{formatDate bordereau.datePeriodeFin}}</div></div>
+  <div class="info-cell"><div class="label">Date Limite Paiement</div><div class="value" style="{{#if bordereau.isOverdue}}color:var(--red){{/if}}">{{formatDate bordereau.dateLimitePaiement}}</div></div>
+  <div class="info-cell"><div class="label">Devise</div><div class="value">{{bordereau.currency}}</div></div>
+</div>
+
+<div class="section-header" style="margin-top:6px">Rubriques (Débit)</div>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Libellé</th>
+      <th>Sinistres Payés</th>
+      <th>REC Constituées</th>
+      <th>SAP Constitués</th>
+      <th>Part. Bénéf.</th>
+      <th>Taxes</th>
+      <th>Courtage</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each bordereau.lines}}
+    <tr>
+      <td>{{libelle}}{{#if couverture}} — {{couverture}}{{/if}}</td>
+      <td class="debit-col">{{formatNumber sinistresPayes}}</td>
+      <td class="debit-col">{{formatNumber recConstitues}}</td>
+      <td class="debit-col">{{formatNumber sapConstitues}}</td>
+      <td class="debit-col">{{formatNumber participationsBenef}}</td>
+      <td class="debit-col">{{formatNumber taxes}}</td>
+      <td class="debit-col">{{formatNumber brokerage}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="7" style="text-align:center;color:var(--muted)">Aucune ligne</td></tr>
+    {{/each}}
+  </tbody>
+</table>
+
+<div class="section-header" style="margin-top:6px">Rubriques (Crédit)</div>
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Libellé</th>
+      <th>Primes Cédées</th>
+      <th>REC Libérées</th>
+      <th>SAP Libérés</th>
+      <th>Intérêts</th>
+      <th>Prime Brute</th>
+      <th>Prime Nette</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#each bordereau.lines}}
+    <tr>
+      <td>{{libelle}}</td>
+      <td class="credit-col">{{formatNumber primesCedees}}</td>
+      <td class="credit-col">{{formatNumber recLiberes}}</td>
+      <td class="credit-col">{{formatNumber sapLiberes}}</td>
+      <td class="credit-col">{{formatNumber interets}}</td>
+      <td>{{formatNumber primeBrute}}</td>
+      <td style="font-weight:700">{{formatNumber primeNette}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="7" style="text-align:center;color:var(--muted)">Aucune ligne</td></tr>
+    {{/each}}
+  </tbody>
+  <tfoot>
+    <tr>
+      <td>TOTAL</td>
+      <td colspan="5"></td>
+      <td>{{formatNumber bordereau.montantTotal}}</td>
+    </tr>
+  </tfoot>
+</table>
+
+<div class="solde-block">
+  <div>
+    <div class="solde-label">Montant Total</div>
+    <div class="solde-amount">{{formatNumber bordereau.montantTotal}} {{bordereau.currency}}</div>
+  </div>
+  <div>
+    <div class="solde-label">Solde</div>
+    <div class="solde-amount" style="color:{{#if (gt bordereau.solde 0)}}var(--red){{else}}var(--green){{/if}}">
+      {{formatNumber bordereau.solde}} {{bordereau.currency}}
+    </div>
+  </div>
+</div>
+
+{{#if bordereau.montantEnLettres}}
+<div class="amount-words">
+  <div class="aw-label">Montant en lettres</div>
+  <div class="aw-value">{{bordereau.montantEnLettres}}</div>
+</div>
+{{/if}}
+
+<div class="chart-section">
+  <div class="chart-title">Débit vs Crédit par Ligne</div>
+  <canvas id="dcChart" height="70"></canvas>
+</div>
+
+<div class="doc-footer">
+  {{company.raisonSociale}} — Document confidentiel — {{bordereau.numero}} — {{generatedAt}}
+</div>
+
+<script>
+(function() {
+  var lines = {{{json bordereau.lines}}} || [];
+  var labels = lines.map(function(l) { return l.libelle || '—'; });
+  var debit = lines.map(function(l) {
+    return Number(l.sinistresPayes||0) + Number(l.recConstitues||0) + Number(l.sapConstitues||0) + Number(l.taxes||0) + Number(l.brokerage||0);
+  });
+  var credit = lines.map(function(l) {
+    return Number(l.primesCedees||0) + Number(l.recLiberes||0) + Number(l.sapLiberes||0) + Number(l.interets||0);
+  });
+
+  var ctx = document.getElementById('dcChart');
+  if (ctx && lines.length) {
+    new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Débit', data: debit, backgroundColor: '#d52b36', borderRadius: 2 },
+          { label: 'Crédit', data: credit, backgroundColor: '#2d6a4f', borderRadius: 2 }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: 'top', labels: { font: { size: 8 }, boxWidth: 10 } } },
+        scales: { y: { beginAtZero: true, ticks: { font: { size: 8 } } }, x: { ticks: { font: { size: 8 } }, grid: { display: false } } }
+      }
+    });
+  }
+  window.__chartsReady = true;
+  window.dispatchEvent(new Event('chartsReady'));
+})();
+</script>
+</body>
+</html>

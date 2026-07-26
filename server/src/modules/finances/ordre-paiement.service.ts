@@ -44,7 +44,6 @@ export class OrdrePaiementService {
   async create(dto: CreateOrdrePaiementDto) {
     const reference = await this.sequence.next('ORDRE_PAIEMENT');
 
-    // Validate bank account exists (and has SWIFT for foreign currency)
     if (dto.bankAccountId) {
       const bank = await this.prisma.bankAccount.findUnique({ where: { id: dto.bankAccountId } });
       if (!bank) throw new NotFoundException('Compte bancaire bénéficiaire introuvable');
@@ -75,35 +74,71 @@ export class OrdrePaiementService {
     if (op.statut !== OrdreVirementStatut.BROUILLON) {
       throw new BadRequestException('Seul un ordre BROUILLON peut être validé');
     }
-    return this.prisma.ordrePaiement.update({
+
+    const updated = await this.prisma.ordrePaiement.update({
       where: { id },
-      data: { statut: OrdreVirementStatut.VALIDE },
+      // FIX (Finances pass): userId was accepted as a param but discarded —
+      // no field existed to store it. Now recorded, matching the pattern
+      // already used on Bordereau/Settlement/FiscalPeriod.
+      data: { statut: OrdreVirementStatut.VALIDE, dateValidation: new Date(), validatedByUserId: userId },
     });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId, action: 'ORDRE_PAIEMENT_VALIDATED', entityType: 'OrdrePaiement', entityId: id,
+        before: { statut: op.statut }, after: { statut: OrdreVirementStatut.VALIDE },
+      },
+    });
+
+    return updated;
   }
 
-  async markExecuted(id: string) {
+  async markExecuted(id: string, userId?: string) {
     const op = await this.findOne(id);
     if (op.statut !== OrdreVirementStatut.VALIDE) {
       throw new BadRequestException('L\'ordre doit être VALIDE avant exécution');
     }
-    return this.prisma.ordrePaiement.update({
+
+    const updated = await this.prisma.ordrePaiement.update({
       where: { id },
       data: { statut: OrdreVirementStatut.EXECUTE, dateExecution: new Date() },
     });
+
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId, action: 'ORDRE_PAIEMENT_EXECUTED', entityType: 'OrdrePaiement', entityId: id,
+          before: { statut: op.statut }, after: { statut: OrdreVirementStatut.EXECUTE },
+        },
+      });
+    }
+
+    return updated;
   }
 
-  async attachSwift(id: string, swiftDocumentId: string) {
+  async attachSwift(id: string, swiftDocumentId: string, userId?: string) {
     const op = await this.findOne(id);
     if (op.statut !== OrdreVirementStatut.EXECUTE) {
       throw new BadRequestException('Le SWIFT ne peut être attaché qu\'après exécution');
     }
-    return this.prisma.ordrePaiement.update({
+
+    const updated = await this.prisma.ordrePaiement.update({
       where: { id },
       data: { statut: OrdreVirementStatut.SWIFT_RECU, swiftReceived: true, swiftDocumentId },
     });
+
+    if (userId) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId, action: 'ORDRE_PAIEMENT_SWIFT_ATTACHED', entityType: 'OrdrePaiement', entityId: id,
+          after: { swiftDocumentId },
+        },
+      });
+    }
+
+    return updated;
   }
 
-  /** Generate PDF from Handlebars template */
   async generatePdf(id: string): Promise<Buffer> {
     const op = await this.findOne(id);
     const company = await this.prisma.companyProfile.findFirst();

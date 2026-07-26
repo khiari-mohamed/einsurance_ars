@@ -4,11 +4,12 @@ import { ChevronDown } from 'lucide-react';
 
 const SelectContext = React.createContext<{ value: string; onValueChange: (value: string) => void; open: boolean; setOpen: (open: boolean) => void } | undefined>(undefined);
 
-export function Select({ value, onValueChange, children, defaultValue }: { value?: string; onValueChange?: (value: string) => void; children: React.ReactNode; defaultValue?: string }) {
+export function Select({ value, onValueChange, children, defaultValue, disabled }: { value?: string; onValueChange?: (value: string) => void; children: React.ReactNode; defaultValue?: string; disabled?: boolean }) {
   const [internalValue, setInternalValue] = React.useState(defaultValue || '');
   const [open, setOpen] = React.useState(false);
   const currentValue = value !== undefined ? value : internalValue;
   const handleChange = (newValue: string) => {
+    if (disabled) return;
     if (value === undefined) setInternalValue(newValue);
     onValueChange?.(newValue);
     setOpen(false);
@@ -20,13 +21,14 @@ export function Select({ value, onValueChange, children, defaultValue }: { value
   );
 }
 
-export function SelectTrigger({ children, className }: { children: React.ReactNode; className?: string }) {
+export function SelectTrigger({ children, className, disabled }: { children: React.ReactNode; className?: string; disabled?: boolean }) {
   const context = React.useContext(SelectContext);
   if (!context) throw new Error('SelectTrigger must be used within Select');
   return (
     <button
       type="button"
-      onClick={() => context.setOpen(!context.open)}
+      onClick={() => !disabled && context.setOpen(!context.open)}
+      disabled={disabled}
       className={cn('flex h-10 w-full items-center justify-between rounded-md border border-gray-300 bg-white px-3 py-2 text-sm ring-offset-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50', className)}
     >
       {children}

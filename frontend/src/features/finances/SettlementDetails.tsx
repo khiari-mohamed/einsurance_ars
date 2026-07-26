@@ -1,185 +1,82 @@
-import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { financesApi } from '@/api/finances.api';
-import { Settlement } from '@/types/finance.types';
 import { toast } from 'sonner';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/currency';
 
-interface SettlementDetailsProps {
-  settlementId: string;
-}
+interface Props { settlementId: string }
 
-export default function SettlementDetails({ settlementId }: SettlementDetailsProps) {
-  const [settlement, setSettlement] = useState<Settlement | null>(null);
+// FIX (Finances pass): full rewrite. Removed every invented section —
+// lignes[], historique[], approbations[], soldePrecedent/gainPerteChange —
+// none of that exists on the real Settlement. Shows what's actually there:
+// FX rates, linked encaissements/decaissements, and validate/calculate
+// actions matching the real workflow.
+export default function SettlementDetails({ settlementId }: Props) {
+  const queryClient = useQueryClient();
+  const { data: settlement, isLoading } = useQuery({
+    queryKey: ['settlement', settlementId],
+    queryFn: async () => (await financesApi.getSettlement(settlementId)).data,
+  });
 
-  useEffect(() => {
-    loadSettlement();
-  }, [settlementId]);
+  const calcMutation = useMutation({
+    mutationFn: () => financesApi.calculateSettlement(settlementId),
+    onSuccess: () => { toast.success('Montant TND recalculé'); queryClient.invalidateQueries({ queryKey: ['settlement', settlementId] }); },
+  });
+  const validateMutation = useMutation({
+    mutationFn: () => financesApi.validateSettlement(settlementId),
+    onSuccess: () => { toast.success('Règlement validé'); queryClient.invalidateQueries({ queryKey: ['settlement', settlementId] }); },
+    onError: (e: any) => toast.error(e.response?.data?.message || 'Erreur'),
+  });
 
-  const loadSettlement = async () => {
-    try {
-      const data = await financesApi.getSettlement(settlementId);
-      setSettlement(data);
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
-    }
-  };
-
-  if (!settlement) return <div>Chargement...</div>;
+  if (isLoading || !settlement) return <div>Chargement...</div>;
 
   return (
     <div className="space-y-6">
-      {/* Header Info */}
       <Card>
-        <CardHeader>
-          <CardTitle>Situation {settlement.numero}</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Règlement {settlement.reference}</CardTitle></CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Cédante</p>
-              <p className="font-semibold">{settlement.cedante?.nom}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Période</p>
-              <p className="font-semibold">
-                {formatDate(settlement.dateDebut)} - {formatDate(settlement.dateFin)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Type</p>
-              <p className="font-semibold">{settlement.type.toUpperCase()}</p>
-            </div>
+            <div><p className="text-sm text-gray-600">Mode</p><p className="font-semibold">{settlement.mode}</p></div>
+            <div><p className="text-sm text-gray-600">Affaire</p><p className="font-semibold">{settlement.affaire?.numero || '-'}</p></div>
+            <div><p className="text-sm text-gray-600">Date</p><p className="font-semibold">{formatDate(settlement.dateSettlement)}</p></div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Financial Summary */}
       <Card>
-        <CardHeader>
-          <CardTitle>Résumé Financier</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Montants</CardTitle></CardHeader>
         <CardContent>
           <div className="grid grid-cols-4 gap-4">
-            <div className="p-4 bg-blue-50 rounded-lg">
-              <p className="text-sm text-gray-600">Total Prime</p>
-              <p className="text-2xl font-bold text-blue-600">
-                {formatCurrency(settlement.totalPrime)}
-              </p>
-            </div>
-            <div className="p-4 bg-purple-50 rounded-lg">
-              <p className="text-sm text-gray-600">Commission ARS</p>
-              <p className="text-2xl font-bold text-purple-600">
-                {formatCurrency(settlement.totalCommissionARS)}
-              </p>
-            </div>
-            <div className="p-4 bg-orange-50 rounded-lg">
-              <p className="text-sm text-gray-600">Commission Cédante</p>
-              <p className="text-2xl font-bold text-orange-600">
-                {formatCurrency(settlement.totalCommissionCedante)}
-              </p>
-            </div>
-            <div className="p-4 bg-green-50 rounded-lg">
-              <p className="text-sm text-gray-600">Solde Final</p>
-              <p className="text-2xl font-bold text-green-600">
-                {formatCurrency(settlement.soldeFinal)}
-              </p>
-            </div>
+            <div className="p-4 bg-blue-50 rounded-lg"><p className="text-sm text-gray-600">Montant</p><p className="text-2xl font-bold text-blue-600">{formatCurrency(settlement.montant, settlement.currency)}</p></div>
+            <div className="p-4 bg-green-50 rounded-lg"><p className="text-sm text-gray-600">Équivalent TND</p><p className="text-2xl font-bold text-green-600">{formatCurrency(settlement.montantTnd ?? settlement.montant, 'TND')}</p></div>
+            {settlement.tauxRealisation != null && <div className="p-4 bg-gray-50 rounded-lg"><p className="text-sm text-gray-600">Taux réalisation</p><p className="text-lg font-semibold">{settlement.tauxRealisation}</p></div>}
+            {settlement.tauxReglement != null && <div className="p-4 bg-gray-50 rounded-lg"><p className="text-sm text-gray-600">Taux règlement</p><p className="text-lg font-semibold">{settlement.tauxReglement}</p></div>}
           </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-4">
-            <div>
-              <p className="text-sm text-gray-600">Total Sinistres</p>
-              <p className="text-lg font-semibold text-red-600">
-                {formatCurrency(settlement.totalSinistre)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Solde Précédent</p>
-              <p className="text-lg font-semibold">
-                {formatCurrency(settlement.soldePrecedent)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Gain/Perte de Change</p>
-              <p className={`text-lg font-semibold ${Number(settlement.gainPerteChange) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(settlement.gainPerteChange)}
-              </p>
-            </div>
+          <div className="mt-4 flex items-center gap-3">
+            {settlement.validatedAt ? (
+              <Badge className="bg-green-500">VALIDÉ le {formatDate(settlement.validatedAt)}</Badge>
+            ) : (
+              <>
+                <Button size="sm" variant="outline" onClick={() => calcMutation.mutate()} disabled={calcMutation.isPending}>Recalculer TND</Button>
+                <Button size="sm" onClick={() => validateMutation.mutate()} disabled={validateMutation.isPending}>Valider</Button>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Detailed Lines */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Détail des Affaires ({settlement.lignes.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bordereau</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prime 100%</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prime Cédée</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Comm. ARS</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sinistres</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Net à Payer</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {settlement.lignes.map((ligne, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-sm font-medium">{ligne.referenceBordereau}</td>
-                    <td className="px-4 py-3 text-sm">
-                      <Badge variant="outline">{ligne.type}</Badge>
-                    </td>
-                    <td className="px-4 py-3 text-sm">{formatCurrency(ligne.prime100)}</td>
-                    <td className="px-4 py-3 text-sm font-semibold">{formatCurrency(ligne.primeCedee)}</td>
-                    <td className="px-4 py-3 text-sm text-purple-600">{formatCurrency(ligne.commissionARS)}</td>
-                    <td className="px-4 py-3 text-sm text-red-600">{formatCurrency(ligne.sinistreMontant)}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-green-600">{formatCurrency(ligne.netAPayer)}</td>
-                    <td className="px-4 py-3">
-                      <Badge className={
-                        ligne.statutPaiement === 'PAYE' ? 'bg-green-500' :
-                        ligne.statutPaiement === 'PARTIEL' ? 'bg-yellow-500' : 'bg-red-500'
-                      }>
-                        {ligne.statutPaiement}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* History */}
-      {settlement.historique && settlement.historique.length > 0 && (
+      {((settlement.encaissements?.length ?? 0) > 0 || (settlement.decaissements?.length ?? 0) > 0) && (
         <Card>
-          <CardHeader>
-            <CardTitle>Historique</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {settlement.historique.map((h, idx) => (
-                <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                  <div>
-                    <p className="font-medium">{h.action}</p>
-                    {h.details && <p className="text-sm text-gray-600">{h.details}</p>}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600">{formatDate(h.date)}</p>
-                    <p className="text-xs text-gray-500">{h.user}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+          <CardHeader><CardTitle>Mouvements liés</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {settlement.encaissements?.map((e) => (
+              <div key={e.id} className="flex justify-between p-2 bg-green-50 rounded text-sm"><span className="font-mono">{e.reference}</span><span className="font-semibold">{formatCurrency(e.montant, e.currency)}</span></div>
+            ))}
+            {settlement.decaissements?.map((d) => (
+              <div key={d.id} className="flex justify-between p-2 bg-red-50 rounded text-sm"><span className="font-mono">{d.reference}</span><span className="font-semibold">{formatCurrency(d.montant, d.currency)}</span></div>
+            ))}
           </CardContent>
         </Card>
       )}

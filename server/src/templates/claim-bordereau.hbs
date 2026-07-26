@@ -41,6 +41,7 @@
   .s-rejete{background:#f8d7da;color:#721c24}
   .s-clos{background:#e2e3e5;color:#383d41}
   .s-reass{background:#fff3cd;color:#856404}
+  .empty-row td{text-align:center!important;color:var(--muted);font-style:italic}
   .timeline{padding:12px 16px}
   .timeline-title{font-size:9px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
   .timeline-item{display:flex;gap:12px;margin-bottom:8px;position:relative}
@@ -65,6 +66,16 @@
 </head>
 <body>
 
+<!-- FIX: SinistresService (as reviewed) has no generatePdf() method — this
+     template is currently orphaned/unwired, OR a caller exists in a file not
+     yet reviewed (e.g. sinistre-analytics.service.ts). Made the "participations"
+     and "events" sections below accept EITHER a flattened top-level context
+     (participations, events) OR the nested shape SinistresService.findOne()
+     actually returns (sinistre.participations, sinistre.events), via
+     `default` fallback + `#with`, so it renders correctly however it
+     eventually gets wired up — but flagging that it needs a real caller
+     confirmed. -->
+
 <div class="page-header">
   <div>
     <div class="logo-text">ARS</div>
@@ -72,29 +83,29 @@
   </div>
   <div>
     <div class="doc-title">AVIS DE SINISTRE</div>
-    <div class="doc-ref">N° {{sinistre.numero}} — Émis le {{generatedAt}}</div>
+    <div class="doc-ref">N° {{default sinistre.numero '—'}} — Émis le {{generatedAt}}</div>
   </div>
   <div style="text-align:right;font-size:9px">
-    <div style="opacity:.9">{{company.raisonSociale}}</div>
-    <div style="opacity:.7">MF: {{company.matriculeFiscal}}</div>
+    <div style="opacity:.9">{{default company.raisonSociale '—'}}</div>
+    <div style="opacity:.7">MF: {{default company.matriculeFiscal '—'}}</div>
   </div>
 </div>
 
 <div class="parties">
   <div class="party-box">
     <div class="party-label">Courtier</div>
-    <div class="party-name">{{company.raisonSociale}}</div>
+    <div class="party-name">{{default company.raisonSociale '—'}}</div>
     <div class="party-detail">{{company.adresse}}</div>
   </div>
   <div class="party-box">
     <div class="party-label">Cédante</div>
-    <div class="party-name">{{affaire.cedante.raisonSociale}}</div>
-    <div class="party-detail">Code: {{affaire.cedante.code}}</div>
+    <div class="party-name">{{default affaire.cedante.raisonSociale '—'}}</div>
+    <div class="party-detail">Code: {{default affaire.cedante.code '—'}}</div>
   </div>
   <div class="party-box">
     <div class="party-label">Affaire concernée</div>
-    <div class="party-name">{{affaire.numero}}</div>
-    <div class="party-detail">Type: {{affaire.type}}</div>
+    <div class="party-name">{{default affaire.numero '—'}}</div>
+    <div class="party-detail">Type: {{default affaire.type '—'}}</div>
   </div>
 </div>
 
@@ -102,7 +113,7 @@
 <div class="info-grid">
   <div class="info-cell">
     <div class="label">N° Sinistre ARS</div>
-    <div class="value">{{sinistre.numero}}</div>
+    <div class="value">{{default sinistre.numero '—'}}</div>
   </div>
   <div class="info-cell">
     <div class="label">Date de Survenance</div>
@@ -127,7 +138,7 @@
       {{else}}{{#ifCond sinistre.statut '===' 'REJETE'}}<span class="status-badge s-rejete">Rejeté</span>
       {{else}}{{#ifCond sinistre.statut '===' 'CLOS'}}<span class="status-badge s-clos">Clos</span>
       {{else}}{{#ifCond sinistre.statut '===' 'DECLARE_REASSUREURS'}}<span class="status-badge s-reass">Déclaré Réass.</span>
-      {{else}}<span class="status-badge s-declare">{{sinistre.statut}}</span>
+      {{else}}<span class="status-badge s-declare">{{default sinistre.statut '—'}}</span>
       {{/ifCond}}{{/ifCond}}{{/ifCond}}{{/ifCond}}
     </div>
   </div>
@@ -164,7 +175,8 @@
 </div>
 
 <!-- Reinsurer participation table -->
-{{#if participations.length}}
+{{#with (default participations sinistre.participations) as |partList|}}
+{{#if partList.length}}
 <div class="section-header" style="margin-top:8px">Répartition par Réassureur</div>
 <table>
   <thead>
@@ -172,14 +184,14 @@
       <th style="text-align:left">Réassureur</th>
       <th>Quote-Part (%)</th>
       <th>Montant Part (TND)</th>
-        <th>Notifié</th>
-  <th>Date Notification</th>
-</tr>
+      <th>Notifié</th>
+      <th>Date Notification</th>
+    </tr>
   </thead>
   <tbody>
-    {{#each participations}}
+    {{#each partList}}
     <tr>
-      <td>{{reassureurCode}}</td>
+      <td>{{default reassureurCode '—'}}</td>
       <td>{{formatPercent partPct}}</td>
       <td>{{formatNumber (default montantPart 0)}}</td>
       <td>
@@ -191,6 +203,8 @@
       </td>
       <td>{{formatDate notifiedAt}}</td>
     </tr>
+    {{else}}
+    <tr class="empty-row"><td colspan="5">Aucune participation réassureur enregistrée</td></tr>
     {{/each}}
   </tbody>
   <tfoot>
@@ -204,30 +218,35 @@
   </tfoot>
 </table>
 {{/if}}
+{{/with}}
+
 <!-- Event timeline -->
-{{#if events.length}}
+{{#with (default events sinistre.events) as |eventList|}}
+{{#if eventList.length}}
 <div class="section-header" style="margin-top:8px">Chronologie du Dossier</div>
 <div class="timeline">
   <div class="timeline-title">Historique des événements</div>
-  {{#each events}}
+  {{#each eventList}}
   <div class="timeline-item">
     <div class="timeline-dot">{{add @index 1}}</div>
     <div class="timeline-content">
-      <div class="timeline-action">{{action}}</div>
-      <div class="timeline-meta">{{actorLabel}} — {{formatDate date}}</div>
+      <div class="timeline-action">{{default action '—'}}</div>
+      <div class="timeline-meta">{{default actorLabel 'Système'}} — {{formatDate date}}</div>
       {{#if note}}<div class="timeline-note">{{note}}</div>{{/if}}
     </div>
   </div>
   {{/each}}
 </div>
 {{/if}}
+{{/with}}
+
 <!-- Chart -->
 <div class="chart-section">
   <div class="chart-title">Décomposition des Montants du Sinistre</div>
   <canvas id="sinistreChart" height="80"></canvas>
 </div>
 <div class="doc-footer">
-  {{company.raisonSociale}} — Document confidentiel — {{sinistre.numero}} — {{generatedAt}}
+  {{default company.raisonSociale '—'}} — Document confidentiel — {{default sinistre.numero '—'}} — {{generatedAt}}
 </div>
 <script>
 (function() {

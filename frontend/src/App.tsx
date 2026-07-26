@@ -51,6 +51,7 @@ import SettlementsPage from './features/finances/SettlementsPage';
 import PaymentOrdersPage from './features/finances/PaymentOrdersPage';
 import FinancialDashboard from './features/finances/FinancialDashboard';
 import SituationBuilder from './features/finances/SituationBuilder';
+import SituationsPage from './features/finances/SituationsPage';
 
 // ── Comptabilité ──────────────────────────────────────────────────────────────────
 import {
@@ -336,6 +337,14 @@ export default function App() {
                 element={
                   <ProtectedRoute path="/finances">
                     <FinancialDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="finances/situations"
+                element={
+                  <ProtectedRoute path="/finances">
+                    <SituationsPage />
                   </ProtectedRoute>
                 }
               />

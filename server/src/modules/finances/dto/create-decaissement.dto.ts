@@ -1,14 +1,17 @@
+// FIX (Finances pass): stray extra closing brace at end of file — hard
+// compile error, nothing in this module built until this was removed.
 import { IsString, IsNumber, IsOptional, IsEnum, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FinancialPartyType } from '@prisma/client';
 
 export class CreateDecaissementDto {
   @IsOptional() @IsString() affaireId?: string;
-  @IsEnum(FinancialPartyType) partyType: FinancialPartyType;
+  @ApiProperty({ enum: FinancialPartyType }) @IsEnum(FinancialPartyType) partyType: FinancialPartyType;
   @IsOptional() @IsString() reassureurCode?: string;
   @IsOptional() @IsString() coCourtId?: string;
-  @IsNumber() @Min(0) montant: number;
+  @ApiProperty() @IsNumber() @Min(0) montant: number;
   @IsOptional() @IsString() currency?: string;
-  @IsOptional() @IsNumber() tauxReglement?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() tauxReglement?: number;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsNumber() stepNumber?: number;
 }

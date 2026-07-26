@@ -1,77 +1,75 @@
-import { useState, useEffect } from 'react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, TrendingUp, TrendingDown, DollarSign, CheckCircle } from 'lucide-react';
 import { financesApi } from '@/api/finances.api';
-import { Encaissement, Decaissement, EncaissementStatus, DecaissementStatus } from '@/types/finance.types';
+import { DecaissementStatut, decaissementStatutLabels, decaissementStatutColors, partyTypeLabels } from '@/types/finance.types';
 import EncaissementForm from './EncaissementForm';
 import DecaissementForm from './DecaissementForm';
 import LettrageView from './LettrageView';
 import { toast } from 'sonner';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate } from '@/lib/currency';
 
+// FIX (Finances pass): full rewrite of the data layer. Real Encaissement has
+// no status enum — approval is a boolean (isValidated). Real Decaissement
+// has a real 4-state DecaissementStatut (BROUILLON/APPROUVE/EXECUTE/REJETE),
+// not the fictional 7-state approuve_n1/approuve_n2/ordonnance workflow.
 export default function FinancesPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('encaissements');
-  const [encaissements, setEncaissements] = useState<Encaissement[]>([]);
-  const [decaissements, setDecaissements] = useState<Decaissement[]>([]);
-  const [stats, setStats] = useState<any>(null);
   const [showEncForm, setShowEncForm] = useState(false);
   const [showDecForm, setShowDecForm] = useState(false);
   const [selectedEnc, setSelectedEnc] = useState<string | undefined>();
   const [selectedDec, setSelectedDec] = useState<string | undefined>();
 
-  useEffect(() => {
-    loadData();
-  }, [activeTab]);
+  const { data: encData } = useQuery({
+    queryKey: ['encaissements-hub'],
+    queryFn: async () => (await financesApi.getEncaissements({ limit: 50 })).data,
+    enabled: activeTab === 'encaissements',
+  });
+  const { data: decData } = useQuery({
+    queryKey: ['decaissements-hub'],
+    queryFn: async () => (await financesApi.getDecaissements({ limit: 50 })).data,
+    enabled: activeTab === 'decaissements',
+  });
 
-  const unwrap = (d: any): any[] => (Array.isArray(d) ? d : (d as any)?.data ?? []);
+  const today = new Date();
+  const { data: stats } = useQuery({
+    queryKey: ['cash-flow-ytd'],
+    queryFn: async () => {
+      const start = new Date(today.getFullYear(), 0, 1).toISOString().split('T')[0];
+      const end = today.toISOString().split('T')[0];
+      return (await financesApi.getCashFlowReport(start, end)).data;
+    },
+  });
 
-  const loadData = async () => {
-    try {
-      if (activeTab === 'encaissements') {
-        const response = await financesApi.getEncaissements();
-        setEncaissements(unwrap(response.data));
-      } else if (activeTab === 'decaissements') {
-        const response = await financesApi.getDecaissements();
-        setDecaissements(unwrap(response.data));
-      }
-      await loadStats();
-    } catch (error) {
-      toast.error('Erreur lors du chargement');
-    }
-  };
-
-  const loadStats = async () => {
-    try {
-      const startDate = new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
-      const endDate = new Date().toISOString().split('T')[0];
-      const data = await financesApi.getCashFlowReport(startDate, endDate);
-      setStats((data as any)?.data || data);
-    } catch (error) {
-      console.error('Error loading stats:', error);
-    }
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['encaissements-hub'] });
+    queryClient.invalidateQueries({ queryKey: ['decaissements-hub'] });
+    queryClient.invalidateQueries({ queryKey: ['cash-flow-ytd'] });
   };
 
   const handleValidateEncaissement = async (id: string) => {
     try {
       await financesApi.validateEncaissement(id);
       toast.success('Encaissement validé');
-      loadData();
+      invalidate();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erreur');
     }
   };
 
-  const handleApproveDecaissement = async (id: string, niveau: number) => {
+  const handleApproveDecaissement = async (id: string) => {
     try {
-      await financesApi.approveDecaissement(id, niveau);
-      toast.success(`Décaissement approuvé niveau ${niveau}`);
-      loadData();
+      await financesApi.approveDecaissement(id);
+      toast.success('Décaissement approuvé');
+      invalidate();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erreur');
     }
@@ -81,26 +79,10 @@ export default function FinancesPage() {
     try {
       await financesApi.executeDecaissement(id);
       toast.success('Décaissement exécuté');
-      loadData();
+      invalidate();
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erreur');
     }
-  };
-
-  const getStatusBadge = (statut: string | undefined | null) => {
-    const status = statut ?? '';
-    const colors: Record<string, string> = {
-      brouillon: 'bg-gray-500',
-      saisi: 'bg-blue-500',
-      valide: 'bg-green-500',
-      comptabilise: 'bg-purple-500',
-      approuve_n1: 'bg-yellow-500',
-      approuve_n2: 'bg-orange-500',
-      ordonnance: 'bg-indigo-500',
-      execute: 'bg-green-600',
-      annule: 'bg-red-500',
-    };
-    return <Badge className={colors[status] || 'bg-gray-500'}>{status.toUpperCase() || 'INCONNU'}</Badge>;
   };
 
   return (
@@ -109,7 +91,6 @@ export default function FinancesPage() {
         <h1 className="text-3xl font-bold">Gestion Financière</h1>
       </div>
 
-      {/* Stats Cards */}
       {stats && (
         <div className="grid grid-cols-4 gap-4">
           <Card>
@@ -118,51 +99,42 @@ export default function FinancesPage() {
               <TrendingUp className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {formatCurrency(stats.totalEncaissements)}
-              </div>
-              <p className="text-xs text-gray-500">{stats.encaissements} transactions</p>
+              <div className="text-2xl font-bold text-green-600">{formatCurrency(stats.totalEncaissements)}</div>
+              <p className="text-xs text-gray-500">{stats.encaissements} transactions (année en cours)</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Décaissements</CardTitle>
               <TrendingDown className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">
-                {formatCurrency(stats.totalDecaissements)}
-              </div>
+              <div className="text-2xl font-bold text-red-600">{formatCurrency(stats.totalDecaissements)}</div>
               <p className="text-xs text-gray-500">{stats.decaissements} transactions</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Solde Net</CardTitle>
               <DollarSign className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
-              <div className={`text-2xl font-bold ${stats.soldeNet >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {formatCurrency(stats.soldeNet)}
-              </div>
+              <div className={`text-2xl font-bold ${stats.soldeNet >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(stats.soldeNet)}</div>
               <p className="text-xs text-gray-500">Année en cours</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Taux de Recouvrement</CardTitle>
+              <CardTitle className="text-sm font-medium">Part Encaissements</CardTitle>
               <CheckCircle className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-purple-600">
-                {stats.totalEncaissements > 0 
+                {stats.totalEncaissements + stats.totalDecaissements > 0
                   ? ((stats.totalEncaissements / (stats.totalEncaissements + stats.totalDecaissements)) * 100).toFixed(1)
                   : 0}%
               </div>
-              <p className="text-xs text-gray-500">Performance</p>
+              <p className="text-xs text-gray-500">des flux totaux</p>
             </CardContent>
           </Card>
         </div>
@@ -173,7 +145,7 @@ export default function FinancesPage() {
           <TabsTrigger value="encaissements">Encaissements</TabsTrigger>
           <TabsTrigger value="decaissements">Décaissements</TabsTrigger>
           <TabsTrigger value="commissions">Commissions</TabsTrigger>
-          <TabsTrigger value="settlements">Situations</TabsTrigger>
+          <TabsTrigger value="situations">Situations</TabsTrigger>
           <TabsTrigger value="orders">Ordres Paiement</TabsTrigger>
           <TabsTrigger value="lettrage">Lettrage</TabsTrigger>
         </TabsList>
@@ -184,42 +156,36 @@ export default function FinancesPage() {
               <Plus className="mr-2 h-4 w-4" /> Nouvel Encaissement
             </Button>
           </div>
-
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Numéro</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Référence</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Montant</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Partie</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Montant TND</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {encaissements.map((enc) => (
+                    {(encData?.data ?? []).map((enc) => (
                       <tr key={enc.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium">{enc.numero}</td>
+                        <td className="px-4 py-3 text-sm font-medium font-mono">{enc.reference}</td>
                         <td className="px-4 py-3 text-sm">{formatDate(enc.dateEncaissement)}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {enc.cedante?.nom || enc.client?.nom || enc.reassureur?.nom || '-'}
+                        <td className="px-4 py-3 text-sm">{enc.cedante?.raisonSociale || enc.assureLabel || partyTypeLabels[enc.partyType]}</td>
+                        <td className="px-4 py-3 text-sm font-semibold">{formatCurrency(enc.montantTnd ?? enc.montant, 'TND')}</td>
+                        <td className="px-4 py-3">
+                          <Badge className={enc.isValidated ? 'bg-green-500' : 'bg-gray-400'}>
+                            {enc.isValidated ? 'VALIDÉ' : 'NON VALIDÉ'}
+                          </Badge>
+                          {enc.amlFlagged && <Badge className="ml-1 bg-orange-500">AML</Badge>}
                         </td>
-                        <td className="px-4 py-3 text-sm font-semibold">
-                          {formatCurrency(enc.montantEquivalentTND)}
-                        </td>
-                        <td className="px-4 py-3">{getStatusBadge(enc.statut)}</td>
                         <td className="px-4 py-3 text-sm space-x-2">
-                          {enc.statut === EncaissementStatus.SAISI && (
-                            <Button size="sm" onClick={() => handleValidateEncaissement(enc.id)}>
-                              Valider
-                            </Button>
-                          )}
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedEnc(enc.id); setShowEncForm(true); }}>
-                            Modifier
-                          </Button>
+                          {!enc.isValidated && <Button size="sm" onClick={() => handleValidateEncaissement(enc.id)}>Valider</Button>}
+                          <Button size="sm" variant="outline" onClick={() => { setSelectedEnc(enc.id); setShowEncForm(true); }}>Modifier</Button>
                         </td>
                       </tr>
                     ))}
@@ -236,52 +202,41 @@ export default function FinancesPage() {
               <Plus className="mr-2 h-4 w-4" /> Nouveau Décaissement
             </Button>
           </div>
-
           <Card>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Numéro</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Référence</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bénéficiaire</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Montant</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Montant TND</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {decaissements.map((dec) => (
+                    {(decData?.data ?? []).map((dec) => (
                       <tr key={dec.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-medium">{dec.numero}</td>
+                        <td className="px-4 py-3 text-sm font-medium font-mono">{dec.reference}</td>
                         <td className="px-4 py-3 text-sm">{formatDate(dec.dateDecaissement)}</td>
-                        <td className="px-4 py-3 text-sm">
-                          {dec.reassureur?.nom || dec.cedante?.nom || dec.courtier?.nom || '-'}
+                        <td className="px-4 py-3 text-sm">{dec.reassureurCode || partyTypeLabels[dec.partyType]}</td>
+                        <td className="px-4 py-3 text-sm font-semibold">{formatCurrency(dec.montantTnd ?? dec.montant, 'TND')}</td>
+                        <td className="px-4 py-3">
+                          <Badge className={decaissementStatutColors[dec.statut]}>{decaissementStatutLabels[dec.statut]}</Badge>
+                          {dec.amlFlagged && <Badge className="ml-1 bg-orange-500">AML</Badge>}
                         </td>
-                        <td className="px-4 py-3 text-sm font-semibold">
-                          {formatCurrency(dec.montantEquivalentTND)}
-                        </td>
-                        <td className="px-4 py-3">{getStatusBadge(dec.statut)}</td>
                         <td className="px-4 py-3 text-sm space-x-2">
-                          {dec.statut === DecaissementStatus.BROUILLON && (
-                            <Button size="sm" onClick={() => handleApproveDecaissement(dec.id, 1)}>
-                              Approuver N1
-                            </Button>
+                          {dec.statut === DecaissementStatut.BROUILLON && (
+                            <Button size="sm" onClick={() => handleApproveDecaissement(dec.id)}>Approuver</Button>
                           )}
-                          {dec.statut === DecaissementStatus.APPROUVE_N1 && (
-                            <Button size="sm" onClick={() => handleApproveDecaissement(dec.id, 2)}>
-                              Approuver N2
-                            </Button>
+                          {dec.statut === DecaissementStatut.APPROUVE && (
+                            <Button size="sm" onClick={() => handleExecuteDecaissement(dec.id)}>Exécuter</Button>
                           )}
-                          {dec.statut === DecaissementStatus.ORDONNANCE && (
-                            <Button size="sm" onClick={() => handleExecuteDecaissement(dec.id)}>
-                              Exécuter
-                            </Button>
+                          {dec.statut === DecaissementStatut.BROUILLON && (
+                            <Button size="sm" variant="outline" onClick={() => { setSelectedDec(dec.id); setShowDecForm(true); }}>Modifier</Button>
                           )}
-                          <Button size="sm" variant="outline" onClick={() => { setSelectedDec(dec.id); setShowDecForm(true); }}>
-                            Modifier
-                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -298,9 +253,9 @@ export default function FinancesPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="settlements">
+        <TabsContent value="situations">
           <div className="text-center py-8">
-            <Button onClick={() => navigate('/finances/settlements')}>Ouvrir Situations</Button>
+            <Button onClick={() => navigate('/finances/situations')}>Ouvrir Situations</Button>
           </div>
         </TabsContent>
 
@@ -317,27 +272,15 @@ export default function FinancesPage() {
 
       <Dialog open={showEncForm} onOpenChange={setShowEncForm}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{selectedEnc ? 'Modifier' : 'Nouveau'} Encaissement</DialogTitle>
-          </DialogHeader>
-          <EncaissementForm
-            encaissementId={selectedEnc}
-            onSuccess={() => { setShowEncForm(false); loadData(); }}
-            onCancel={() => setShowEncForm(false)}
-          />
+          <DialogHeader><DialogTitle>{selectedEnc ? 'Modifier' : 'Nouveau'} Encaissement</DialogTitle></DialogHeader>
+          <EncaissementForm encaissementId={selectedEnc} onSuccess={() => { setShowEncForm(false); invalidate(); }} onCancel={() => setShowEncForm(false)} />
         </DialogContent>
       </Dialog>
 
       <Dialog open={showDecForm} onOpenChange={setShowDecForm}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{selectedDec ? 'Modifier' : 'Nouveau'} Décaissement</DialogTitle>
-          </DialogHeader>
-          <DecaissementForm
-            decaissementId={selectedDec}
-            onSuccess={() => { setShowDecForm(false); loadData(); }}
-            onCancel={() => setShowDecForm(false)}
-          />
+          <DialogHeader><DialogTitle>{selectedDec ? 'Modifier' : 'Nouveau'} Décaissement</DialogTitle></DialogHeader>
+          <DecaissementForm decaissementId={selectedDec} onSuccess={() => { setShowDecForm(false); invalidate(); }} onCancel={() => setShowDecForm(false)} />
         </DialogContent>
       </Dialog>
     </div>

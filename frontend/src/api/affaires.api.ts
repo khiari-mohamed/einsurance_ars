@@ -10,6 +10,7 @@ import { CreateAffaireDto, UpdateAffaireDto, Affaire, AffaireStatut, AffairesLis
 
 interface AffaireFilters {
   cedanteId?: string;
+  assureId?: string;
   statut?: AffaireStatut;
   type?: string;
   search?: string;

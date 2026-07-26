@@ -799,6 +799,12 @@ model AffaireReassureur {
   partPct               Decimal        @db.Decimal(7, 4)    // participation %
   isLeader               Boolean        @default(false)
 
+  // NEW (Finances pass): markCommissionPaid() was a no-op stub — no field
+  // existed to record it. Bare FK to Decaissement, no relation, matching
+  // the FiscalPeriod.closedByUserId precedent elsewhere in this schema.
+  commissionPaidAt        DateTime?
+  commissionDecaissementId String?
+
   // ARS commission per reinsurer (toggle: CALCULABLE or FORFAITAIRE)
   commissionMode        CommissionMode @default(CALCULABLE)
   tauxCommissionArs     Decimal?       @db.Decimal(7, 4)    // used when CALCULABLE
@@ -1078,6 +1084,24 @@ model SinistreAudit {
 // MODULE 5 — FINANCES
 // ============================================================
 
+// ============================================================
+// NEW (Finances pass): Decaissement approval workflow.
+// The controller/service already exposed approveDecaissement(niveau)/
+// executeDecaissement() as permission-gated routes, but Decaissement had no
+// status field to actually transition — both were literal no-ops. This adds
+// the real state the WebXL reference material describes (double validation
+// before an OD is created, i.e. before the wire is actually sent).
+// Single-level approval is implemented here (BROUILLON -> APPROUVE ->
+// EXECUTE); if ARS's real process requires N-level sign-off, extend with a
+// counter rather than re-deriving from this migration.
+// ============================================================
+enum DecaissementStatut {
+  BROUILLON
+  APPROUVE
+  EXECUTE
+  REJETE
+}
+
 // Cash-in — from Assure or Cedante
 model Encaissement {
   id                String             @id @default(uuid())
@@ -1100,6 +1124,14 @@ model Encaissement {
 
   // 4-step flow tracking (steps 1 and 3 for client ARS flow)
   stepNumber        Int?
+
+  // NEW (Finances pass): validateEncaissement() was a no-op stub — no field
+  // existed to record confirmation. Lighter-weight than Decaissement's
+  // approval workflow since the money is already received; this just
+  // confirms the recording is accurate.
+  isValidated       Boolean   @default(false)
+  validatedAt       DateTime?
+  validatedByUserId String?
 
   dateEncaissement  DateTime           @default(now())
   description       String?
@@ -1140,6 +1172,13 @@ model Decaissement {
   // 4-step flow (steps 2 and 4)
   stepNumber        Int?
 
+  // NEW (Finances pass): see DecaissementStatut above.
+  statut            DecaissementStatut @default(BROUILLON)
+  approvedAt        DateTime?
+  approvedByUserId  String?
+  executedAt        DateTime?
+  rejectionReason   String?
+
   dateDecaissement  DateTime           @default(now())
   description       String?
 
@@ -1175,6 +1214,11 @@ model Settlement {
   tauxRealisation Decimal?       @db.Decimal(15, 6)
   tauxReglement   Decimal?       @db.Decimal(15, 6)
   montantTnd      Decimal?       @db.Decimal(20, 3)
+
+  // NEW (Finances pass): validate(id) was `data: {}` — no field existed to
+  // record it, so "validating" a settlement did nothing observable.
+  validatedAt        DateTime?
+  validatedByUserId  String?
 
   dateSettlement  DateTime       @default(now())
 
@@ -1253,6 +1297,13 @@ model OrdrePaiement {
   // SWIFT confirmation slot — payment stays flagged until SWIFT attached
   swiftReceived       Boolean             @default(false)
   swiftDocumentId     String?
+
+  // NEW (Finances pass): validate(id, userId) accepted userId but never
+  // stored it — no field existed. Bordereau already tracks
+  // createdByUserId/validatedByUserId; OrdrePaiement (actual money leaving
+  // the bank) is at least as sensitive and had no such trail at all.
+  dateValidation     DateTime?
+  validatedByUserId  String?
 
   decaissements       Decaissement[]
   documents           DocumentLink[]      @relation("ordrePaiementDocuments")

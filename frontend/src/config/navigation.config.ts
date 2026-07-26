@@ -49,7 +49,7 @@ export const navigation: NavigationItem[] = [
     subItems: [
       { nameKey: 'nav.financesTransactions', href: '/finances' },
       { nameKey: 'nav.financesCommissions', href: '/finances/commissions' },
-      { nameKey: 'nav.financesSituations', href: '/finances/settlements' },
+      { nameKey: 'nav.financesSituations', href: '/finances/situations' },
       { nameKey: 'nav.financesCompilerSituation', href: '/finances/situation-builder' },
       { nameKey: 'nav.financesOrdresPaiement', href: '/finances/payment-orders' },
       { nameKey: 'nav.financesDashboard', href: '/finances/dashboard' },

@@ -9,6 +9,7 @@ import { bordereauxApi } from '../../api/bordereaux.api';
 import type { Bordereau, BordereauStatus, BordereauType } from '../../types/bordereau.types';
 import BordereauDocuments from './BordereauDocuments';
 import BordereauPaymentModal from './BordereauPaymentModal';
+import BordereauEditModal from './BordereauEditModal';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -44,6 +45,7 @@ export default function BordereauDetail() {
   const [paymentModal, setPaymentModal] = useState(false);
   const [sendModal, setSendModal] = useState(false);
   const [rejectModal, setRejectModal] = useState(false);
+  const [editModal, setEditModal] = useState(false);
   const [recipients, setRecipients] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [activeTab, setActiveTab] = useState('details');
@@ -280,7 +282,7 @@ export default function BordereauDetail() {
               {bordereau.statut === 'BROUILLON' && (
                 <>
                   <Button className="w-full gap-2" onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}><CheckCircle size={18} /> Soumettre à Validation</Button>
-                  <Button variant="outline" className="w-full gap-2" onClick={() => navigate(`/bordereaux/${id}/edit`)}><Edit size={18} /> Modifier</Button>
+                  <Button variant="outline" className="w-full gap-2" onClick={() => setEditModal(true)}><Edit size={18} /> Modifier</Button>
                   <Button variant="outline" className="w-full gap-2 text-red-600 border-red-300 hover:bg-red-50" onClick={() => { if (confirm('Êtes-vous sûr de vouloir supprimer ce bordereau ?')) deleteMutation.mutate(); }} disabled={deleteMutation.isPending}>
                     <Trash2 size={18} /> Supprimer
                   </Button>
@@ -354,6 +356,14 @@ export default function BordereauDetail() {
       )}
 
       {paymentModal && <BordereauPaymentModal isOpen={paymentModal} onClose={() => setPaymentModal(false)} bordereau={bordereau} />}
+
+      {editModal && (
+        <BordereauEditModal
+          isOpen={editModal}
+          onClose={() => setEditModal(false)}
+          bordereau={bordereau}
+        />
+      )}
     </div>
   );
 }

@@ -46,6 +46,20 @@ export enum Permission {
   // Reporting
   REPORTING_READ = 'reporting:read',
   REPORTING_EXPORT = 'reporting:export',
+
+  // ============================================================
+  // NEW (Bordereaux pass): Bordereaux straddles Affaires (creation/
+  // validation, driven by DIRECTION_REASSURANCE) and Finances (payment
+  // recording/archival, driven by DAF). Gating every route on AFFAIRES_*
+  // alone (the original shape) left DAF — who owns pay()/archive() per
+  // the CDC — unable to even GET /bordereaux, since DAF's role has no
+  // AFFAIRES_READ at all. These are additive; nothing else references them,
+  // so no other module's behavior changes.
+  // ============================================================
+  BORDEREAUX_READ = 'bordereaux:read',
+  BORDEREAUX_CREATE = 'bordereaux:create',
+  BORDEREAUX_VALIDATE = 'bordereaux:validate',   // submit/validate/reject/send/reminder
+  BORDEREAUX_PAY = 'bordereaux:pay',             // pay/archive
 }
 
 export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -69,6 +83,11 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.GED_READ,
     Permission.GED_UPLOAD,
     Permission.REPORTING_READ,
+    // NEW: they create/validate/send bordereaux (generate(), submit,
+    // validate, reject, send) — mirrors their AFFAIRES_VALIDATE scope.
+    Permission.BORDEREAUX_READ,
+    Permission.BORDEREAUX_CREATE,
+    Permission.BORDEREAUX_VALIDATE,
   ],
 
   DIRECTION_COMMERCIALE: [
@@ -77,6 +96,8 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.DONNEES_READ,
     Permission.GED_READ,
     Permission.GED_UPLOAD,
+    // NEW: read-only visibility into bordereaux tied to affaires they created.
+    Permission.BORDEREAUX_READ,
   ],
 
   DIRECTION_GENERALE: [
@@ -88,6 +109,8 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.GED_READ,
     Permission.REPORTING_READ,
     Permission.REPORTING_EXPORT,
+    // NEW: matches their stated "Read-only all modules" scope.
+    Permission.BORDEREAUX_READ,
   ],
 
   DAF: [
@@ -101,6 +124,10 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.COMPTABILITE_EXPORT,
     Permission.GED_READ,
     Permission.GED_UPLOAD,
+    // NEW: this is the actual fix — DAF can now read bordereaux and
+    // record payments/archive them, which they could not do at all before.
+    Permission.BORDEREAUX_READ,
+    Permission.BORDEREAUX_PAY,
   ],
 
   SERVICE_IRDS: [

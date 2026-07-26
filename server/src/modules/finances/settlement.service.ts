@@ -89,16 +89,42 @@ export class SettlementService {
     return this.prisma.settlement.update({ where: { id }, data: { montantTnd } });
   }
 
-  async validate(id: string) {
-    await this.findOne(id);
-    return this.prisma.settlement.update({ where: { id }, data: {} });
+  async validate(id: string, userId: string) {
+    const s = await this.findOne(id);
+    // FIX (Finances pass): previously `data: {}` — Settlement had no field
+    // to record validation, so calling this endpoint changed nothing
+    // observable despite being gated behind FINANCES_APPROVE.
+    if ((s as any).validatedAt) {
+      throw new BadRequestException('Ce règlement est déjà validé');
+    }
+    const updated = await this.prisma.settlement.update({
+      where: { id },
+      data: { validatedAt: new Date(), validatedByUserId: userId },
+    });
+    await this.prisma.auditLog.create({
+      data: { userId, action: 'SETTLEMENT_VALIDATED', entityType: 'Settlement', entityId: id },
+    });
+    return updated;
   }
 
   async delete(id: string) {
     const s = await this.prisma.settlement.findUnique({ where: { id } });
     if (!s) throw new NotFoundException('Settlement introuvable');
+
     const enc = await this.prisma.encaissement.count({ where: { settlementId: id } });
     if (enc > 0) throw new BadRequestException('Impossible de supprimer un settlement avec des encaissements liés');
+
+    // FIX (Finances pass): only encaissements were checked — a settlement
+    // with only decaissements linked (Settlement.decaissements is a real
+    // relation) could previously be deleted, orphaning those decaissement
+    // rows' settlementId FK and, if the settlement had already generated an
+    // FX gain/loss journal entry, orphaning that too.
+    const dec = await this.prisma.decaissement.count({ where: { settlementId: id } });
+    if (dec > 0) throw new BadRequestException('Impossible de supprimer un settlement avec des décaissements liés');
+
+    const fx = await this.prisma.fxGainLoss.findUnique({ where: { settlementId: id } });
+    if (fx) throw new BadRequestException('Impossible de supprimer un settlement ayant généré un écart de change comptabilisé');
+
     return this.prisma.settlement.delete({ where: { id } });
   }
 }

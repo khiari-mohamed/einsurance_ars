@@ -19,7 +19,7 @@ export default function SinistreSAP({ sinistre }: Props) {
   });
 
   const adjustMutation = useMutation({
-    mutationFn: (data: any) => sinistresApi.adjustSAP({ ...data, sinistreId: sinistre.id }),
+    mutationFn: (data: any) => sinistresApi.adjustSap(sinistre.id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sinistre', sinistre.id] });
       setShowAdjustForm(false);

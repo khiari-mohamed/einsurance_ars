@@ -4,6 +4,15 @@ import { persist } from 'zustand/middleware';
 // ── Domain types ────────────────────────────────────────────────────────────────
 
 export type UserRole =
+  | 'ADMINISTRATEUR'
+  | 'CHARGE_DE_DOSSIER'
+  | 'DIRECTEUR_GENERAL'
+  | 'DIRECTEUR_COMMERCIAL'
+  | 'DIRECTEUR_FINANCIER'
+  | 'RESPONSABLE_PRODUCTION'
+  | 'TECHNICIEN_SINISTRES'
+  | 'AGENT_FINANCIER'
+  | 'COMPTABLE'
   | 'DIRECTION_COMMERCIALE'
   | 'DIRECTION_REASSURANCE'
   | 'DIRECTION_GENERALE'
