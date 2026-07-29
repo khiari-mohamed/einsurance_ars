@@ -1,10 +1,45 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { FinancialMovementType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ImportBankMovementDto } from './dto/import-bank-movement.dto';
 
 @Injectable()
 export class BankReconciliationService {
   constructor(private prisma: PrismaService) {}
+
+  /**
+   * NEW (Reconciliation gap fix): there was previously no way to list
+   * BankMovement rows at all — only getUnreconciled() (which returns
+   * Encaissement/Decaissement rows, not BankMovement) existed. A real
+   * reconciliation UI needs to browse the bank side (raw statement lines)
+   * to pick one to match against, which this provides.
+   */
+  async listMovements(filters: {
+    reconciled?: boolean;
+    type?: FinancialMovementType;
+    page?: number;
+    limit?: number;
+  }) {
+    const { reconciled, type, page = 1, limit = 20 } = filters;
+    const skip = (page - 1) * limit;
+    const where: any = {};
+    if (reconciled !== undefined) where.isReconciled = reconciled;
+    if (type) where.type = type;
+
+    const [data, total] = await Promise.all([
+      this.prisma.bankMovement.findMany({
+        where,
+        include: {
+          encaissements: { select: { id: true, reference: true, montant: true } },
+          decaissements: { select: { id: true, reference: true, montant: true } },
+        },
+        skip, take: limit,
+        orderBy: { dateValeur: 'desc' },
+      }),
+      this.prisma.bankMovement.count({ where }),
+    ]);
+    return { data, total, page, limit };
+  }
 
   async getUnreconciled() {
     const [encaissements, decaissements] = await Promise.all([
@@ -23,41 +58,20 @@ export class BankReconciliationService {
 
   async reconcile(encaissementId: string, bankMovementId: string) {
     await this.prisma.$transaction([
-      this.prisma.encaissement.update({
-        where: { id: encaissementId },
-        data: { bankMovementId },
-      }),
-      this.prisma.bankMovement.update({
-        where: { id: bankMovementId },
-        data: { isReconciled: true, reconciledAt: new Date() },
-      }),
+      this.prisma.encaissement.update({ where: { id: encaissementId }, data: { bankMovementId } }),
+      this.prisma.bankMovement.update({ where: { id: bankMovementId }, data: { isReconciled: true, reconciledAt: new Date() } }),
     ]);
     return { message: 'Rapprochement effectué' };
   }
 
-  /**
-   * FIX (Finances pass, new): Decaissement.bankMovementId exists on the
-   * schema but there was no reconciliation path for it at all — only
-   * encaissements could ever be matched to a bank movement.
-   */
   async reconcileDecaissement(decaissementId: string, bankMovementId: string) {
     await this.prisma.$transaction([
-      this.prisma.decaissement.update({
-        where: { id: decaissementId },
-        data: { bankMovementId },
-      }),
-      this.prisma.bankMovement.update({
-        where: { id: bankMovementId },
-        data: { isReconciled: true, reconciledAt: new Date() },
-      }),
+      this.prisma.decaissement.update({ where: { id: decaissementId }, data: { bankMovementId } }),
+      this.prisma.bankMovement.update({ where: { id: bankMovementId }, data: { isReconciled: true, reconciledAt: new Date() } }),
     ]);
     return { message: 'Rapprochement effectué' };
   }
 
-  /**
-   * FIX (Finances pass, new): no way to undo a wrong match — a fat-fingered
-   * reconciliation was permanent.
-   */
   async unreconcile(bankMovementId: string) {
     const movement = await this.prisma.bankMovement.findUnique({
       where: { id: bankMovementId },
@@ -66,29 +80,14 @@ export class BankReconciliationService {
     if (!movement) throw new NotFoundException('Mouvement bancaire introuvable');
 
     await this.prisma.$transaction([
-      ...movement.encaissements.map((e) =>
-        this.prisma.encaissement.update({ where: { id: e.id }, data: { bankMovementId: null } }),
-      ),
-      ...movement.decaissements.map((d) =>
-        this.prisma.decaissement.update({ where: { id: d.id }, data: { bankMovementId: null } }),
-      ),
-      this.prisma.bankMovement.update({
-        where: { id: bankMovementId },
-        data: { isReconciled: false, reconciledAt: null },
-      }),
+      ...movement.encaissements.map((e) => this.prisma.encaissement.update({ where: { id: e.id }, data: { bankMovementId: null } })),
+      ...movement.decaissements.map((d) => this.prisma.decaissement.update({ where: { id: d.id }, data: { bankMovementId: null } })),
+      this.prisma.bankMovement.update({ where: { id: bankMovementId }, data: { isReconciled: false, reconciledAt: null } }),
     ]);
 
     return { message: 'Rapprochement annulé' };
   }
 
-  /**
-   * FIX (Finances pass): `type: string` was blindly cast `as any` with no
-   * enum validation, and there was no guard against importing the same bank
-   * statement line twice (a re-run of the same import file would silently
-   * double the bank movements). Now validated per-row via the DTO and
-   * deduplicated on `reference` when provided, with a per-row success
-   * report — mirrors the bulk-import pattern used across Référentiel.
-   */
   async importBankMovements(movements: ImportBankMovementDto[]) {
     const results: { reference?: string; success: boolean; error?: string }[] = [];
 
@@ -98,7 +97,6 @@ export class BankReconciliationService {
           const dup = await this.prisma.bankMovement.findFirst({ where: { reference: m.reference } });
           if (dup) throw new Error(`Référence ${m.reference} déjà importée`);
         }
-
         await this.prisma.bankMovement.create({
           data: {
             type: m.type,

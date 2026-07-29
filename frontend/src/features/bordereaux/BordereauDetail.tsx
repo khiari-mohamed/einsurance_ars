@@ -14,6 +14,7 @@ import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { useAuthStore } from '../../lib/store';
 
 const STATUS_CONFIG: Record<BordereauStatus, { label: string; color: string; icon: any }> = {
   BROUILLON: { label: 'Brouillon', color: 'bg-gray-100 text-gray-800', icon: FileText },
@@ -49,6 +50,7 @@ export default function BordereauDetail() {
   const [recipients, setRecipients] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [activeTab, setActiveTab] = useState('details');
+  const hasPermission = useAuthStore((s) => s.hasPermission);
 
   const { data, isLoading } = useQuery({
     queryKey: ['bordereau', id],
@@ -157,9 +159,11 @@ export default function BordereauDetail() {
                 <p className="text-sm text-red-700">Date limite dépassée: {new Date(bordereau.dateLimitePaiement!).toLocaleDateString('fr-FR')}</p>
               </div>
             </div>
-            <Button size="sm" variant="outline" onClick={() => sendReminderMutation.mutate()} disabled={sendReminderMutation.isPending}>
-              <Mail size={16} className="mr-2" /> Envoyer Rappel
-            </Button>
+            {hasPermission('bordereaux:validate') && (
+              <Button size="sm" variant="outline" onClick={() => sendReminderMutation.mutate()} disabled={sendReminderMutation.isPending}>
+                <Mail size={16} className="mr-2" /> Envoyer Rappel
+              </Button>
+            )}
           </div>
         </Card>
       )}
@@ -279,7 +283,7 @@ export default function BordereauDetail() {
           <Card className="p-6">
             <h3 className="font-semibold text-lg mb-4">Actions</h3>
             <div className="space-y-2">
-              {bordereau.statut === 'BROUILLON' && (
+              {bordereau.statut === 'BROUILLON' && hasPermission('bordereaux:create') && (
                 <>
                   <Button className="w-full gap-2" onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}><CheckCircle size={18} /> Soumettre à Validation</Button>
                   <Button variant="outline" className="w-full gap-2" onClick={() => setEditModal(true)}><Edit size={18} /> Modifier</Button>
@@ -289,22 +293,22 @@ export default function BordereauDetail() {
                 </>
               )}
 
-              {bordereau.statut === 'EN_VALIDATION' && (
+              {bordereau.statut === 'EN_VALIDATION' && hasPermission('bordereaux:validate') && (
                 <>
                   <Button className="w-full gap-2" onClick={() => validateMutation.mutate()} disabled={validateMutation.isPending}><CheckCircle size={18} /> Valider</Button>
                   <Button variant="outline" className="w-full gap-2 text-red-600 border-red-300 hover:bg-red-50" onClick={() => setRejectModal(true)}><XCircle size={18} /> Rejeter</Button>
                 </>
               )}
 
-              {bordereau.statut === 'VALIDE' && (
+              {bordereau.statut === 'VALIDE' && hasPermission('bordereaux:validate') && (
                 <Button className="w-full gap-2" onClick={() => setSendModal(true)}><Send size={18} /> Envoyer</Button>
               )}
 
-              {bordereau.statut === 'EMIS' && (
+              {bordereau.statut === 'EMIS' && hasPermission('bordereaux:pay') && (
                 <Button className="w-full gap-2" onClick={() => setPaymentModal(true)}><DollarSign size={18} /> Enregistrer Paiement</Button>
               )}
 
-              {bordereau.statut === 'ACQUITTE' && (
+              {bordereau.statut === 'ACQUITTE' && hasPermission('bordereaux:pay') && (
                 <Button className="w-full gap-2" onClick={() => archiveMutation.mutate()} disabled={archiveMutation.isPending}><Archive size={18} /> Archiver</Button>
               )}
 

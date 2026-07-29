@@ -12,6 +12,7 @@ import BordereauGenerateModal from './BordereauGenerateModal';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Card } from '../../components/ui/card';
+import { useAuthStore } from '../../lib/store';
 
 const STATUS_CONFIG: Record<BordereauStatus, { label: string; color: string; icon: any }> = {
   BROUILLON: { label: 'Brouillon', color: 'bg-gray-100 text-gray-800', icon: FileText },
@@ -42,6 +43,7 @@ export default function BordereauxList() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
 
   const [filters, setFilters] = useState<BordereauFilters>({
     page: 1,
@@ -117,12 +119,16 @@ export default function BordereauxList() {
           <p className="text-gray-600 mt-1">Cession, réassureur, sinistre — cycle brouillon → validation → envoi → paiement</p>
         </div>
         <div className="flex gap-3">
-          <Button onClick={() => setIsGenerateModalOpen(true)} variant="outline" className="gap-2">
-            <Zap size={18} /> Générer Auto
-          </Button>
-          <Button onClick={() => setIsCreateModalOpen(true)} className="gap-2">
-            <Plus size={18} /> Nouveau Bordereau
-          </Button>
+          {hasPermission('bordereaux:create') && (
+            <>
+              <Button onClick={() => setIsGenerateModalOpen(true)} variant="outline" className="gap-2">
+                <Zap size={18} /> Générer Auto
+              </Button>
+              <Button onClick={() => setIsCreateModalOpen(true)} className="gap-2">
+                <Plus size={18} /> Nouveau Bordereau
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -201,12 +207,16 @@ export default function BordereauxList() {
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">{selectedIds.length} bordereau(x) sélectionné(s)</span>
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => bulkValidateMutation.mutate(selectedIds)} disabled={bulkValidateMutation.isPending}>
-                <CheckCircle size={16} className="mr-1" /> Valider
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => bulkArchiveMutation.mutate(selectedIds)} disabled={bulkArchiveMutation.isPending}>
-                <Archive size={16} className="mr-1" /> Archiver
-              </Button>
+              {hasPermission('bordereaux:validate') && (
+                <Button size="sm" variant="outline" onClick={() => bulkValidateMutation.mutate(selectedIds)} disabled={bulkValidateMutation.isPending}>
+                  <CheckCircle size={16} className="mr-1" /> Valider
+                </Button>
+              )}
+              {hasPermission('bordereaux:pay') && (
+                <Button size="sm" variant="outline" onClick={() => bulkArchiveMutation.mutate(selectedIds)} disabled={bulkArchiveMutation.isPending}>
+                  <Archive size={16} className="mr-1" /> Archiver
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={() => setSelectedIds([])}>
                 <XCircle size={16} className="mr-1" /> Annuler
               </Button>

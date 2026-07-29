@@ -1,144 +1,68 @@
+// FIX (Comptabilité pass): full rewrite. Old version called getAccounts,
+// getBalanceSheet, getProfitLoss(wrong signature), getCurrentPeriod
+// (wrong path), closePeriod/reopenPeriod with a single `id` param where the
+// real DTO needs {annee, mois}, deleteAccount/updateAccount hitting routes
+// that were never wired to the controller. Rebuilt against the exact
+// ComptabiliteController route set reviewed in this pass.
 import api from '../lib/api';
-
-export interface Account {
-  id: string;
-  code: string;
-  libelle: string;
-  type: 'actif' | 'passif' | 'charge' | 'produit';
-  classe: '1' | '2' | '3' | '4' | '5' | '6' | '7';
-  parentCode?: string;
-  isActive: boolean;
-  isAuxiliary: boolean;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface LedgerEntry {
-  id: string;
-  accountCode: string;
-  accountLabel: string;
-  dateOperation: string;
-  periode: string;
-  journalCode: string;
-  pieceReference: string;
-  libelle: string;
-  debit: number;
-  credit: number;
-  solde: number;
-  accountingEntryId: string;
-  createdAt: string;
-}
-
-export interface FiscalPeriod {
-  id: string;
-  exercice: number;
-  mois: number;
-  code: string;
-  dateDebut: string;
-  dateFin: string;
-  statut: 'open' | 'closed' | 'locked';
-  closedById?: string;
-  dateCloture?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface TrialBalance {
-  exercice: number;
-  mois?: number;
-  accounts: Array<{
-    code: string;
-    label: string;
-    debit: number;
-    credit: number;
-    solde: number;
-  }>;
-  totalDebit: number;
-  totalCredit: number;
-}
-
-export interface BalanceSheet {
-  exercice: number;
-  actif: {
-    accounts: any[];
-    total: number;
-  };
-  passif: {
-    accounts: any[];
-    total: number;
-  };
-  resultat: number;
-}
-
-export interface ProfitLoss {
-  exercice: number;
-  charges: {
-    accounts: any[];
-    total: number;
-  };
-  produits: {
-    accounts: any[];
-    total: number;
-  };
-  resultat: number;
-}
-
-export interface JournalEntry {
-  id: string;
-  reference: string;
-  entryDate: string;
-  journalType: 'ventes' | 'achats' | 'banque' | 'caisse' | 'divers';
-  description: string;
-  totalDebit: number;
-  totalCredit: number;
-  isBalanced: boolean;
-  status: 'brouillon' | 'valide' | 'comptabilise' | 'annule';
-  lines: Array<{
-    id: string;
-    accountNumber: string;
-    accountLabel: string;
-    debit: number;
-    credit: number;
-    description: string;
-  }>;
-}
+import {
+  PlanComptable, LedgerResult, TrialBalanceLine, PaginatedEntries, JournalEntry,
+  ProfitLossReport, FiscalPeriod, AuxiliaryAccount, ExportResult, JournalEntryStatut,
+} from '../types/comptabilite.types';
 
 export const comptabiliteApi = {
-  createAccount: (data: Partial<Account>) => api.post('/comptabilite/accounts', data),
-  
-  getAccounts: (params?: { classe?: string; isActive?: boolean }) => 
-    api.get('/comptabilite/accounts', { params }),
-  
-  getAccount: (id: string) => api.get(`/comptabilite/accounts/${id}`),
-  
-  updateAccount: (id: string, data: Partial<Account>) => 
-    api.put(`/comptabilite/accounts/${id}`, data),
-  
-  deleteAccount: (id: string) => api.delete(`/comptabilite/accounts/${id}`),
-  
-  getLedger: (accountCode: string, startDate: string, endDate: string) =>
-    api.get(`/comptabilite/ledger/${accountCode}`, { params: { startDate, endDate } }),
-  
-  getTrialBalance: (exercice: number, mois?: number) =>
-    api.get('/comptabilite/trial-balance', { params: { exercice, mois } }),
-  
-  getBalanceSheet: (exercice: number) =>
-    api.get('/comptabilite/balance-sheet', { params: { exercice } }),
-  
-  getProfitLoss: (exercice: number) =>
-    api.get('/comptabilite/profit-loss', { params: { exercice } }),
-  
-  getCurrentPeriod: () => api.get('/comptabilite/periods/current'),
-  
-  closePeriod: (exercice: number, mois: number) =>
-    api.post('/comptabilite/periods/close', { exercice, mois }),
-  
-  reopenPeriod: (exercice: number, mois: number) =>
-    api.post('/comptabilite/periods/reopen', { exercice, mois }),
+  // ── Entries ──────────────────────────────────────────────────────
+  getEntries: (params?: { statut?: JournalEntryStatut; type?: string; affaireId?: string; fiscalPeriodId?: string; page?: number; limit?: number }) =>
+    api.get<PaginatedEntries>('/comptabilite/entries', { params }),
+  getEntry: (id: string) => api.get<JournalEntry>(`/comptabilite/entries/${id}`),
+  validateEntry: (id: string, pieceComptable?: string, codeJournal?: string) =>
+    api.patch<JournalEntry>(`/comptabilite/entries/${id}/validate`, { pieceComptable, codeJournal }),
+  deleteEntry: (id: string) => api.delete<void>(`/comptabilite/entries/${id}`),
 
-  getJournalEntries: (params?: { journalType?: string; startDate?: string; endDate?: string }) =>
-    api.get('/comptabilite/journal-entries', { params }),
+  // ── Generation ───────────────────────────────────────────────────
+  generateFacultative: (affaireId: string) => api.post<JournalEntry>(`/comptabilite/generate/facultative/${affaireId}`),
+  generateTraite: (situationId: string) => api.post<JournalEntry>(`/comptabilite/generate/traite-situation/${situationId}`),
+  generateEncaissement: (encaissementId: string) => api.post<JournalEntry>(`/comptabilite/generate/encaissement/${encaissementId}`),
+  generateDecaissement: (decaissementId: string) => api.post<JournalEntry>(`/comptabilite/generate/decaissement/${decaissementId}`),
 
-  getJournalEntry: (id: string) => api.get(`/comptabilite/journal-entries/${id}`),
+  // ── Ledger / reports ─────────────────────────────────────────────
+  getLedger: (params: { compte?: string; cedanteId?: string; reassureurId?: string; year?: number }) =>
+    api.get<LedgerResult>('/comptabilite/ledger', { params }),
+  getTrialBalance: (year?: number, mois?: number) =>
+    api.get<TrialBalanceLine[]>('/comptabilite/trial-balance', { params: { year, mois } }),
+  getProfitLoss: (year?: number) => api.get<ProfitLossReport>('/comptabilite/profit-loss', { params: { year } }),
+  exportEntries: (dateFrom?: string, dateTo?: string, codeJournal?: string, format: 'csv' | 'json' = 'csv') =>
+    api.post<ExportResult>('/comptabilite/export', { dateFrom, dateTo, codeJournal, format }),
+  generateIntegrationExport: (data: { format?: 'SAGE' | 'CSV_GENERIC'; dateFrom?: string; dateTo?: string; codeJournal?: string }) =>
+    api.post<{ id: string; reference: string; format: string; entryCount: number; content: string }>('/comptabilite/integration-export', data),
+  listExportBatches: (page?: number, limit?: number) =>
+    api.get<{ data: any[]; total: number; page: number; limit: number }>('/comptabilite/integration-export/batches', { params: { page, limit } }),
+  getExportBatch: (id: string) => api.get<any>(`/comptabilite/integration-export/batches/${id}`),
+  voidExportBatch: (id: string) => api.post(`/comptabilite/integration-export/batches/${id}/void`),
+
+  // ── Plan comptable ───────────────────────────────────────────────
+  getPlanComptable: (search?: string, classe?: string) =>
+    api.get<PlanComptable[]>('/comptabilite/plan-comptable', { params: { search, classe } }),
+  getPlanComptableOne: (id: string) => api.get<PlanComptable>(`/comptabilite/plan-comptable/${id}`),
+  createPlanComptable: (data: { compte: string; libelle: string; type: string; classe: string; isAuxiliary?: boolean }) =>
+    api.post<PlanComptable>('/comptabilite/plan-comptable', data),
+  updatePlanComptable: (id: string, data: { libelle?: string; isActive?: boolean }) =>
+    api.put<PlanComptable>(`/comptabilite/plan-comptable/${id}`, data),
+  deletePlanComptable: (id: string) => api.delete<PlanComptable>(`/comptabilite/plan-comptable/${id}`),
+  seedPlanComptable: () => api.post<{ seeded: number }>('/comptabilite/plan-comptable/seed'),
+
+  // ── Auxiliary accounts ───────────────────────────────────────────
+  getAuxiliaryAccounts: (planComptableId?: string) =>
+    api.get<AuxiliaryAccount[]>('/comptabilite/auxiliary-accounts', { params: { planComptableId } }),
+  createAuxiliaryAccount: (data: { planComptableId: string; code: string; libelle: string; cedanteId?: string; reassureurId?: string }) =>
+    api.post<AuxiliaryAccount>('/comptabilite/auxiliary-accounts', data),
+
+  // ── Fiscal periods ───────────────────────────────────────────────
+  getFiscalPeriods: () => api.get<FiscalPeriod[]>('/comptabilite/fiscal-periods'),
+  getCurrentPeriod: () => api.get<FiscalPeriod>('/comptabilite/fiscal-periods/current'),
+  initYear: (year: number) => api.post<{ created: number; annee: number }>(`/comptabilite/fiscal-periods/init/${year}`),
+  closePeriod: (annee: number, mois: number) => api.patch<FiscalPeriod>('/comptabilite/fiscal-periods/close', { annee, mois }),
+  reopenPeriod: (annee: number, mois: number) => api.patch<FiscalPeriod>('/comptabilite/fiscal-periods/reopen', { annee, mois }),
 };
+
+export default comptabiliteApi;

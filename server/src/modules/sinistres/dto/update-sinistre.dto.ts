@@ -10,4 +10,8 @@ export class UpdateSinistreDto {
   @IsOptional() @IsString() periodeCouverture?: string;
   @IsOptional() @IsString() numerPolice?: string;
   @IsOptional() @IsEnum(RecoveryMethod) recoveryMethod?: RecoveryMethod;
+  // NEW (Sinistres pass)
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() cause?: string;
+  @IsOptional() @IsString() lieu?: string;
 }

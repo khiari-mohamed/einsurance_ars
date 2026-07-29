@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, FileText, CheckCircle, X } from 'lucide-react';
+import { gedApi } from '@/api/ged.api';
 import { financesApi } from '@/api/finances.api';
+import { DocumentEntityType } from '@/types/ged.types';
 import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/currency';
 
@@ -14,27 +16,49 @@ interface Props {
   onDone?: () => void;
 }
 
-// FIX (Finances pass): full rewrite. SWIFT confirmation attaches to
-// OrdrePaiement (PATCH /finances/ordres-paiement/:id/swift, body
-// {swiftDocumentId}), not Decaissement — the old component's prop was
-// paymentId used against a decaissement-shaped fictional route
-// ('/api/finances/payments/:id/swift-confirmed') that doesn't exist.
-//
-// NOTE: the actual file upload (turning a chosen PDF/image into a Document
-// id to pass as swiftDocumentId) depends on the GED module's upload
-// endpoint, which wasn't part of this review — ged.api.ts/uploads.api.ts
-// weren't provided. Rather than guess at that contract, this component
-// exposes a manual "Document ID" field for now (for a document already
-// uploaded via GED) and documents exactly where the real upload call needs
-// to be wired in once that module is reviewed.
-export default function SWIFTUpload({ ordrePaiementId, reference, montant, currency, beneficiaire, onDone }: Props) {
-  const [documentId, setDocumentId] = useState('');
+const MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
 
-  const attachMutation = useMutation({
-    mutationFn: () => financesApi.attachSwift(ordrePaiementId, documentId),
-    onSuccess: () => { toast.success('Confirmation SWIFT attachée'); onDone?.(); },
-    onError: (e: any) => toast.error(e.response?.data?.message || 'Erreur'),
+// FIX (SWIFT/GED gap): now does a real upload instead of asking the user
+// to paste a document id they don't have. Uploads via gedApi.uploadDocument
+// with ordrePaiementId (the backend resolves DocumentEntityType.
+// ORDRE_PAIEMENT from that FK automatically), then attaches the returned
+// Document.id to the ordre via financesApi.attachSwift — completing the
+// path end to end.
+export default function SWIFTUpload({ ordrePaiementId, reference, montant, currency, beneficiaire, onDone }: Props) {
+  const [file, setFile] = useState<File | null>(null);
+
+  const uploadAndAttach = useMutation({
+    mutationFn: async () => {
+      if (!file) throw new Error('Aucun fichier sélectionné');
+      const document = await gedApi.uploadDocument(file, {
+        entityType: DocumentEntityType.ORDRE_PAIEMENT,
+        entityId: ordrePaiementId,
+        documentType: 'SWIFT_CONFIRMATION',
+      });
+      await financesApi.attachSwift(ordrePaiementId, document.id);
+      return document;
+    },
+    onSuccess: () => {
+      toast.success('Confirmation SWIFT attachée avec succès');
+      onDone?.();
+    },
+    onError: (err: any) => toast.error(err.response?.data?.message || err.message || 'Erreur lors de l\'envoi'),
   });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!ACCEPTED_TYPES.includes(f.type)) {
+      toast.error('Format non supporté. Utilisez PDF, JPG ou PNG');
+      return;
+    }
+    if (f.size > MAX_SIZE_BYTES) {
+      toast.error('Fichier trop volumineux (max 5MB)');
+      return;
+    }
+    setFile(f);
+  };
 
   return (
     <div className="space-y-4">
@@ -46,34 +70,37 @@ export default function SWIFTUpload({ ordrePaiementId, reference, montant, curre
         </div>
       </div>
 
-      <div className="p-3 bg-amber-50 border-l-4 border-amber-500 rounded flex items-start gap-2">
-        <AlertCircle className="text-amber-600 flex-shrink-0 mt-0.5" size={18} />
-        <div className="text-sm">
-          <p className="font-semibold text-amber-800">Document à téléverser via la GED d'abord</p>
-          <p className="text-amber-700">
-            Téléversez la confirmation SWIFT dans la Gestion Électronique des Documents, puis collez son identifiant ci-dessous.
-          </p>
+      {!file ? (
+        <label className="block">
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
+            <Upload className="mx-auto mb-2 text-gray-400" size={32} />
+            <p className="text-sm font-medium text-gray-700">Cliquez pour sélectionner le fichier SWIFT</p>
+            <p className="text-xs text-gray-500 mt-1">PDF, JPG ou PNG (max 5MB)</p>
+          </div>
+          <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFileSelect} />
+        </label>
+      ) : (
+        <div className="border rounded-lg p-4 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <FileText className="text-blue-600" size={24} />
+              <div>
+                <p className="font-medium">{file.name}</p>
+                <p className="text-xs text-gray-500">{(file.size / 1024).toFixed(2)} KB</p>
+              </div>
+            </div>
+            <button onClick={() => setFile(null)} className="p-1 text-red-600 hover:bg-red-50 rounded"><X size={18} /></button>
+          </div>
+          <button
+            onClick={() => uploadAndAttach.mutate()}
+            disabled={uploadAndAttach.isPending}
+            className="w-full mt-3 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          >
+            <CheckCircle size={16} />
+            {uploadAndAttach.isPending ? 'Envoi...' : 'Téléverser et confirmer la réception SWIFT'}
+          </button>
         </div>
-      </div>
-
-      <div>
-        <label className="text-sm font-medium">Identifiant du document (GED)</label>
-        <input
-          className="w-full border rounded-lg px-3 py-2 text-sm font-mono mt-1"
-          value={documentId}
-          onChange={(e) => setDocumentId(e.target.value)}
-          placeholder="uuid du document"
-        />
-      </div>
-
-      <button
-        onClick={() => attachMutation.mutate()}
-        disabled={!documentId || attachMutation.isPending}
-        className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-      >
-        <CheckCircle size={16} />
-        {attachMutation.isPending ? 'Enregistrement...' : 'Confirmer la réception SWIFT'}
-      </button>
+      )}
     </div>
   );
 }

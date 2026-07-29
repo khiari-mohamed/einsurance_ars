@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery } from '@nestjs/swagger';
-import { OrdreVirementStatut } from '@prisma/client';
+import { OrdreVirementStatut, FinancialMovementType } from '@prisma/client';
 import { FinancesService } from './finances.service';
 import { SettlementService } from './settlement.service';
 import { SituationService } from './situation.service';
@@ -66,15 +66,11 @@ export class FinancesController {
 
   @Post('encaissements')
   @RequirePermissions(Permission.FINANCES_CREATE)
-  createEncaissement(@Body() dto: CreateEncaissementDto) {
-    return this.finances.createEncaissement(dto);
-  }
+  createEncaissement(@Body() dto: CreateEncaissementDto) { return this.finances.createEncaissement(dto); }
 
   @Put('encaissements/:id')
   @RequirePermissions(Permission.FINANCES_UPDATE)
-  updateEncaissement(@Param('id') id: string, @Body() dto: any) {
-    return this.finances.updateEncaissement(id, dto);
-  }
+  updateEncaissement(@Param('id') id: string, @Body() dto: any) { return this.finances.updateEncaissement(id, dto); }
 
   @Put('encaissements/:id/validate')
   @RequirePermissions(Permission.FINANCES_APPROVE)
@@ -85,9 +81,7 @@ export class FinancesController {
 
   @Delete('encaissements/:id')
   @RequirePermissions(Permission.FINANCES_APPROVE)
-  deleteEncaissement(@Param('id') id: string) {
-    return this.finances.deleteEncaissement(id);
-  }
+  deleteEncaissement(@Param('id') id: string) { return this.finances.deleteEncaissement(id); }
 
   // ── Décaissements ─────────────────────────────────────────────────
   @Get('decaissements')
@@ -97,9 +91,7 @@ export class FinancesController {
     @Query('affaireId') affaireId?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
-  ) {
-    return this.finances.findDecaissements({ affaireId, page, limit });
-  }
+  ) { return this.finances.findDecaissements({ affaireId, page, limit }); }
 
   @Get('decaissements/:id')
   @RequirePermissions(Permission.FINANCES_READ)
@@ -107,15 +99,11 @@ export class FinancesController {
 
   @Post('decaissements')
   @RequirePermissions(Permission.FINANCES_CREATE)
-  createDecaissement(@Body() dto: CreateDecaissementDto) {
-    return this.finances.createDecaissement(dto);
-  }
+  createDecaissement(@Body() dto: CreateDecaissementDto) { return this.finances.createDecaissement(dto); }
 
   @Put('decaissements/:id')
   @RequirePermissions(Permission.FINANCES_UPDATE)
-  updateDecaissement(@Param('id') id: string, @Body() dto: any) {
-    return this.finances.updateDecaissement(id, dto);
-  }
+  updateDecaissement(@Param('id') id: string, @Body() dto: any) { return this.finances.updateDecaissement(id, dto); }
 
   @Put('decaissements/:id/approve')
   @RequirePermissions(Permission.FINANCES_APPROVE)
@@ -124,7 +112,6 @@ export class FinancesController {
     return this.finances.approveDecaissement(id, dto.niveau, user.id, dto.note);
   }
 
-  // NEW (Finances pass): complement to approve — no reject route existed.
   @Put('decaissements/:id/reject')
   @RequirePermissions(Permission.FINANCES_APPROVE)
   @HttpCode(HttpStatus.OK)
@@ -135,24 +122,18 @@ export class FinancesController {
   @Put('decaissements/:id/execute')
   @RequirePermissions(Permission.FINANCES_APPROVE)
   @HttpCode(HttpStatus.OK)
-  executeDecaissement(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.finances.executeDecaissement(id, user.id);
-  }
+  executeDecaissement(@Param('id') id: string, @CurrentUser() user: any) { return this.finances.executeDecaissement(id, user.id); }
 
   @Delete('decaissements/:id')
   @RequirePermissions(Permission.FINANCES_APPROVE)
-  deleteDecaissement(@Param('id') id: string) {
-    return this.finances.deleteDecaissement(id);
-  }
+  deleteDecaissement(@Param('id') id: string) { return this.finances.deleteDecaissement(id); }
 
   // ── Balance ───────────────────────────────────────────────────────
   @Get('balance/:affaireId')
   @RequirePermissions(Permission.FINANCES_READ)
-  getBalance(@Param('affaireId') affaireId: string) {
-    return this.finances.getBalanceForAffaire(affaireId);
-  }
+  getBalance(@Param('affaireId') affaireId: string) { return this.finances.getBalanceForAffaire(affaireId); }
 
-  // ── Commissions (read-only + mark-paid; see finances.service.ts note) ──
+  // ── Commissions ───────────────────────────────────────────────────
   @Get('commissions')
   @RequirePermissions(Permission.FINANCES_READ)
   @ApiQuery({ name: 'affaireId', required: false })
@@ -171,10 +152,6 @@ export class FinancesController {
   @Get('commissions/:id')
   @RequirePermissions(Permission.FINANCES_READ)
   getCommission(@Param('id') id: string) { return this.finances.findCommission(id); }
-
-  // FIX (Finances pass): POST /finances/commissions (raw AffaireReassureur
-  // creation) REMOVED — see finances.service.ts for why. Commission lines
-  // are created exclusively through the Affaires module.
 
   @Patch('commissions/:id/mark-paid')
   @RequirePermissions(Permission.FINANCES_UPDATE)
@@ -200,9 +177,7 @@ export class FinancesController {
   @Get('reports/aging')
   @RequirePermissions(Permission.FINANCES_READ)
   @ApiQuery({ name: 'type', required: true, description: 'creances or dettes' })
-  getAgingReport(@Query('type') type: 'creances' | 'dettes') {
-    return this.finances.getAgingReport(type);
-  }
+  getAgingReport(@Query('type') type: 'creances' | 'dettes') { return this.finances.getAgingReport(type); }
 
   // ── Settlements ───────────────────────────────────────────────────
   @Get('settlements')
@@ -214,9 +189,7 @@ export class FinancesController {
     @Query('situationId') s?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
-  ) {
-    return this.settlements.findAll(a, s, page, limit);
-  }
+  ) { return this.settlements.findAll(a, s, page, limit); }
 
   @Get('settlements/:id')
   @RequirePermissions(Permission.FINANCES_READ)
@@ -224,9 +197,7 @@ export class FinancesController {
 
   @Post('settlements')
   @RequirePermissions(Permission.FINANCES_CREATE)
-  createSettlement(@Body() dto: CreateSettlementDto) {
-    return this.settlements.create(dto);
-  }
+  createSettlement(@Body() dto: CreateSettlementDto) { return this.settlements.create(dto); }
 
   @Patch('settlements/:id/calculate')
   @RequirePermissions(Permission.FINANCES_UPDATE)
@@ -240,9 +211,7 @@ export class FinancesController {
 
   @Delete('settlements/:id')
   @RequirePermissions(Permission.FINANCES_APPROVE)
-  deleteSettlement(@Param('id') id: string) {
-    return this.settlements.delete(id);
-  }
+  deleteSettlement(@Param('id') id: string) { return this.settlements.delete(id); }
 
   // ── Situations ─────────────────────────────────────────────────────
   @Get('situations')
@@ -252,9 +221,7 @@ export class FinancesController {
     @Query('cedanteId') cedanteId?: string,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
-  ) {
-    return this.situations.findAll(cedanteId, page, limit);
-  }
+  ) { return this.situations.findAll(cedanteId, page, limit); }
 
   @Get('situations/:id')
   @RequirePermissions(Permission.FINANCES_READ)
@@ -263,9 +230,7 @@ export class FinancesController {
   @Post('situations')
   @RequirePermissions(Permission.FINANCES_CREATE)
   @ApiOperation({ summary: 'Compiler une situation périodique (batch netting)' })
-  createSituation(@Body() dto: CreateSituationDto, @CurrentUser() user: any) {
-    return this.situations.create(dto, user.id);
-  }
+  createSituation(@Body() dto: CreateSituationDto, @CurrentUser() user: any) { return this.situations.create(dto, user.id); }
 
   @Delete('situations/:id')
   @RequirePermissions(Permission.FINANCES_APPROVE)
@@ -274,10 +239,7 @@ export class FinancesController {
   // ── Lettrage ──────────────────────────────────────────────────────
   @Get('lettrage/open-items/:cedanteId')
   @RequirePermissions(Permission.FINANCES_READ)
-  @ApiOperation({ summary: 'Éléments ouverts (bordereaux non lettrés) pour une cédante' })
-  getOpenItems(@Param('cedanteId') cedanteId: string) {
-    return this.lettrage.getOpenItems(cedanteId);
-  }
+  getOpenItems(@Param('cedanteId') cedanteId: string) { return this.lettrage.getOpenItems(cedanteId); }
 
   @Get('lettrage')
   @RequirePermissions(Permission.FINANCES_READ)
@@ -293,10 +255,7 @@ export class FinancesController {
 
   @Post('lettrage')
   @RequirePermissions(Permission.FINANCES_CREATE)
-  @ApiOperation({ summary: 'Lettrer des bordereaux contre un encaissement' })
-  lettre(@Body() dto: CreateLettrageDto, @CurrentUser() user: any) {
-    return this.lettrage.lettre(dto, user.id);
-  }
+  lettre(@Body() dto: CreateLettrageDto, @CurrentUser() user: any) { return this.lettrage.lettre(dto, user.id); }
 
   // ── Ordres de paiement ────────────────────────────────────────────
   @Get('ordres-paiement')
@@ -306,9 +265,7 @@ export class FinancesController {
     @Query('statut') statut?: OrdreVirementStatut,
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
-  ) {
-    return this.ordres.findAll(page, limit, statut);
-  }
+  ) { return this.ordres.findAll(page, limit, statut); }
 
   @Get('ordres-paiement/:id')
   @RequirePermissions(Permission.FINANCES_READ)
@@ -321,9 +278,7 @@ export class FinancesController {
   @Patch('ordres-paiement/:id/validate')
   @RequirePermissions(Permission.FINANCES_APPROVE)
   @HttpCode(HttpStatus.OK)
-  validateOrdre(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.ordres.validate(id, user.id);
-  }
+  validateOrdre(@Param('id') id: string, @CurrentUser() user: any) { return this.ordres.validate(id, user.id); }
 
   @Patch('ordres-paiement/:id/execute')
   @RequirePermissions(Permission.FINANCES_APPROVE)
@@ -333,7 +288,6 @@ export class FinancesController {
   @Patch('ordres-paiement/:id/swift')
   @RequirePermissions(Permission.FINANCES_APPROVE)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Attacher confirmation SWIFT reçue' })
   attachSwift(@Param('id') id: string, @Body('swiftDocumentId') swiftDocumentId: string, @CurrentUser() user: any) {
     return this.ordres.attachSwift(id, swiftDocumentId, user.id);
   }
@@ -350,12 +304,31 @@ export class FinancesController {
   // ── 4-Step payment ────────────────────────────────────────────────
   @Post('four-step/:affaireId')
   @RequirePermissions(Permission.FINANCES_CREATE)
-  @ApiOperation({ summary: 'Exécuter le flux 4 étapes pour une affaire facultative' })
   fourStepPayment(@Param('affaireId') affaireId: string, @CurrentUser() user: any) {
     return this.fourStep.executeForAffaire(affaireId, user.id);
   }
 
   // ── Rapprochement bancaire ────────────────────────────────────────
+  // NEW (Reconciliation gap fix): previously there was no way to list
+  // BankMovement rows at all.
+  @Get('bank-movements')
+  @RequirePermissions(Permission.FINANCES_READ)
+  @ApiQuery({ name: 'reconciled', required: false })
+  @ApiQuery({ name: 'type', required: false, enum: FinancialMovementType })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  getBankMovements(
+    @Query('reconciled') reconciled?: string,
+    @Query('type') type?: FinancialMovementType,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
+  ) {
+    return this.reconciliation.listMovements({
+      reconciled: reconciled === undefined ? undefined : reconciled === 'true',
+      type, page, limit,
+    });
+  }
+
   @Get('reconciliation/unreconciled')
   @RequirePermissions(Permission.FINANCES_READ)
   getUnreconciled() { return this.reconciliation.getUnreconciled(); }
@@ -366,32 +339,24 @@ export class FinancesController {
     return this.reconciliation.reconcile(dto.encaissementId, dto.bankMovementId);
   }
 
-  // NEW (Finances pass): Decaissement.bankMovementId existed on the schema
-  // with no reconciliation route at all.
   @Post('reconciliation/decaissement')
   @RequirePermissions(Permission.FINANCES_CREATE)
   reconcileDecaissement(@Body() dto: ReconcileDecaissementDto) {
     return this.reconciliation.reconcileDecaissement(dto.decaissementId, dto.bankMovementId);
   }
 
-  // NEW (Finances pass): no way to undo a wrong match previously existed.
   @Post('reconciliation/:bankMovementId/unreconcile')
   @RequirePermissions(Permission.FINANCES_APPROVE)
   @HttpCode(HttpStatus.OK)
-  unreconcile(@Param('bankMovementId') bankMovementId: string) {
-    return this.reconciliation.unreconcile(bankMovementId);
-  }
+  unreconcile(@Param('bankMovementId') bankMovementId: string) { return this.reconciliation.unreconcile(bankMovementId); }
 
   @Post('reconciliation/import')
   @RequirePermissions(Permission.FINANCES_CREATE)
-  importMovements(@Body() movements: ImportBankMovementDto[]) {
-    return this.reconciliation.importBankMovements(movements);
-  }
+  importMovements(@Body() movements: ImportBankMovementDto[]) { return this.reconciliation.importBankMovements(movements); }
 
   // ── AML ───────────────────────────────────────────────────────────
   @Get('aml/flagged')
   @RequirePermissions(Permission.FINANCES_APPROVE)
-  @ApiOperation({ summary: 'Transactions signalées AML (anti-blanchiment)' })
   getFlagged(
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(30), ParseIntPipe) limit?: number,

@@ -96,13 +96,20 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.DONNEES_READ,
     Permission.GED_READ,
     Permission.GED_UPLOAD,
-    // NEW: read-only visibility into bordereaux tied to affaires they created.
-    Permission.BORDEREAUX_READ,
   ],
 
   DIRECTION_GENERALE: [
     Permission.AFFAIRES_READ,
     Permission.SINISTRES_READ,
+    // NEW (Sinistres pass): SinistreValidationService.approve()/.reject()
+    // are labeled and notified as Direction Générale's own action
+    // ('Direction Générale' actorLabel, notifyRole('DIRECTION_GENERALE',
+    // 'VALIDATION_SINISTRE', ...) on submit) — but this role never had
+    // SINISTRES_VALIDATE, meaning the department the code says approves
+    // claims was structurally unable to call PATCH /sinistres/:id/approve
+    // or /reject at all. Same shape of bug as the DAF/Bordereaux gap
+    // found previously.
+    Permission.SINISTRES_VALIDATE,
     Permission.FINANCES_READ,
     Permission.COMPTABILITE_READ,
     Permission.DONNEES_READ,

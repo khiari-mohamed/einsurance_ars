@@ -9,6 +9,7 @@ import { CreateSinistreDto } from './dto/create-sinistre.dto';
 import { UpdateSinistreDto } from './dto/update-sinistre.dto';
 import { CreateCashCallDto } from './dto/cash-call.dto';
 import { AdjustSapDto } from './dto/adjust-sap.dto';
+import { RecordCashCallPaymentDto } from './dto/record-cash-call-payment.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -40,6 +41,8 @@ export class SinistresController {
     @Query('limit') limit?: number,
   ) { return this.service.findAll({ affaireId, statut, cedanteId, page, limit }); }
 
+  // ── Analytics — fixed-path GETs before ':id' ──────────────────────
+
   @Get('analytics/kpis')
   @RequirePermissions(Permission.SINISTRES_READ)
   @ApiQuery({ name: 'cedanteId', required: false })
@@ -52,6 +55,33 @@ export class SinistresController {
   @RequirePermissions(Permission.SINISTRES_READ)
   getLossRatio(@Query('cedanteId') cedanteId?: string, @Query('year') year?: number) {
     return this.analytics.getLossRatio(cedanteId, year);
+  }
+
+  // NEW (Sinistres pass) — real implementations, replacing dead frontend stubs.
+  @Get('analytics/evolution')
+  @RequirePermissions(Permission.SINISTRES_READ)
+  @ApiQuery({ name: 'months', required: false })
+  getEvolution(@Query('months') months?: number) {
+    return this.analytics.getEvolution(months ? Number(months) : 12);
+  }
+
+  @Get('analytics/by-cedante')
+  @RequirePermissions(Permission.SINISTRES_READ)
+  @ApiQuery({ name: 'limit', required: false })
+  getByCedante(@Query('limit') limit?: number) {
+    return this.analytics.getByCedante(limit ? Number(limit) : 10);
+  }
+
+  @Get('analytics/by-status')
+  @RequirePermissions(Permission.SINISTRES_READ)
+  getByStatus() {
+    return this.analytics.getByStatus();
+  }
+
+  @Get('analytics/aging')
+  @RequirePermissions(Permission.SINISTRES_READ)
+  getAging() {
+    return this.analytics.getAging();
   }
 
   @Get(':id')
@@ -141,5 +171,13 @@ export class SinistresController {
     @CurrentUser() user: any,
   ) {
     return this.service.advanceCashCall(id, statut, user.id, note);
+  }
+
+  // NEW (Sinistres pass) — the only real path to CashCallStatut.PAIEMENT_RECU.
+  @Post(':id/cash-call/record-payment')
+  @RequirePermissions(Permission.SINISTRES_UPDATE)
+  @ApiOperation({ summary: 'Enregistrer le paiement reçu du cash call (EN_ATTENTE_PAIEMENT → PAIEMENT_RECU)' })
+  recordCashCallPayment(@Param('id') id: string, @Body() dto: RecordCashCallPaymentDto, @CurrentUser() user: any) {
+    return this.service.recordCashCallPayment(id, dto.montantRecu, user.id);
   }
 }

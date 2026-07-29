@@ -1,134 +1,178 @@
-export enum EntityType {
-  CLIENT = 'client',
-  CEDANTE = 'cedante',
-  REASSUREUR = 'reassureur',
-  CO_COURTIER = 'co_courtier',
-  AFFAIRE = 'affaire',
-  SINISTRE = 'sinistre',
-  FINANCE = 'finance',
-  ACCOUNTING = 'accounting',
+// FIX (SWIFT/GED gap): full rewrite. Previous version described a
+// fictional model — DocumentEntityType had no ORDRE_PAIEMENT at all (so a
+// SWIFT confirmation could never even be typed correctly), Document had
+// fields (fileName/storagePath/confidentialityLevel/status as an enum)
+// that don't exist on the real Prisma model, and UploadDocumentDto used a
+// generic entityId instead of matching the backend's per-entity-type FK
+// shape (assureId/cedanteId/.../ordrePaiementId).
+
+export enum DocumentEntityType {
+  ASSURE = 'ASSURE',
+  CEDANTE = 'CEDANTE',
+  REASSUREUR = 'REASSUREUR',
+  CO_COURTIER = 'CO_COURTIER',
+  AFFAIRE = 'AFFAIRE',
+  SINISTRE = 'SINISTRE',
+  ENCAISSEMENT = 'ENCAISSEMENT',
+  DECAISSEMENT = 'DECAISSEMENT',
+  ORDRE_PAIEMENT = 'ORDRE_PAIEMENT',
+  BORDEREAU = 'BORDEREAU',
 }
 
-export enum DocumentType {
-  ID_CARD = 'id_card',
-  COMPANY_REGISTRATION = 'company_registration',
-  INSURANCE_POLICY = 'insurance_policy',
-  CORRESPONDENCE = 'correspondence',
-  LEGAL_DOCUMENT = 'legal_document',
-  BANKING_INFO = 'banking_info',
-  POWER_OF_ATTORNEY = 'power_of_attorney',
-  TREATY_AGREEMENT = 'treaty_agreement',
-  NOTE_SYNTHESE = 'note_synthese',
-  DEMANDE_COTATION = 'demande_cotation',
-  SLIP_COTATION = 'slip_cotation',
-  ORDRE_PLACEMENT = 'ordre_placement',
-  SLIP_COUVERTURE = 'slip_couverture',
-  BORDEREAU_CESSION = 'bordereau_cession',
-  BORDEREAU_REASSUREUR = 'bordereau_reassureur',
-  BORDEREAU_SINISTRE = 'bordereau_sinistre',
-  AVIS_SINISTRE = 'avis_sinistre',
-  EXPERT_REPORT = 'expert_report',
-  CLAIM_ASSESSMENT = 'claim_assessment',
-  PAYMENT_JUSTIFICATION = 'payment_justification',
-  PAYMENT_ORDER = 'payment_order',
-  SWIFT_CONFIRMATION = 'swift_confirmation',
-  BANK_STATEMENT = 'bank_statement',
-  COMMISSION_CALCULATION = 'commission_calculation',
-  SETTLEMENT_STATEMENT = 'settlement_statement',
-  ACCOUNTING_ENTRY = 'accounting_entry',
-  AUDIT_DOCUMENT = 'audit_document',
-  CADRE_CONTRACTUEL = 'cadre_contractuel',
-  PLACEMENT_PLAN = 'placement_plan',
-  TECHNICAL_QUESTIONNAIRE = 'technical_questionnaire',
-  REINSURER_RESPONSE = 'reinsurer_response',
-  COMMISSION_AGREEMENT = 'commission_agreement',
-  SAP_DOCUMENT = 'sap_document',
-  PMD_DOCUMENT = 'pmd_document',
-  SITUATION_STATEMENT = 'situation_statement',
-  OTHER = 'other',
+// Alias kept for backward compatibility — uploads.api.ts imports `EntityType`.
+export { DocumentEntityType as EntityType };
+
+export enum DocumentStatut {
+  MANQUANT = 'MANQUANT',
+  EN_ATTENTE = 'EN_ATTENTE',
+  RECU = 'RECU',
+  REJETE = 'REJETE',
 }
 
-export enum ConfidentialityLevel {
-  PUBLIC = 'public',
-  INTERNAL = 'internal',
-  CONFIDENTIAL = 'confidential',
-  SECRET = 'secret',
+// documentType is a free-form business string on the backend, not a fixed
+// enum — this is a curated list for populating <select> options only. Any
+// string is accepted server-side.
+export const KNOWN_DOCUMENT_TYPES = [
+  'SLIP_COTATION', 'CONVENTION', 'SWIFT', 'SWIFT_CONFIRMATION', 'CONTRAT',
+  'NOTE_SYNTHESE', 'POLICE', 'BORDEREAU_MODELE', 'PAYMENT_JUSTIFICATION',
+  'BANK_STATEMENT', 'AVIS_SINISTRE', 'EXPERT_REPORT', 'OTHER',
+] as const;
+
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  versionNumber: number;
+  filePath: string;
+  uploadedById?: string;
+  comment?: string;
+  createdAt: string;
 }
 
-export enum DocumentStatus {
-  DRAFT = 'draft',
-  PENDING_REVIEW = 'pending_review',
-  APPROVED = 'approved',
-  REJECTED = 'rejected',
-  ARCHIVED = 'archived',
+export interface DocumentLink {
+  id: string;
+  documentId: string;
+  document?: Document;
+  entityType: DocumentEntityType;
+  assureId?: string;
+  cedanteId?: string;
+  reassureurId?: string;
+  coCourtId?: string;
+  affaireId?: string;
+  sinistreId?: string;
+  encaissementId?: string;
+  decaissementId?: string;
+  ordrePaiementId?: string;
+  bordereauId?: string;
+  createdAt: string;
 }
 
 export interface Document {
   id: string;
-  fileName: string;
-  storagePath: string;
-  mimeType: string;
-  fileSize: number;
-  entityType: EntityType;
-  entityId: string;
-  documentType: DocumentType;
-  confidentialityLevel: ConfidentialityLevel;
-  status: DocumentStatus;
-  validFrom?: string;
-  validTo?: string;
-  tags: string[];
-  description?: string;
-  version: number;
-  checksum: string;
+  nom: string;
+  originalName?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  filePath: string;
   ocrText?: string;
-  uploadedBy: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-  };
-  uploadedById: string;
-  uploadedAt: string;
+  documentType?: string;
+  statut: DocumentStatut;
+  isLatestVersion: boolean;
+  versionNumber: number;
+  uploadedById?: string;
+  links?: DocumentLink[];
+  versions?: DocumentVersion[];
+  createdAt: string;
   updatedAt: string;
 }
 
+// Matches server UploadDocumentDto exactly — one FK per possible target,
+// not a generic entityId. entityType is optional and, if supplied, is
+// cross-checked server-side against whichever FK is actually set.
 export interface UploadDocumentDto {
-  entityType: EntityType;
-  entityId: string;
-  documentType: DocumentType;
-  confidentialityLevel?: ConfidentialityLevel;
-  validFrom?: string;
-  validTo?: string;
-  tags?: string[];
-  description?: string;
+  documentType?: string;
+  entityType?: DocumentEntityType;
+  assureId?: string;
+  cedanteId?: string;
+  reassureurId?: string;
+  coCourtId?: string;
+  affaireId?: string;
+  sinistreId?: string;
+  encaissementId?: string;
+  decaissementId?: string;
+  ordrePaiementId?: string;
+  bordereauId?: string;
+  comment?: string;
 }
 
 export interface UpdateDocumentDto {
-  documentType?: DocumentType;
-  confidentialityLevel?: ConfidentialityLevel;
-  status?: DocumentStatus;
-  validFrom?: string;
-  validTo?: string;
-  tags?: string[];
-  description?: string;
+  documentType?: string;
+  nom?: string;
+  statut?: DocumentStatut;
 }
 
 export interface SearchDocumentDto {
   search?: string;
-  entityType?: EntityType;
+  documentType?: string;
+  entityType?: DocumentEntityType;
   entityId?: string;
-  documentType?: DocumentType;
-  status?: DocumentStatus;
-  confidentialityLevel?: ConfidentialityLevel;
-  uploadedAfter?: string;
-  uploadedBefore?: string;
-  uploadedById?: string;
-  tags?: string;
+  affaireId?: string;
+  statut?: DocumentStatut;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface PaginatedDocuments {
+  data: Document[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export interface DocumentStatistics {
   total: number;
-  byType: Array<{ type: string; count: string }>;
-  byEntity: Array<{ type: string; count: string }>;
-  totalSize: number;
+  totalSizeBytes: number;
+  byStatut: { statut: DocumentStatut; count: number }[];
+  byType: { documentType: string | null; count: number }[];
+  recentUploads: Document[];
+}
+
+export interface DocumentChecklistItem {
+  id: string;
+  checklistId: string;
+  documentType: string;
+  libelle: string;
+  isMandatory: boolean;
+  statut: DocumentStatut;
+  documentId?: string;
+  receivedAt?: string;
+  ordre: number;
+}
+
+export interface DocumentChecklist {
+  id: string;
+  affaireId: string;
+  items: DocumentChecklistItem[];
+  completionPct: number;
+  updatedAt: string;
+  createdAt: string;
+}
+
+export interface ShareLinkConfig {
+  userId?: string;
+  email?: string;
+  expiresAt?: string;
+  // NOTE: password/maxDownloads are accepted by the backend's ShareDocumentDto
+  // but NOT yet persisted or enforced (see GedService.share()'s own
+  // SCHEMA TODO comment) — included here for forward-compat, but don't rely
+  // on them actually protecting the link today.
+  password?: string;
+  maxDownloads?: number;
+}
+
+export interface ShareLinkResult {
+  token: string;
+  url: string;
+  expiresAt?: string;
 }

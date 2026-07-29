@@ -127,6 +127,9 @@ export interface BankMovement {
   description?: string;
   isReconciled: boolean;
   reconciledAt?: string;
+  // NEW (Reconciliation gap fix): light refs from the new list endpoint.
+  encaissements?: { id: string; reference: string; montant: number }[];
+  decaissements?: { id: string; reference: string; montant: number }[];
   createdAt: string;
 }
 

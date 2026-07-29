@@ -2,6 +2,11 @@ import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
+const currentYear = new Date().getFullYear();
+
+function makeUtcDate(month: number, day: number, hour = 0, minute = 0, second = 0) {
+  return new Date(Date.UTC(currentYear, month - 1, day, hour, minute, second));
+}
 
 async function resetDatabase() {
   const tables = [
@@ -19,13 +24,32 @@ async function resetDatabase() {
     'Affaire',
     'FacultativeAffaire',
     'TraiteAffaire',
+    'SinistreParticipation',
+    'SinistreEvent',
+    'SinistreAudit',
     'Sinistre',
+    'BordereauPayment',
+    'BordereauLine',
     'Bordereau',
     'SituationLine',
     'Situation',
     'Settlement',
+    'Encaissement',
+    'Decaissement',
+    'OrdrePaiement',
+    'LettrageItem',
+    'Lettrage',
+    'BankMovement',
+    'FxGainLoss',
+    'JournalLine',
     'JournalEntry',
     'WorkflowTask',
+    'BudgetTarget',
+    'FiscalPeriod',
+    'PlanComptable',
+    'AuxiliaryAccount',
+    'ExchangeRate',
+    'Currency',
     'RefreshToken',
     'PasswordResetToken',
     'User',
@@ -54,7 +78,7 @@ async function main() {
 
   const passwordHash = await bcrypt.hash('Password123!', 12);
 
-  await prisma.user.createMany({
+  const users = await prisma.user.createManyAndReturn({
     data: [
       {
         email: 'admin@ars.tn',
@@ -90,6 +114,13 @@ async function main() {
       },
     ],
   });
+
+  const admin = users.find((user) => user.email === 'admin@ars.tn');
+  const daf = users.find((user) => user.email === 'daf@ars.tn');
+
+  if (!admin || !daf) {
+    throw new Error('Unable to locate seeded admin or DAF user');
+  }
 
   await prisma.sequence.createMany({
     data: [
@@ -204,7 +235,7 @@ async function main() {
     });
   }
 
-  const document = await prisma.document.create({
+  const clientDocument = await prisma.document.create({
     data: {
       nom: 'Carte d’identité client',
       originalName: 'carte-client.pdf',
@@ -220,7 +251,7 @@ async function main() {
 
   await prisma.documentLink.create({
     data: {
-      documentId: document.id,
+      documentId: clientDocument.id,
       entityType: 'ASSURE',
       assureId: assures[0].id,
     },
@@ -481,8 +512,8 @@ async function main() {
         reassuranceType: 'PROPORTIONNEL',
         assureId: assures[0].id,
         numeroPoliceCedante: 'POL-001',
-        dateEffet: new Date('2024-01-15T00:00:00.000Z'),
-        dateEcheance: new Date('2024-12-31T00:00:00.000Z'),
+        dateEffet: makeUtcDate(1, 15),
+        dateEcheance: makeUtcDate(12, 31),
         modeRenouvellement: 'TACITE',
         paysAssure: 'Tunisie',
         branche: 'Incendie',
@@ -500,8 +531,8 @@ async function main() {
         reassuranceType: 'NON_PROPORTIONNEL',
         assureId: assures[0].id,
         numeroPoliceCedante: 'POL-003',
-        dateEffet: new Date('2023-06-01T00:00:00.000Z'),
-        dateEcheance: new Date('2025-05-31T00:00:00.000Z'),
+        dateEffet: makeUtcDate(6, 1),
+        dateEcheance: makeUtcDate(5, 31),
         modeRenouvellement: 'NEGOCIATION',
         paysAssure: 'Tunisie',
         branche: 'Transport',
@@ -524,8 +555,8 @@ async function main() {
         referenceTraite: 'TRT-001',
         reassuranceType: 'PROPORTIONNEL',
         formeCouverture: 'QUOTA_PART',
-        dateEffet: new Date('2022-01-01T00:00:00.000Z'),
-        dateEcheance: new Date('2024-12-31T00:00:00.000Z'),
+        dateEffet: makeUtcDate(1, 1),
+        dateEcheance: makeUtcDate(12, 31),
         modeRenouvellement: 'TACITE',
         zoneGeographique: 'Tunisie',
         branche: 'Catnat',
@@ -588,6 +619,363 @@ async function main() {
     ],
   });
 
+  const tndCurrency = await prisma.currency.upsert({
+    where: { code: 'TND' },
+    update: {},
+    create: { code: 'TND', label: 'Dinar Tunisien' },
+  });
+
+  const usdCurrency = await prisma.currency.upsert({
+    where: { code: 'USD' },
+    update: {},
+    create: { code: 'USD', label: 'Dollar US' },
+  });
+
+  const eurCurrency = await prisma.currency.upsert({
+    where: { code: 'EUR' },
+    update: {},
+    create: { code: 'EUR', label: 'Euro' },
+  });
+
+  await prisma.exchangeRate.upsert({
+    where: { currencyCode_dateEffet: { currencyCode: 'USD', dateEffet: makeUtcDate(1, 1) } },
+    update: {},
+    create: {
+      currencyId: usdCurrency.id,
+      currencyCode: usdCurrency.code,
+      taux: 3.18,
+      dateEffet: makeUtcDate(1, 1),
+      source: 'BCT',
+      isMonthly: false,
+    },
+  });
+
+  await prisma.exchangeRate.upsert({
+    where: { currencyCode_dateEffet: { currencyCode: 'EUR', dateEffet: makeUtcDate(1, 1) } },
+    update: {},
+    create: {
+      currencyId: eurCurrency.id,
+      currencyCode: eurCurrency.code,
+      taux: 3.35,
+      dateEffet: makeUtcDate(1, 1),
+      source: 'BCT',
+      isMonthly: false,
+    },
+  });
+
+  await prisma.budgetTarget.createMany({
+    data: [
+      { annee: currentYear, mois: 1, cedanteId: cedantes[0].id, targetCA: 1200000, actualCA: 1185000, variancePct: -1.25 },
+      { annee: currentYear, mois: 1, reassureurCode: 'REA-0001', targetCA: 900000, actualCA: 925000, variancePct: 2.78 },
+    ],
+  });
+
+  const fiscalPeriod = await prisma.fiscalPeriod.create({
+    data: {
+      annee: currentYear,
+      mois: 1,
+      dateDebut: makeUtcDate(1, 1),
+      dateFin: makeUtcDate(1, 31, 23, 59, 59),
+      isClosed: false,
+    },
+  });
+
+  await prisma.planComptable.createMany({
+    data: [
+      { compte: '41130000', libelle: 'Cédantes', type: 'DEBIT_NORMAL', classe: '4' },
+      { compte: '40130000', libelle: 'Réassureurs', type: 'CREDIT_NORMAL', classe: '4' },
+      { compte: '53200000', libelle: 'Banque', type: 'DEBIT_NORMAL', classe: '5' },
+      { compte: '70510000', libelle: 'Commissions ARS', type: 'CREDIT_NORMAL', classe: '7' },
+    ],
+  });
+
+  const planComptable = await prisma.planComptable.findFirst({ where: { compte: '41130000' } });
+
+  const settlement = await prisma.settlement.create({
+    data: {
+      reference: 'SET-0001',
+      mode: 'PAR_AFFAIRE',
+      affaireId: affaires[0].id,
+      montant: 600000,
+      currency: 'TND',
+      tauxRealisation: 1,
+      tauxReglement: 1,
+      montantTnd: 600000,
+      dateSettlement: makeUtcDate(1, 20),
+    },
+  });
+
+  const encaissement = await prisma.encaissement.create({
+    data: {
+      reference: 'ENC-0001',
+      affaireId: affaires[0].id,
+      partyType: 'CEDANTE',
+      cedanteId: cedantes[0].id,
+      montant: 600000,
+      currency: 'TND',
+      tauxRealisation: 1,
+      montantTnd: 600000,
+      isValidated: true,
+      validatedAt: makeUtcDate(1, 20),
+      dateEncaissement: makeUtcDate(1, 20),
+      description: 'Prime facultative encaissée',
+      settlementId: settlement.id,
+    },
+  });
+
+  const decaissement = await prisma.decaissement.create({
+    data: {
+      reference: 'DEC-0001',
+      affaireId: affaires[0].id,
+      partyType: 'REASSUREUR',
+      reassureurCode: 'REA-0001',
+      montant: 300000,
+      currency: 'TND',
+      tauxReglement: 1,
+      montantTnd: 300000,
+      statut: 'APPROUVE',
+      approvedAt: makeUtcDate(1, 22),
+      dateDecaissement: makeUtcDate(1, 22),
+      description: 'Commission au réassureur',
+      settlementId: settlement.id,
+    },
+  });
+
+  const ordrePaiement = await prisma.ordrePaiement.create({
+    data: {
+      reference: 'OP-0001',
+      statut: 'VALIDE',
+      beneficiaire: 'Munich Re',
+      montant: 300000,
+      currency: 'TND',
+      referenceAffaire: affaires[0].numero,
+      dateExecution: makeUtcDate(1, 23),
+      signataires: ['Admin'],
+      dateValidation: makeUtcDate(1, 23),
+      validatedByUserId: admin.id,
+    },
+  });
+
+  await prisma.decaissement.update({
+    where: { id: decaissement.id },
+    data: { ordrePaiementId: ordrePaiement.id },
+  });
+
+  const treatyAffaire = await prisma.traiteAffaire.findFirst({
+    where: { affaireId: affaires[1].id },
+  });
+
+  if (!treatyAffaire) {
+    throw new Error('Unable to find treaty data for the seeded situation');
+  }
+
+  const situation = await prisma.situation.create({
+    data: {
+      reference: 'SIT-0001',
+      cedanteId: cedantes[0].id,
+      traiteId: treatyAffaire.id,
+      dateDebut: makeUtcDate(1, 1),
+      dateFin: makeUtcDate(3, 31, 23, 59, 59),
+      periodicite: 'TRIMESTRIELLE',
+      totalDebit: 600000,
+      totalCredit: 300000,
+      soldeNet: 300000,
+      soldeDirection: 'CEDANTE_DOIT',
+      currency: 'TND',
+    },
+  });
+
+  await prisma.situationLine.create({
+    data: {
+      situationId: situation.id,
+      affaireId: affaires[0].id,
+      debit: 600000,
+      credit: 300000,
+      solde: 300000,
+      description: 'Netting de la période',
+    },
+  });
+
+  const bordereau = await prisma.bordereau.create({
+    data: {
+      numero: 'BDR-0001',
+      type: 'SITUATION_TRAITE',
+      statut: 'VALIDE',
+      affaireId: affaires[1].id,
+      situationId: situation.id,
+      cedanteId: cedantes[0].id,
+      currency: 'TND',
+      montantTotal: 300000,
+      montantEnLettres: 'TROIS CENT MILLE DINARS',
+      dateLimitePaiement: makeUtcDate(4, 15),
+      dateValidation: makeUtcDate(3, 15),
+      createdByUserId: admin.id,
+      validatedByUserId: admin.id,
+      montantRegle: 0,
+    },
+  });
+
+  await prisma.bordereauLine.create({
+    data: {
+      bordereauId: bordereau.id,
+      libelle: 'Situation de traite',
+      prime100: 600000,
+      primeBrute: 600000,
+      commissionCedante: 30000,
+      primeNette: 570000,
+      currency: 'TND',
+      ordre: 1,
+    },
+  });
+
+  await prisma.bordereauPayment.create({
+    data: {
+      bordereauId: bordereau.id,
+      montant: 300000,
+      modePaiement: 'VIREMENT',
+      datePaiement: makeUtcDate(3, 20),
+      referenceBancaire: 'REF-001',
+      notes: 'Paiement partiel',
+      recordedByUserId: admin.id,
+    },
+  });
+
+  await prisma.document.create({
+    data: {
+      nom: 'Document de démonstration',
+      originalName: 'demo-document.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 102400,
+      filePath: '/uploads/demo-document.pdf',
+      documentType: 'CONTRAT',
+      statut: 'RECU',
+      isLatestVersion: true,
+      versionNumber: 1,
+    },
+  });
+
+  const conventionDocument = await prisma.document.create({
+    data: {
+      nom: 'Convention signée',
+      originalName: 'convention.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 204800,
+      filePath: '/uploads/convention.pdf',
+      documentType: 'CONVENTION',
+      statut: 'RECU',
+      isLatestVersion: true,
+      versionNumber: 1,
+    },
+  });
+
+  await prisma.documentLink.create({
+    data: {
+      documentId: conventionDocument.id,
+      entityType: 'AFFAIRE',
+      affaireId: affaires[0].id,
+    },
+  });
+
+  await prisma.documentChecklist.create({
+    data: {
+      affaireId: affaires[0].id,
+      completionPct: 100,
+      items: {
+        create: [
+          { documentType: 'CONTRAT', libelle: 'Police', isMandatory: true, statut: 'RECU', ordre: 1 },
+          { documentType: 'CONVENTION', libelle: 'Convention signée', isMandatory: true, statut: 'RECU', ordre: 2 },
+        ],
+      },
+    },
+  });
+
+  await prisma.workflowTask.create({
+    data: {
+      type: 'VALIDATION_SINISTRE',
+      statut: 'EN_ATTENTE',
+      affaireId: affaires[0].id,
+      assignedToId: admin.id,
+      createdById: admin.id,
+      description: 'Valider le dossier de réassurance',
+      dueDate: makeUtcDate(2, 15),
+    },
+  });
+
+  await prisma.journalEntry.create({
+    data: {
+      numero: 'JE-0001',
+      statut: 'VALIDE',
+      type: 'ENCAISSEMENT_PRIME_CEDEE',
+      affaireId: affaires[0].id,
+      fiscalPeriodId: fiscalPeriod.id,
+      codeJournal: 'VTEEXP',
+      pieceComptable: 'PC001',
+      validatedAt: makeUtcDate(1, 21),
+      validatedBy: admin.id,
+      description: 'Pièce de validation de la prime',
+      currency: 'TND',
+      lines: {
+        create: [
+          {
+            planComptableId: planComptable!.id,
+            cedanteId: cedantes[0].id,
+            debit: 600000,
+            credit: 0,
+            currency: 'TND',
+            libelle: 'Prime encaissée',
+            ordre: 1,
+          },
+          {
+            planComptableId: planComptable!.id,
+            reassureurId: reassureurs[0].id,
+            debit: 0,
+            credit: 600000,
+            currency: 'TND',
+            libelle: 'Réassureur crédité',
+            ordre: 2,
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.sinistre.create({
+    data: {
+      numero: 'SIN-0001',
+      affaireId: affaires[0].id,
+      statut: 'DECLARE',
+      numerPolice: 'POL-001',
+      periodeCouverture: `${currentYear}-01`,
+      dateSurvenance: makeUtcDate(1, 10),
+      reglementExerciceN: 150000,
+      cumulReglementAnterieurs: 0,
+      reserves: 50000,
+      partReassureurs: 75000,
+      appelAuComptant: true,
+      recoveryMethod: 'COMPENSATION',
+      events: {
+        create: [
+          {
+            actorLabel: 'Commercial',
+            action: 'Déclaration reçue cédante',
+            note: 'Sinistre déclaré par la cédante',
+          },
+        ],
+      },
+      participations: {
+        create: [
+          {
+            reassureurCode: 'REA-0001',
+            partPct: 100,
+            montantPart: 75000,
+            isNotified: true,
+            notifiedAt: makeUtcDate(1, 12),
+          },
+        ],
+      },
+    },
+  });
+
   console.log('✅ Seed completed successfully.');
   console.log('Seeded entities:');
   console.log('- 4 users');
@@ -596,7 +984,7 @@ async function main() {
   console.log('- 3 cedantes');
   console.log('- 3 reassureurs');
   console.log('- 2 co-courtiers');
-  console.log('- contacts, bank accounts, documents and code registry entries');
+  console.log('- master data, finance records, workflow tasks, claims and accounting entries');
 }
 
 main()

@@ -996,6 +996,11 @@ model Sinistre {
   appelAuComptant           Boolean                @default(false)
   cashCall                  CashCall?
 
+  // Standard claims metadata
+  description               String?
+  cause                     String?
+  lieu                      String?
+
   // Recovery
   recoveryMethod            RecoveryMethod?
   recoveredAt               DateTime?
@@ -1503,6 +1508,11 @@ model JournalEntry {
   integrationExportId String?
   integrationExport   IntegrationExport? @relation(fields: [integrationExportId], references: [id])
 
+  // NEW (Comptabilité pass — integration export)
+  exportBatchId       String?
+  exportBatch         ExportBatch?       @relation(fields: [exportBatchId], references: [id])
+  exportedAt          DateTime?
+
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
@@ -1538,6 +1548,21 @@ model JournalLine {
 
   libelle         String?
   ordre           Int               @default(0)
+}
+
+model ExportBatch {
+  id                String    @id @default(uuid())
+  reference         String    @unique
+  format            String    // 'SAGE' | 'CSV_GENERIC'
+  dateFrom          DateTime?
+  dateTo            DateTime?
+  codeJournal       String?
+  entryCount        Int
+  content           String    @db.Text  // the exact exported payload, for reproducibility
+  exportedByUserId  String?
+  createdAt         DateTime  @default(now())
+
+  entries           JournalEntry[]
 }
 
 // Export record — validated entries exported to TXT or Excel for external accounting

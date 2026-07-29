@@ -1,137 +1,122 @@
+// FIX (SWIFT/GED gap): full rewrite against the real GedController.
+// - getDocuments()/search() now return the real {data,total,page,limit}
+//   envelope instead of assuming a bare array.
+// - uploadDocument() now builds the per-entity-type FK field (assureId /
+//   cedanteId / ... / ordrePaiementId) that the backend's UploadDocumentDto
+//   actually expects, instead of a generic entityId that had no matching
+//   field on the DTO at all.
+// - getEntityDocuments() now hits the real route
+//   (/ged/entity/:entityType/:entityId) and is typed as DocumentLink[]
+//   (what GedService.getDocumentsForEntity() actually returns), not
+//   Document[].
 import api from '../lib/api';
-import { Document, UploadDocumentDto, UpdateDocumentDto, SearchDocumentDto, DocumentStatistics, EntityType, DocumentType } from '../types/ged.types';
+import {
+  Document, DocumentLink, UploadDocumentDto, UpdateDocumentDto, SearchDocumentDto,
+  PaginatedDocuments, DocumentStatistics, DocumentEntityType, DocumentChecklist,
+  ShareLinkConfig, ShareLinkResult,
+} from '../types/ged.types';
+
+// Mirrors uploads.service.ts's ENTITY_LINK_FIELD map exactly — the
+// canonical entityType -> FK field name mapping used server-side.
+const ENTITY_LINK_FIELD: Record<DocumentEntityType, string> = {
+  [DocumentEntityType.ASSURE]: 'assureId',
+  [DocumentEntityType.CEDANTE]: 'cedanteId',
+  [DocumentEntityType.REASSUREUR]: 'reassureurId',
+  [DocumentEntityType.CO_COURTIER]: 'coCourtId',
+  [DocumentEntityType.AFFAIRE]: 'affaireId',
+  [DocumentEntityType.SINISTRE]: 'sinistreId',
+  [DocumentEntityType.ENCAISSEMENT]: 'encaissementId',
+  [DocumentEntityType.DECAISSEMENT]: 'decaissementId',
+  [DocumentEntityType.ORDRE_PAIEMENT]: 'ordrePaiementId',
+  [DocumentEntityType.BORDEREAU]: 'bordereauId',
+};
+
+export interface UploadTarget {
+  entityType: DocumentEntityType;
+  entityId: string;
+  documentType?: string;
+  comment?: string;
+}
 
 export const gedApi = {
-  uploadDocument: async (file: File, data: UploadDocumentDto): Promise<Document> => {
+  uploadDocument: async (file: File, target: UploadTarget): Promise<Document> => {
     const formData = new FormData();
     formData.append('file', file);
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== undefined) {
-        formData.append(key, Array.isArray(value) ? JSON.stringify(value) : String(value));
-      }
+    formData.append('entityType', target.entityType);
+    formData.append(ENTITY_LINK_FIELD[target.entityType], target.entityId);
+    if (target.documentType) formData.append('documentType', target.documentType);
+    if (target.comment) formData.append('comment', target.comment);
+
+    const { data } = await api.post<Document>('/ged/upload', formData, {
+      headers: { 'Content-Type': undefined }, // let axios set the multipart boundary
     });
-
-    const response = await api.post('/ged/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return response.data;
+    return data;
   },
 
-  getDocuments: async (params?: SearchDocumentDto): Promise<Document[]> => {
-    const response = await api.get('/ged/documents', { params });
-    return response.data;
-  },
+  getDocuments: (params?: SearchDocumentDto) =>
+    api.get<PaginatedDocuments>('/ged/documents', { params }),
 
-  getDocument: async (id: string): Promise<Document> => {
-    const response = await api.get(`/ged/documents/${id}`);
-    return response.data;
-  },
+  getDocument: (id: string) => api.get<Document>(`/ged/documents/${id}`),
 
   downloadDocument: async (id: string): Promise<Blob> => {
-    const response = await api.get(`/ged/documents/${id}/download`, {
-      responseType: 'blob',
-    });
-    return response.data;
+    const { data } = await api.get(`/ged/documents/${id}/download`, { responseType: 'blob' });
+    return data as Blob;
   },
 
-  updateDocument: async (id: string, data: UpdateDocumentDto): Promise<Document> => {
-    const response = await api.put(`/ged/documents/${id}`, data);
-    return response.data;
-  },
+  updateDocument: (id: string, data: UpdateDocumentDto) =>
+    api.put<Document>(`/ged/documents/${id}`, data),
 
-  deleteDocument: async (id: string): Promise<void> => {
-    await api.delete(`/ged/documents/${id}`);
-  },
+  deleteDocument: (id: string) => api.delete<void>(`/ged/documents/${id}`),
 
-  getEntityDocuments: async (entityType: EntityType, entityId: string): Promise<Document[]> => {
-    const response = await api.get(`/ged/entity/${entityType}/${entityId}`);
-    return response.data;
-  },
+  getEntityDocuments: (entityType: DocumentEntityType, entityId: string) =>
+    api.get<DocumentLink[]>(`/ged/entity/${entityType}/${entityId}`),
 
-  getStatistics: async (): Promise<DocumentStatistics> => {
-    const response = await api.get('/ged/statistics');
-    return response.data;
-  },
+  getAffaireDocuments: (affaireId: string) => api.get<DocumentLink[]>(`/ged/affaire/${affaireId}/documents`),
+  getSinistreDocuments: (sinistreId: string) => api.get<DocumentLink[]>(`/ged/sinistre/${sinistreId}/documents`),
+  getPaymentDocuments: (paymentId: string) => api.get<DocumentLink[]>(`/ged/finance/payment/${paymentId}/documents`),
 
-  bulkUpload: async (files: File[], data: { entityType: EntityType; entityId: string; documentType: DocumentType }): Promise<Document[]> => {
+  getStatistics: () => api.get<DocumentStatistics>('/ged/statistics'),
+
+  bulkUpload: (files: File[], target: { entityType: DocumentEntityType; entityId: string; documentType?: string }) => {
     const formData = new FormData();
-    files.forEach(file => formData.append('files', file));
-    formData.append('entityType', data.entityType);
-    formData.append('entityId', data.entityId);
-    formData.append('documentType', String(data.documentType));
-
-    const response = await api.post('/ged/bulk/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
-    return response.data;
+    files.forEach((f) => formData.append('files', f));
+    formData.append('entityType', target.entityType);
+    formData.append('entityId', target.entityId);
+    if (target.documentType) formData.append('documentType', target.documentType);
+    return api.post<{ success: boolean; fileName: string; document?: Document; error?: string }[]>(
+      '/ged/bulk/upload', formData, { headers: { 'Content-Type': undefined } },
+    );
   },
 
   bulkDownload: async (documentIds: string[]): Promise<Blob> => {
-    const response = await api.post('/ged/bulk/download', { documentIds }, {
-      responseType: 'blob',
-    });
-    return response.data;
+    const { data } = await api.post('/ged/bulk/download', { documentIds }, { responseType: 'blob' });
+    return data as Blob;
   },
 
-  createShareLink: async (id: string, config: { expiresAt: string; password?: string; email?: string; maxDownloads?: number }): Promise<{ token: string; url: string }> => {
-    const response = await api.post(`/ged/documents/${id}/share`, config);
-    return response.data;
+  createShareLink: (id: string, config: ShareLinkConfig) =>
+    api.post<ShareLinkResult>(`/ged/documents/${id}/share`, config),
+
+  // Hits the @Public() /ged/shared/:token route — works without auth.
+  accessSharedDocument: async (token: string): Promise<Blob> => {
+    const { data } = await api.get(`/ged/shared/${token}`, { responseType: 'blob' });
+    return data as Blob;
   },
 
-  // NOTE: this hits GET /ged/shared/:token, which is a @Public() route on
-  // the backend (no auth header required/sent) — that's intentional, this
-  // is meant to work for an external recipient with just the link.
-  accessSharedDocument: async (token: string, password?: string): Promise<Blob> => {
-    const response = await api.get(`/ged/shared/${token}`, {
-      params: { password },
-      responseType: 'blob',
-    });
-    return response.data;
-  },
+  checkCompliance: (entityType: DocumentEntityType, entityId: string) =>
+    api.get<any>(`/ged/compliance/${entityType}/${entityId}`),
 
-  checkCompliance: async (entityType: EntityType, entityId: string): Promise<any> => {
-    const response = await api.get(`/ged/compliance/${entityType}/${entityId}`);
-    return response.data;
-  },
+  getComplianceReport: () => api.get<any>('/ged/compliance/report'),
 
-  getMissingDocumentsReport: async (): Promise<any[]> => {
-    const response = await api.get('/ged/compliance/reports/missing-documents');
-    return response.data;
-  },
+  getMissingDocumentsReport: () => api.get<any[]>('/ged/compliance/reports/missing-documents'),
 
-  getAffaireDocuments: async (affaireId: string): Promise<Document[]> => {
-    const response = await api.get(`/ged/affaire/${affaireId}/documents`);
-    return response.data;
-  },
+  // ── Checklists ──────────────────────────────────────────────────
+  getChecklist: (affaireId: string) => api.get<DocumentChecklist>(`/ged/checklist/${affaireId}`),
 
-  getSinistreDocuments: async (sinistreId: string): Promise<Document[]> => {
-    const response = await api.get(`/ged/sinistre/${sinistreId}/documents`);
-    return response.data;
-  },
+  markItemReceived: (checklistId: string, itemId: string, documentId: string) =>
+    api.post<DocumentChecklist>(`/ged/checklist/${checklistId}/items/${itemId}/receive`, { documentId }),
 
-  getPaymentDocuments: async (paymentId: string): Promise<Document[]> => {
-    const response = await api.get(`/ged/finance/payment/${paymentId}/documents`);
-    return response.data;
-  },
-
-  // ── Checklists ────────────────────────────────────────────────────
-  // NEW: DocumentChecklist.tsx previously bypassed the API layer entirely
-  // with raw `fetch()` calls to non-existent/unauthenticated endpoints.
-  // These bring checklist access into the same authenticated axios
-  // instance (Bearer token, envelope-unwrapping, silent refresh) as
-  // everything else in this file.
-  getChecklist: async (affaireId: string): Promise<any> => {
-    const response = await api.get(`/ged/checklist/${affaireId}`);
-    return response.data;
-  },
-
-  markItemReceived: async (checklistId: string, itemId: string, documentId: string): Promise<any> => {
-    const response = await api.post(`/ged/checklist/${checklistId}/items/${itemId}/receive`, { documentId });
-    return response.data;
-  },
-
-  markItemRejected: async (checklistId: string, itemId: string): Promise<any> => {
-    const response = await api.post(`/ged/checklist/${checklistId}/items/${itemId}/reject`, {});
-    return response.data;
-  },
+  markItemRejected: (checklistId: string, itemId: string) =>
+    api.post<DocumentChecklist>(`/ged/checklist/${checklistId}/items/${itemId}/reject`, {}),
 };
+
+export default gedApi;

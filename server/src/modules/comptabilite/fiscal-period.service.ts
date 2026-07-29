@@ -15,14 +15,12 @@ export class FiscalPeriodService {
     const annee = now.getFullYear();
     const mois = now.getMonth() + 1;
 
-    // Use findFirst to avoid null uniqueness issue
-    let period = await this.prisma.fiscalPeriod.findFirst({
-      where: { annee, mois },
-    });
+    // FIX (Comptabilité pass): the old code called findFirst, then — if not
+    // found — called the EXACT SAME findFirst query again immediately
+    // before creating. Pure dead code (the second call always returns the
+    // same null the first one did); removed.
+    let period = await this.prisma.fiscalPeriod.findFirst({ where: { annee, mois } });
     if (!period) {
-      // Check there's no duplicate before creating
-      const existing = await this.prisma.fiscalPeriod.findFirst({ where: { annee, mois } });
-      if (existing) return existing;
       period = await this.prisma.fiscalPeriod.create({
         data: { annee, mois, dateDebut: new Date(annee, mois - 1, 1), dateFin: new Date(annee, mois, 0, 23, 59, 59) },
       });
@@ -30,14 +28,23 @@ export class FiscalPeriodService {
     return period;
   }
 
+  /**
+   * NEW (Comptabilité pass): the frontend dashboard needs a single "what's
+   * the current period and is it open/closed" view — no such endpoint
+   * existed (only a bare list via findAll()).
+   */
+  async getCurrent() {
+    const period = await this.getOrCreateCurrent();
+    return this.prisma.fiscalPeriod.findUniqueOrThrow({ where: { id: period.id } });
+  }
+
   async close(dto: ClosePeriodDto, userId: string) {
     const period = await this.prisma.fiscalPeriod.findUnique({
-      where: { annee_mois: { annee: dto.annee, mois: dto.mois ?? null as any } },
+      where: { annee_mois: { annee: dto.annee, mois: dto.mois ?? (null as any) } },
     });
     if (!period) throw new NotFoundException('Période introuvable');
     if (period.isClosed) throw new BadRequestException('Période déjà clôturée');
 
-    // Ensure all BROUILLON entries in this period are validated before closing
     const unvalidated = await this.prisma.journalEntry.count({
       where: { fiscalPeriodId: period.id, statut: 'BROUILLON' },
     });
@@ -49,6 +56,35 @@ export class FiscalPeriodService {
       where: { id: period.id },
       data: { isClosed: true, closedAt: new Date(), closedByUserId: userId },
     });
+  }
+
+  /**
+   * NEW (Comptabilité pass): the schema (isClosed/closedAt/closedByUserId)
+   * was clearly built for a real open→close→reopen admin workflow, but no
+   * reopen path existed at all — a mistaken closure was permanent. Gated
+   * behind the same admin-only permission level as seed() at the
+   * controller, since reopening a closed period is a sensitive override.
+   */
+  async reopen(dto: ClosePeriodDto, userId: string) {
+    const period = await this.prisma.fiscalPeriod.findUnique({
+      where: { annee_mois: { annee: dto.annee, mois: dto.mois ?? (null as any) } },
+    });
+    if (!period) throw new NotFoundException('Période introuvable');
+    if (!period.isClosed) throw new BadRequestException('Période déjà ouverte');
+
+    const updated = await this.prisma.fiscalPeriod.update({
+      where: { id: period.id },
+      data: { isClosed: false, closedAt: null, closedByUserId: null },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        userId, action: 'FISCAL_PERIOD_REOPENED', entityType: 'FiscalPeriod', entityId: period.id,
+        before: { isClosed: true }, after: { isClosed: false },
+      },
+    });
+
+    return updated;
   }
 
   async initYear(annee: number) {

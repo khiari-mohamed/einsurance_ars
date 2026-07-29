@@ -1,191 +1,43 @@
-import { Download, Printer } from 'lucide-react';
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { comptabiliteApi } from '../../api/comptabilite.api';
+import { useNavigate } from 'react-router-dom';
+import { Info, ArrowRight, Download } from 'lucide-react';
 
+// FIX (Comptabilité pass): deliberately NOT a fabricated Bilan (actif/
+// passif). Per the CDC's own scope for this module (§ Fenêtres de
+// l'application: génération d'écriture + fichier d'intégration only) and
+// the accompanying description, statutory accounting (including the
+// balance sheet) lives in ARS's separate accounting software, fed by this
+// module's export. Building a Bilan off this 10-account seed chart — with
+// no immobilisations/capitaux propres structure — would produce numbers
+// that look official but aren't grounded in real data. This panel is
+// honest about that boundary and routes to what IS real: the export, and
+// the compte de résultat (which the trial balance genuinely supports).
 export default function BalanceSheet() {
-  const currentYear = new Date().getFullYear();
-  const [exercice, setExercice] = useState(currentYear);
-
-  const { data: balanceSheet, isLoading } = useQuery({
-    queryKey: ['balance-sheet', exercice],
-    queryFn: () => comptabiliteApi.getBalanceSheet(exercice).then(r => r.data),
-  });
-
-  const exportToExcel = () => {
-    if (!balanceSheet) return;
-    const csvContent = [
-      ['Bilan', exercice].join(','),
-      [''],
-      ['ACTIF', '', 'PASSIF', ''].join(','),
-      ['Compte', 'Montant', 'Compte', 'Montant'].join(','),
-      ...Array.from({ length: Math.max(balanceSheet.actif.accounts.length, balanceSheet.passif.accounts.length) }, (_, i) => {
-        const actif = balanceSheet.actif.accounts[i];
-        const passif = balanceSheet.passif.accounts[i];
-        return [
-          actif ? `${actif.code} - ${actif.label}` : '',
-          actif ? actif.solde : '',
-          passif ? `${passif.code} - ${passif.label}` : '',
-          passif ? Math.abs(passif.solde) : '',
-        ].join(',');
-      }),
-      [''],
-      ['TOTAL ACTIF', balanceSheet.actif.total, 'TOTAL PASSIF', balanceSheet.passif.total].join(','),
-      ['', '', 'RESULTAT', balanceSheet.resultat].join(','),
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `bilan-${exercice}.csv`;
-    a.click();
-  };
+  const navigate = useNavigate();
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Bilan</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={exportToExcel}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-          >
-            <Download size={20} />
-            Exporter
+    <div className="p-6 max-w-2xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">Bilan</h1>
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <Info className="text-blue-600 shrink-0 mt-0.5" size={22} />
+          <div className="text-sm text-blue-900">
+            <p className="font-semibold mb-1">Le bilan (actif/passif) n'est pas produit par ce module.</p>
+            <p>
+              Selon le cahier des charges, ARS Réassurance gère les écritures techniques (génération, validation) et
+              produit un fichier d'intégration exporté vers le logiciel comptable dédié — c'est ce dernier qui
+              établit les états financiers statutaires, dont le bilan.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <button onClick={() => navigate('/comptabilite/profit-loss')} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-blue-300 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-100">
+            Voir le Compte de Résultat <ArrowRight size={16} />
           </button>
-          <button
-            onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-          >
-            <Printer size={20} />
-            Imprimer
+          <button onClick={() => navigate('/comptabilite/export')} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            <Download size={16} /> Fichier d'intégration
           </button>
         </div>
       </div>
-
-      <div className="bg-white rounded-lg shadow mb-6">
-        <div className="p-4 border-b">
-          <label className="block text-sm font-medium mb-1">Exercice</label>
-          <select
-            value={exercice}
-            onChange={(e) => setExercice(parseInt(e.target.value))}
-            className="px-3 py-2 border rounded-lg"
-          >
-            {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {isLoading ? (
-        <p className="text-center py-8 text-gray-500">Chargement...</p>
-      ) : !balanceSheet ? (
-        <p className="text-center py-8 text-gray-500">Aucune donn\u00e9e</p>
-      ) : (
-        <>
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="bg-white rounded-lg shadow p-4">
-              <p className="text-sm text-gray-600 mb-1">Total Actif</p>
-              <p className="text-2xl font-bold text-blue-600">{balanceSheet.actif.total.toLocaleString()} TND</p>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <p className="text-sm text-gray-600 mb-1">Total Passif</p>
-              <p className="text-2xl font-bold text-purple-600">{balanceSheet.passif.total.toLocaleString()} TND</p>
-            </div>
-            <div className={`bg-white rounded-lg shadow p-4 ${balanceSheet.resultat >= 0 ? 'border-l-4 border-green-500' : 'border-l-4 border-red-500'}`}>
-              <p className="text-sm text-gray-600 mb-1">R\u00e9sultat</p>
-              <p className={`text-2xl font-bold ${balanceSheet.resultat >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {Math.abs(balanceSheet.resultat).toLocaleString()} TND
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                {balanceSheet.resultat >= 0 ? 'B\u00e9n\u00e9fice' : 'Perte'}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-6">
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b bg-blue-50">
-                <h2 className="text-lg font-semibold text-blue-900">ACTIF</h2>
-              </div>
-              <div className="overflow-x-auto max-h-[600px]">
-                <table className="w-full">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Compte</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Libell\u00e9</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Montant</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {balanceSheet.actif.accounts.map((account: any) => (
-                      <tr key={account.code} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-mono">{account.code}</td>
-                        <td className="px-4 py-3 text-sm">{account.label}</td>
-                        <td className="px-4 py-3 text-sm text-right font-medium text-blue-600">
-                          {account.solde.toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-blue-50 font-bold">
-                    <tr>
-                      <td colSpan={2} className="px-4 py-3 text-right">TOTAL ACTIF:</td>
-                      <td className="px-4 py-3 text-right text-blue-600">
-                        {balanceSheet.actif.total.toLocaleString()} TND
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-4 border-b bg-purple-50">
-                <h2 className="text-lg font-semibold text-purple-900">PASSIF</h2>
-              </div>
-              <div className="overflow-x-auto max-h-[600px]">
-                <table className="w-full">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Compte</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Libell\u00e9</th>
-                      <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Montant</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y">
-                    {balanceSheet.passif.accounts.map((account: any) => (
-                      <tr key={account.code} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-sm font-mono">{account.code}</td>
-                        <td className="px-4 py-3 text-sm">{account.label}</td>
-                        <td className="px-4 py-3 text-sm text-right font-medium text-purple-600">
-                          {Math.abs(account.solde).toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot className="bg-purple-50">
-                    <tr className="font-bold">
-                      <td colSpan={2} className="px-4 py-3 text-right">TOTAL PASSIF:</td>
-                      <td className="px-4 py-3 text-right text-purple-600">
-                        {balanceSheet.passif.total.toLocaleString()} TND
-                      </td>
-                    </tr>
-                    <tr className="font-bold">
-                      <td colSpan={2} className="px-4 py-3 text-right">R\u00c9SULTAT:</td>
-                      <td className={`px-4 py-3 text-right ${balanceSheet.resultat >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {Math.abs(balanceSheet.resultat).toLocaleString()} TND
-                      </td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 }

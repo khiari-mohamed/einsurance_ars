@@ -11,4 +11,8 @@ export class CreateSinistreDto {
   @IsOptional() @IsNumber() @Min(0) reserves?: number;
   @IsOptional() @IsNumber() @Min(0) partReassureurs?: number;
   @IsOptional() @IsBoolean() appelAuComptant?: boolean;
+  // NEW (Sinistres pass): see schema note.
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() cause?: string;
+  @IsOptional() @IsString() lieu?: string;
 }

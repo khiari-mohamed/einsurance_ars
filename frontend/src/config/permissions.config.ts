@@ -113,7 +113,7 @@ const ROUTE_PERMISSIONS: Record<string, Permission[]> = {
   '/reassureurs':  ['donnees:read'],
   '/co-courtiers': ['donnees:read'],
   '/affaires':     ['affaires:read'],
-  '/bordereaux':   ['affaires:read'],
+  '/bordereaux':   ['bordereaux:read'],
   '/sinistres':    ['sinistres:read'],
   '/finances':     ['finances:read'],
   '/comptabilite': ['comptabilite:read'],

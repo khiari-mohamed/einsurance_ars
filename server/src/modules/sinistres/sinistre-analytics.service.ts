@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -15,7 +16,7 @@ export class SinistreAnalyticsService {
       ...(cedanteId && { affaire: { cedanteId } }),
     };
 
-    const [total, parStatut, reserves, partReassureurs] = await Promise.all([
+    const [total, parStatut, reserves] = await Promise.all([
       this.prisma.sinistre.count({ where }),
       this.prisma.sinistre.groupBy({
         by: ['statut'],
@@ -25,11 +26,6 @@ export class SinistreAnalyticsService {
       this.prisma.sinistre.aggregate({
         where,
         _sum: { reserves: true, partReassureurs: true, sap: true },
-      }),
-      this.prisma.sinistre.aggregate({
-        where: { ...where, partReassureurs: { not: null } },
-        _sum: { partReassureurs: true },
-        _avg: { partReassureurs: true },
       }),
     ]);
 
@@ -48,7 +44,6 @@ export class SinistreAnalyticsService {
     const dateFrom = new Date(`${targetYear}-01-01`);
     const dateTo = new Date(`${targetYear}-12-31`);
 
-    // Total premiums collected (encaissements in the year)
     const totalPrimes = await this.prisma.encaissement.aggregate({
       where: {
         dateEncaissement: { gte: dateFrom, lte: dateTo },
@@ -57,7 +52,6 @@ export class SinistreAnalyticsService {
       _sum: { montant: true },
     });
 
-    // Total sinistres charges
     const totalSinistres = await this.prisma.sinistre.aggregate({
       where: {
         dateSurvenance: { gte: dateFrom, lte: dateTo },
@@ -71,5 +65,104 @@ export class SinistreAnalyticsService {
     const ratio = primes > 0 ? (sinistres / primes) * 100 : 0;
 
     return { primes, sinistres, lossRatioPct: Math.round(ratio * 100) / 100, year: targetYear };
+  }
+
+  // ============================================================
+  // NEW (Sinistres pass) — real implementations replacing the frontend's
+  // hardcoded Promise.resolve({ data: [] }) stubs in sinistres.api.ts.
+  // ============================================================
+
+  /** Monthly count + ceded-amount evolution over the trailing N months. */
+  async getEvolution(months = 12) {
+    const since = new Date();
+    since.setMonth(since.getMonth() - months);
+    since.setDate(1);
+    since.setHours(0, 0, 0, 0);
+
+    const rows = await this.prisma.$queryRaw<Array<{ period: string; count: bigint; amount: Prisma.Decimal | null }>>`
+      SELECT to_char(date_trunc('month', "dateSurvenance"), 'YYYY-MM') as period,
+             count(*)::bigint as count,
+             COALESCE(sum("partReassureurs"), 0) as amount
+      FROM "Sinistre"
+      WHERE "dateSurvenance" >= ${since}
+      GROUP BY period
+      ORDER BY period ASC
+    `;
+
+    return rows.map((r) => ({
+      period: r.period,
+      count: Number(r.count),
+      amount: Number(r.amount ?? 0),
+    }));
+  }
+
+  /** Top cedantes by ceded claim amount. */
+  async getByCedante(limit = 10) {
+    const rows = await this.prisma.$queryRaw<Array<{ cedante: string; count: bigint; amount: Prisma.Decimal | null }>>`
+      SELECT c."raisonSociale" as cedante,
+             count(s.id)::bigint as count,
+             COALESCE(sum(s."partReassureurs"), 0) as amount
+      FROM "Sinistre" s
+      JOIN "Affaire" a ON a.id = s."affaireId"
+      JOIN "Cedante" c ON c.id = a."cedanteId"
+      GROUP BY c."raisonSociale"
+      ORDER BY amount DESC
+      LIMIT ${limit}
+    `;
+
+    return rows.map((r) => ({
+      cedante: r.cedante,
+      count: Number(r.count),
+      amount: Number(r.amount ?? 0),
+    }));
+  }
+
+  /** Distribution by SinistreStatut, with total ceded amount per status. */
+  async getByStatus() {
+    const rows = await this.prisma.sinistre.groupBy({
+      by: ['statut'],
+      _count: { id: true },
+      _sum: { partReassureurs: true },
+    });
+
+    return rows.map((r) => ({
+      status: r.statut,
+      count: r._count.id,
+      amount: Number(r._sum.partReassureurs ?? 0),
+    }));
+  }
+
+  /**
+   * Aging of open claims (excludes CLOS/REJETE) bucketed by days since
+   * declaration, using `reserves` as the outstanding-exposure figure —
+   * the amount still on the books for an open claim, as opposed to
+   * partReassureurs (a settled/ceded figure) or sap (year-end specific).
+   */
+  async getAging() {
+    const open = await this.prisma.sinistre.findMany({
+      where: { statut: { notIn: ['CLOS', 'REJETE'] } },
+      select: { dateDeclaration: true, reserves: true },
+    });
+
+    const now = Date.now();
+    const buckets = {
+      '0-30 jours': { count: 0, amount: 0 },
+      '31-60 jours': { count: 0, amount: 0 },
+      '61-90 jours': { count: 0, amount: 0 },
+      '+90 jours': { count: 0, amount: 0 },
+    };
+
+    for (const s of open) {
+      const days = Math.floor((now - s.dateDeclaration.getTime()) / 86_400_000);
+      const amount = Number(s.reserves ?? 0);
+      let bucket: keyof typeof buckets = '0-30 jours';
+      if (days > 90) bucket = '+90 jours';
+      else if (days > 60) bucket = '61-90 jours';
+      else if (days > 30) bucket = '31-60 jours';
+      buckets[bucket].count += 1;
+      buckets[bucket].amount += amount;
+    }
+
+    return buckets;
   }
 }

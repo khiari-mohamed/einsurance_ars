@@ -1,144 +1,44 @@
-import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { Download, FileText } from 'lucide-react';
-import { sinistresApi } from '../../api/sinistres.api';
-import { formatCurrency } from '../../lib/currency';
+import { useNavigate } from 'react-router-dom';
+import { FileText, ArrowRight } from 'lucide-react';
 
+// RETIRED (Sinistres pass): this component previously called
+// sinistresApi.generateBordereau()/generateBordereauPDF() — both were
+// hardcoded fake stubs (Promise.resolve with empty data) that never hit a
+// real backend, and both methods were removed entirely when sinistres.api.ts
+// was rebuilt against the real SinistresController contract.
+//
+// The real capability already exists: BordereauxService.generate() with
+// type: 'SINISTRE_FACULTATIVE' builds a genuine bordereau from a single
+// affaire's settled claims (see bordereaux.service.ts). That flow lives in
+// the Bordereaux module itself (BordereauGenerateModal.tsx), not here —
+// this component's old UI (cedante + free date-range, no affaire selection)
+// doesn't match how the real endpoint is scoped (one affaireId, required).
+//
+// Not wired into App.tsx or features/sinistres/index.ts — kept only so the
+// file compiles if anything still references it. Safe to delete.
 export default function SinistreBordereau() {
-  const [formData, setFormData] = useState({
-    startDate: '',
-    endDate: '',
-    reassureurId: '',
-    cedanteId: '',
-  });
-  const [bordereau, setBordereau] = useState<any>(null);
-
-  const generateMutation = useMutation({
-    mutationFn: (data: any) => sinistresApi.generateBordereau(data),
-    onSuccess: (response) => {
-      setBordereau((response.data as any)?.data || response.data);
-    },
-  });
-
-  const generatePDFMutation = useMutation({
-    mutationFn: (data: any) => sinistresApi.generateBordereauPDF(data),
-    onSuccess: (response) => {
-      const data = (response.data as any)?.data || response.data;
-      setBordereau(data);
-      if (data.pdfUrl) {
-        window.open(data.pdfUrl, '_blank');
-      }
-    },
-  });
-
-  const handleGenerate = () => {
-    generateMutation.mutate(formData);
-  };
-
-  const handleGeneratePDF = () => {
-    generatePDFMutation.mutate(formData);
-  };
+  const navigate = useNavigate();
 
   return (
-    <div className="p-8 space-y-6">
-      <h1 className="text-3xl font-bold text-gray-800">Génération Bordereau Sinistres</h1>
-
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-lg font-semibold mb-4">Paramètres</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Date Début</label>
-            <input
-              type="date"
-              value={formData.startDate}
-              onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Date Fin</label>
-            <input
-              type="date"
-              value={formData.endDate}
-              onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-              className="w-full border rounded-lg px-3 py-2"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-4 mt-4">
-          <button
-            onClick={handleGenerate}
-            disabled={!formData.startDate || !formData.endDate || generateMutation.isPending}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            <FileText size={18} />
-            {generateMutation.isPending ? 'Génération...' : 'Générer Aperçu'}
-          </button>
-          <button
-            onClick={handleGeneratePDF}
-            disabled={!formData.startDate || !formData.endDate || generatePDFMutation.isPending}
-            className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50"
-          >
-            <Download size={18} />
-            {generatePDFMutation.isPending ? 'Génération...' : 'Générer PDF'}
-          </button>
-        </div>
+    <div className="p-8">
+      <div className="max-w-lg mx-auto text-center bg-white rounded-lg shadow p-8">
+        <FileText className="mx-auto text-blue-500 mb-4" size={40} />
+        <h2 className="text-xl font-semibold text-gray-800 mb-2">
+          Génération de bordereau sinistre
+        </h2>
+        <p className="text-gray-600 mb-6">
+          La génération de bordereaux (y compris pour les sinistres facultatifs)
+          se fait désormais depuis le module Bordereaux, à partir d'une affaire
+          spécifique.
+        </p>
+        <button
+          onClick={() => navigate('/bordereaux')}
+          className="inline-flex items-center gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-lg hover:bg-blue-700"
+        >
+          Aller au module Bordereaux
+          <ArrowRight size={18} />
+        </button>
       </div>
-
-      {bordereau && (
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold mb-4">Bordereau {bordereau.numero}</h3>
-          
-          <div className="mb-4">
-            <p><strong>Date d'émission:</strong> {new Date(bordereau.dateEmission).toLocaleDateString('fr-FR')}</p>
-            <p><strong>Période:</strong> {new Date(bordereau.periode.debut).toLocaleDateString('fr-FR')} - {new Date(bordereau.periode.fin).toLocaleDateString('fr-FR')}</p>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="border px-4 py-2 text-left">N° Sinistre</th>
-                  <th className="border px-4 py-2 text-left">Cédante</th>
-                  <th className="border px-4 py-2 text-left">Affaire</th>
-                  <th className="border px-4 py-2 text-left">Date</th>
-                  <th className="border px-4 py-2 text-right">Montant Total</th>
-                  <th className="border px-4 py-2 text-right">Réassurance</th>
-                  <th className="border px-4 py-2 text-right">Réglé</th>
-                  <th className="border px-4 py-2 text-right">Restant</th>
-                  <th className="border px-4 py-2 text-left">Statut</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bordereau.sinistres.map((s: any) => (
-                  <tr key={s.numero}>
-                    <td className="border px-4 py-2">{s.numero}</td>
-                    <td className="border px-4 py-2">{s.cedante}</td>
-                    <td className="border px-4 py-2">{s.affaire}</td>
-                    <td className="border px-4 py-2">{new Date(s.dateSurvenance).toLocaleDateString('fr-FR')}</td>
-                    <td className="border px-4 py-2 text-right">{formatCurrency(s.montantTotal)}</td>
-                    <td className="border px-4 py-2 text-right">{formatCurrency(s.montantReassurance)}</td>
-                    <td className="border px-4 py-2 text-right">{formatCurrency(s.montantRegle)}</td>
-                    <td className="border px-4 py-2 text-right">{formatCurrency(s.montantRestant)}</td>
-                    <td className="border px-4 py-2">{s.statut}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot className="bg-gray-50 font-bold">
-                <tr>
-                  <td colSpan={4} className="border px-4 py-2">TOTAUX</td>
-                  <td className="border px-4 py-2 text-right">{formatCurrency(bordereau.totaux.montantTotal)}</td>
-                  <td className="border px-4 py-2 text-right">{formatCurrency(bordereau.totaux.montantReassurance)}</td>
-                  <td className="border px-4 py-2 text-right">{formatCurrency(bordereau.totaux.montantRegle)}</td>
-                  <td className="border px-4 py-2 text-right">{formatCurrency(bordereau.totaux.montantRestant)}</td>
-                  <td className="border px-4 py-2">{bordereau.totaux.nombreSinistres} sinistres</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   OrdrePaiement, CreateOrdrePaiementInput, OrdreVirementStatut,
   FourStepPaymentResult, CashFlowReport, AgingReport, AmlFlaggedEntry,
   ImportBankMovementInput, PaginatedResponse, Encaissement as EncaissementT, Decaissement as DecaissementT,
+  BankMovement, FinancialMovementType,
 } from '../types/finance.types';
 
 interface ListParams { page?: number; limit?: number }
@@ -104,6 +105,8 @@ export const financesApi = {
     api.post<FourStepPaymentResult>(`/finances/four-step/${affaireId}`),
 
   // ── Bank reconciliation ────────────────────────────────────────
+  listBankMovements: (params?: ListParams & { reconciled?: boolean; type?: FinancialMovementType }) =>
+    api.get<PaginatedResponse<BankMovement>>('/finances/bank-movements', { params }),
   getUnreconciled: () =>
     api.get<{ unreconciled: { encaissements: Encaissement[]; decaissements: Decaissement[] } }>(
       '/finances/reconciliation/unreconciled',

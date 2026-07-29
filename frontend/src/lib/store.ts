@@ -50,12 +50,13 @@ export type Permission =
   | 'donnees:read' | 'donnees:create' | 'donnees:update' | 'donnees:delete'
   | 'ged:read' | 'ged:upload' | 'ged:delete'
   | 'system:read' | 'system:update' | 'users:manage'
-  | 'reporting:read' | 'reporting:export';
+  | 'reporting:read' | 'reporting:export'
+  | 'bordereaux:read' | 'bordereaux:create' | 'bordereaux:validate' | 'bordereaux:pay';
 
 // ── Role → permission map ───────────────────────────────────────────────────────
 // Mirrors ROLE_PERMISSIONS from the backend. Keep in sync with server config.
 
-const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
+const ROLE_PERMISSIONS: Partial<Record<UserRole, Permission[]>> = {
   SUPER_ADMIN: [
     'affaires:create', 'affaires:read', 'affaires:update', 'affaires:delete',
     'affaires:validate', 'affaires:place',
@@ -68,6 +69,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'ged:read', 'ged:upload', 'ged:delete',
     'system:read', 'system:update', 'users:manage',
     'reporting:read', 'reporting:export',
+    'bordereaux:read', 'bordereaux:create', 'bordereaux:validate', 'bordereaux:pay',
   ],
   DIRECTION_REASSURANCE: [
     'affaires:create', 'affaires:read', 'affaires:update', 'affaires:delete',
@@ -77,6 +79,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'donnees:read', 'donnees:create', 'donnees:update',
     'ged:read', 'ged:upload',
     'reporting:read',
+    'bordereaux:read', 'bordereaux:create', 'bordereaux:validate',
   ],
   DIRECTION_COMMERCIALE: [
     'affaires:create', 'affaires:read',
@@ -84,15 +87,22 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'ged:read', 'ged:upload',
   ],
   DIRECTION_GENERALE: [
-    'affaires:read', 'sinistres:read', 'finances:read', 'comptabilite:read',
+    'affaires:read', 'sinistres:read',
+    // NEW (Sinistres pass): mirrors the backend fix — DIRECTION_GENERALE is
+    // the actual approver of sinistres per SinistreValidationService's own
+    // actor labels and notification target, but never had this permission.
+    'sinistres:validate',
+    'finances:read', 'comptabilite:read',
     'donnees:read', 'ged:read',
     'reporting:read', 'reporting:export',
+    'bordereaux:read',
   ],
   DAF: [
     'finances:read', 'finances:create', 'finances:update', 'finances:approve',
     'comptabilite:read', 'comptabilite:create',
     'comptabilite:validate', 'comptabilite:export',
     'ged:read', 'ged:upload',
+    'bordereaux:read', 'bordereaux:pay',
   ],
   SERVICE_IRDS: [
     'sinistres:read', 'sinistres:update', 'sinistres:close',

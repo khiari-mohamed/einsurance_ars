@@ -77,7 +77,6 @@ export class SinistresService {
   }
 
   async create(dto: CreateSinistreDto, userId: string) {
-    // Validate affaire exists and is placed
     const affaire = await this.prisma.affaire.findUnique({
       where: { id: dto.affaireId },
       include: { reassureurs: { include: { reassureur: true } } },
@@ -102,11 +101,14 @@ export class SinistresService {
         reserves: dto.reserves,
         partReassureurs: dto.partReassureurs,
         appelAuComptant: dto.appelAuComptant ?? false,
+        // NEW (Sinistres pass)
+        description: dto.description,
+        cause: dto.cause,
+        lieu: dto.lieu,
       },
       include: { affaire: { include: { cedante: true } } },
     });
 
-    // Add initial event to timeline
     await this.prisma.sinistreEvent.create({
       data: {
         sinistreId: sinistre.id,
@@ -117,7 +119,6 @@ export class SinistresService {
       },
     });
 
-    // Audit
     await this.prisma.sinistreAudit.create({
       data: {
         sinistreId: sinistre.id,
@@ -147,6 +148,10 @@ export class SinistresService {
         ...(dto.periodeCouverture !== undefined && { periodeCouverture: dto.periodeCouverture }),
         ...(dto.numerPolice !== undefined && { numerPolice: dto.numerPolice }),
         ...(dto.recoveryMethod !== undefined && { recoveryMethod: dto.recoveryMethod }),
+        // NEW (Sinistres pass)
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.cause !== undefined && { cause: dto.cause }),
+        ...(dto.lieu !== undefined && { lieu: dto.lieu }),
       },
     });
 
@@ -217,6 +222,11 @@ export class SinistresService {
 
   advanceCashCall(id: string, statut: CashCallStatut, userId: string, note?: string) {
     return this.cashCallSvc.advanceStatut(id, statut, userId, note);
+  }
+
+  // NEW (Sinistres pass)
+  recordCashCallPayment(id: string, montantRecu: number, userId: string) {
+    return this.cashCallSvc.recordPayment(id, montantRecu, userId);
   }
 
   getEvents(sinistreId: string) {

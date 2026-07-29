@@ -7,10 +7,14 @@ import { AssureContact } from '../../types/assure.types';
 interface ContactModalProps {
   assureId: string;
   contact: AssureContact | null;
+  /** Full current contacts array from the loaded assure — needed to build the
+   * replacement payload for PUT /master-data/assures/:id (the backend has no
+   * individual contact sub-routes; it does a full deleteMany+create replace). */
+  currentContacts: AssureContact[];
   onClose: () => void;
 }
 
-export default function ContactModal({ assureId, contact, onClose }: ContactModalProps) {
+export default function ContactModal({ assureId, contact, currentContacts, onClose }: ContactModalProps) {
   const queryClient = useQueryClient();
   // FIX: this was the worst field-matching bug in the batch — the initial state
   // used `fonction`, `telephone`, `mobile`, `principal`, none of which exist on
@@ -36,10 +40,24 @@ export default function ContactModal({ assureId, contact, onClose }: ContactModa
 
   const mutation = useMutation({
     mutationFn: (data: Partial<AssureContact>) => {
+      // The backend has no individual contact sub-routes — PUT /assures/:id
+      // does a full deleteMany+create replace on the contacts array.
+      let updatedContacts: Partial<AssureContact>[];
       if (contact) {
-        return masterDataApi.assures.updateContact(assureId, contact.id, data);
+        // Edit: replace the matching entry, strip the id so Prisma recreates it
+        updatedContacts = currentContacts.map((c) =>
+          c.id === contact.id
+            ? { nom: data.nom, prenom: data.prenom, poste: data.poste, telephoneFixe: data.telephoneFixe, telephoneMobile: data.telephoneMobile, email: data.email, isDefault: data.isDefault }
+            : { nom: c.nom, prenom: c.prenom, poste: c.poste, telephoneFixe: c.telephoneFixe, telephoneMobile: c.telephoneMobile, email: c.email, isDefault: c.isDefault },
+        );
+      } else {
+        // Add: append the new contact
+        updatedContacts = [
+          ...currentContacts.map((c) => ({ nom: c.nom, prenom: c.prenom, poste: c.poste, telephoneFixe: c.telephoneFixe, telephoneMobile: c.telephoneMobile, email: c.email, isDefault: c.isDefault })),
+          { nom: data.nom, prenom: data.prenom, poste: data.poste, telephoneFixe: data.telephoneFixe, telephoneMobile: data.telephoneMobile, email: data.email, isDefault: data.isDefault },
+        ];
       }
-      return masterDataApi.assures.addContact(assureId, data);
+      return masterDataApi.assures.update(assureId, { contacts: updatedContacts } as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assures', assureId] });

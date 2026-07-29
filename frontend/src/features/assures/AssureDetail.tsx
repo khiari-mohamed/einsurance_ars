@@ -187,7 +187,12 @@ export default function AssureDetail() {
   });
 
   const deleteContactMutation = useMutation({
-    mutationFn: (contactId: string) => assuresApi.deleteContact(id!, contactId),
+    mutationFn: (contactId: string) => {
+      const updatedContacts = (assure?.contacts ?? [])
+        .filter((c) => c.id !== contactId)
+        .map((c) => ({ nom: c.nom, prenom: c.prenom, poste: c.poste, telephoneFixe: c.telephoneFixe, telephoneMobile: c.telephoneMobile, email: c.email, isDefault: c.isDefault }));
+      return assuresApi.update(id!, { contacts: updatedContacts } as any);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['assures', id] });
     },
@@ -927,6 +932,7 @@ export default function AssureDetail() {
         <ContactModal
           assureId={id!}
           contact={editingContact}
+          currentContacts={assure.contacts ?? []}
           onClose={() => {
             setIsContactModalOpen(false);
             setEditingContact(null);
