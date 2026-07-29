@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X, Upload, File } from 'lucide-react';
 import { gedApi } from '../../api/ged.api';
-import { EntityType, DocumentType, ConfidentialityLevel } from '../../types/ged.types';
+import { EntityType, DocumentType } from '../../types/ged.types';
 
 interface Props {
   isOpen: boolean;
@@ -14,9 +14,7 @@ interface Props {
 export default function DocumentUploadModal({ isOpen, onClose, entityType, entityId, onSuccess }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [documentType, setDocumentType] = useState<DocumentType>(DocumentType.OTHER);
-  const [confidentialityLevel, setConfidentialityLevel] = useState<ConfidentialityLevel>(ConfidentialityLevel.INTERNAL);
-  const [description, setDescription] = useState('');
-  const [tags, setTags] = useState('');
+  const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(false);
 
   if (!isOpen) return null;
@@ -31,15 +29,12 @@ export default function DocumentUploadModal({ isOpen, onClose, entityType, entit
         entityType,
         entityId,
         documentType,
-        confidentialityLevel,
-        description: description || undefined,
-        tags: tags ? tags.split(',').map(t => t.trim()) : undefined,
+        comment: comment || undefined,
       });
       onSuccess?.();
       onClose();
       setFile(null);
-      setDescription('');
-      setTags('');
+      setComment('');
     } catch (error) {
       console.error('Upload failed:', error);
       alert('Échec du téléchargement');
@@ -113,37 +108,12 @@ export default function DocumentUploadModal({ isOpen, onClose, entityType, entit
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Niveau de confidentialité</label>
-            <select
-              value={confidentialityLevel}
-              onChange={(e) => setConfidentialityLevel(e.target.value as ConfidentialityLevel)}
-              className="w-full border rounded-lg px-3 py-2"
-            >
-              <option value={ConfidentialityLevel.PUBLIC}>Public</option>
-              <option value={ConfidentialityLevel.INTERNAL}>Interne</option>
-              <option value={ConfidentialityLevel.CONFIDENTIAL}>Confidentiel</option>
-              <option value={ConfidentialityLevel.SECRET}>Secret</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Description</label>
+            <label className="block text-sm font-medium mb-2">Commentaire</label>
             <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
               className="w-full border rounded-lg px-3 py-2"
               rows={3}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Tags (séparés par des virgules)</label>
-            <input
-              type="text"
-              value={tags}
-              onChange={(e) => setTags(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2"
-              placeholder="urgent, contrat, 2024"
             />
           </div>
 

@@ -23,12 +23,12 @@ export default function DocumentUpload() {
 
   const loadData = async () => {
     try {
-      const [docs, stats] = await Promise.all([
+      const [docsResponse, statsResponse] = await Promise.all([
         gedApi.getDocuments(filters),
         gedApi.getStatistics(),
       ]);
-      setDocuments(docs);
-      setStatistics(stats);
+      setDocuments(docsResponse.data.data);
+      setStatistics(statsResponse.data);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -39,8 +39,8 @@ export default function DocumentUpload() {
   const handleSearch = async () => {
     setLoading(true);
     try {
-      const docs = await gedApi.getDocuments({ ...filters, search: searchQuery });
-      setDocuments(docs);
+      const response = await gedApi.getDocuments({ ...filters, search: searchQuery });
+      setDocuments(response.data.data);
     } catch (error) {
       console.error('Search failed:', error);
     } finally {
@@ -130,7 +130,7 @@ export default function DocumentUpload() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600">Espace Utilisé</p>
-                <p className="text-3xl font-bold text-gray-800">{formatBytes(statistics.totalSize)}</p>
+                <p className="text-3xl font-bold text-gray-800">{formatBytes(statistics.totalSizeBytes)}</p>
               </div>
               <HardDrive className="w-12 h-12 text-green-600" />
             </div>
@@ -142,7 +142,7 @@ export default function DocumentUpload() {
               <div className="space-y-1">
                 {statistics.byType.slice(0, 3).map((item, i) => (
                   <div key={i} className="flex justify-between text-sm">
-                    <span className="text-gray-600">{item.type}</span>
+                    <span className="text-gray-600">{item.documentType ?? 'Sans type'}</span>
                     <span className="font-semibold">{item.count}</span>
                   </div>
                 ))}
@@ -223,15 +223,15 @@ export default function DocumentUpload() {
                       />
                       <FileText className="w-5 h-5 text-blue-600" />
                       <div className="flex-1">
-                        <h3 className="font-medium">{doc.fileName}</h3>
+                        <h3 className="font-medium">{doc.originalName ?? doc.nom}</h3>
                         <p className="text-sm text-gray-600">
-                          {doc.documentType.replace(/_/g, ' ')} • {doc.entityType}
+                          {(doc.documentType ?? 'OTHER').replace(/_/g, ' ')} • {doc.links?.[0]?.entityType ?? '—'}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-sm text-gray-600">
-                        {new Date(doc.uploadedAt).toLocaleDateString('fr-FR')}
+                        {new Date(doc.createdAt).toLocaleDateString('fr-FR')}
                       </div>
                       <button
                         onClick={() => setShareDoc(doc)}
@@ -262,7 +262,7 @@ export default function DocumentUpload() {
           isOpen={true}
           onClose={() => setShareDoc(null)}
           documentId={shareDoc.id}
-          documentName={shareDoc.fileName}
+          documentName={shareDoc.originalName ?? shareDoc.nom}
         />
       )}
     </div>

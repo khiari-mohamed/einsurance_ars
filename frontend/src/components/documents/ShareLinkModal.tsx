@@ -30,7 +30,7 @@ export default function ShareLinkModal({ isOpen, onClose, documentId, documentNa
         email: email || undefined,
         maxDownloads: maxDownloads ? parseInt(maxDownloads) : undefined,
       });
-      const fullUrl = `${window.location.origin}${result.url}`;
+      const fullUrl = `${window.location.origin}${result.data.url}`;
       setShareLink(fullUrl);
     } catch (error) {
       console.error('Failed to create share link:', error);

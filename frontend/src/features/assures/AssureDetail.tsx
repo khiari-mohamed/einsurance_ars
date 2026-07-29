@@ -986,7 +986,7 @@ export default function AssureDetail() {
       <DocumentUploadModal
         isOpen={isDocumentUploadOpen}
         onClose={() => setIsDocumentUploadOpen(false)}
-        entityType={EntityType.CLIENT}
+        entityType={EntityType.ASSURE}
         entityId={id!}
         onSuccess={() => {
           queryClient.invalidateQueries({ queryKey: ['assures', id] });

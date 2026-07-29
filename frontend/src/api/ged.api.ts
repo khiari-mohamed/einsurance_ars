@@ -11,7 +11,7 @@
 //   Document[].
 import api from '../lib/api';
 import {
-  Document, DocumentLink, UploadDocumentDto, UpdateDocumentDto, SearchDocumentDto,
+  Document, DocumentLink, UpdateDocumentDto, SearchDocumentDto,
   PaginatedDocuments, DocumentStatistics, DocumentEntityType, DocumentChecklist,
   ShareLinkConfig, ShareLinkResult,
 } from '../types/ged.types';

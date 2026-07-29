@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, Trash2, FileText } from 'lucide-react';
+import { CheckCircle, Trash2 } from 'lucide-react';
 import comptabiliteApi from '@/api/comptabilite.api';
 import { formatCurrency, formatDate } from '@/lib/currency';
 import { toast } from 'sonner';

@@ -19,8 +19,11 @@ export default function DocumentList({ entityType, entityId, onRefresh }: Props)
 
   const loadDocuments = async () => {
     try {
-      const data = await gedApi.getEntityDocuments(entityType, entityId);
-      setDocuments(data);
+      const response = await gedApi.getEntityDocuments(entityType, entityId);
+      const documents = response.data
+        .map((link) => link.document)
+        .filter((document): document is Document => Boolean(document));
+      setDocuments(documents);
     } catch (error) {
       console.error('Failed to load documents:', error);
     } finally {
@@ -34,7 +37,7 @@ export default function DocumentList({ entityType, entityId, onRefresh }: Props)
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = doc.fileName;
+      a.download = doc.originalName ?? doc.nom;
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (error) {
@@ -93,37 +96,23 @@ export default function DocumentList({ entityType, entityId, onRefresh }: Props)
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-blue-600" />
-                <h3 className="font-medium">{doc.fileName}</h3>
+                <h3 className="font-medium">{doc.originalName ?? doc.nom}</h3>
                 <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                  {doc.documentType.replace(/_/g, ' ')}
+                  {(doc.documentType ?? 'OTHER').replace(/_/g, ' ')}
                 </span>
               </div>
               
               <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
                 <span className="flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
-                  {formatDate(doc.uploadedAt)}
+                  {formatDate(doc.createdAt)}
                 </span>
                 <span className="flex items-center gap-1">
                   <User className="w-4 h-4" />
-                  {doc.uploadedBy.firstName} {doc.uploadedBy.lastName}
+                  {doc.uploadedById ?? '—'}
                 </span>
-                <span>{formatFileSize(doc.fileSize)}</span>
+                <span>{formatFileSize(doc.sizeBytes ?? 0)}</span>
               </div>
-
-              {doc.description && (
-                <p className="mt-2 text-sm text-gray-600">{doc.description}</p>
-              )}
-
-              {doc.tags && doc.tags.length > 0 && (
-                <div className="mt-2 flex gap-1">
-                  {doc.tags.map((tag, i) => (
-                    <span key={i} className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
 
             <div className="flex gap-2 ml-4">

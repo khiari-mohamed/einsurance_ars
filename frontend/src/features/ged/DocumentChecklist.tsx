@@ -42,8 +42,8 @@ export default function DocumentChecklist({ affaireId, affaireNumero }: Document
     setLoading(true);
     setError(null);
     try {
-      const data = await gedApi.getChecklist(affaireId);
-      setChecklist(data);
+      const response = await gedApi.getChecklist(affaireId);
+      setChecklist(response.data);
     } catch (err) {
       // FIX: previously fell back to a hand-guessed, hardcoded checklist
       // built client-side (initializeChecklist()). That silently diverged

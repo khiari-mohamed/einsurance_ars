@@ -6,11 +6,9 @@ import { traitesApi } from '../../api/traites.api';
 import { formatCurrency } from '../../lib/currency';
 import {
   statutColors, statutLabels, AffaireStatut, reassuranceTypeLabels,
-  formeCouvertureLabels, periodiciteLabels, Periodicite, ReassuranceType,
+  formeCouvertureLabels, periodiciteLabels, Periodicite,
 } from '../../types/affaire.types';
-import { TraiteListItem } from '../../types/traite.types';
 import AffaireCreateModal from '../affaires/AffaireCreateModal';
-import { AffaireType } from '../../types/affaire.types';
 
 const LIMIT = 20;
 
@@ -62,9 +60,6 @@ export default function TraitesList() {
   const items = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
-
-  const commissionTotal = (item: TraiteListItem) =>
-    item.affaire.reassureurs.reduce((sum, r) => sum + (r.commissionArs ?? 0), 0);
 
   return (
     <div className="p-4 lg:p-6">

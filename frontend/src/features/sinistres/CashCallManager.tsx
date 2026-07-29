@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle, Clock, Send, PhoneCall, DollarSign, FileCheck } from 'lucide-react';
+import { CheckCircle, Clock, Send, PhoneCall, DollarSign, FileCheck } from 'lucide-react';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';

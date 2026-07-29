@@ -12,8 +12,8 @@ export default function ComplianceDashboard() {
 
   const loadReport = async () => {
     try {
-      const data = await gedApi.getMissingDocumentsReport();
-      setReport(data);
+      const response = await gedApi.getMissingDocumentsReport();
+      setReport(response.data);
     } catch (error) {
       console.error('Failed to load compliance report:', error);
     } finally {
