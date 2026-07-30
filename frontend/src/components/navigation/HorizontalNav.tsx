@@ -39,7 +39,7 @@ export default function HorizontalNav({ onOpenAppearance }: Props) {
   }, []);
 
   return (
-    <header className="h-16 bg-white dark:bg-[#16161f] border-b border-gray-200 dark:border-[#262636] flex items-center px-4 lg:px-6 gap-1 relative z-[60] transition-colors">
+    <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-[#16161f] border-b border-gray-200 dark:border-[#262636] flex items-center px-4 lg:px-6 gap-1 z-[60] transition-colors">
       <img src="/Image1.png" alt="ARS" className="w-8 h-8 object-contain flex-shrink-0 mr-2" />
       <span className="font-bold text-gray-900 dark:text-white text-[14px] mr-4 hidden lg:block whitespace-nowrap">
         {t('sidebar.appName')}

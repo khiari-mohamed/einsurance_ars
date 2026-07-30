@@ -9,6 +9,8 @@ import * as XLSX from 'xlsx';
 import { assuresApi } from '../../api/master-data.api';
 import { Assure } from '../../types/assure.types';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import CountrySelect from '../../components/ui/CountrySelect';
+import CurrencySelect from '../../components/ui/CurrencySelect';
 
 type Statut = 'ACTIVE' | 'INACTIVE' | 'ALL';
 const LIMIT = 20;
@@ -62,6 +64,12 @@ export default function AssuresList() {
   const assures = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
+
+  const hasForme = assures.some((a: Assure) => a.formeJuridique);
+  const hasCapital = assures.some((a: Assure) => a.capital);
+  const freeFieldKeys = Array.from(
+    new Set(assures.flatMap((a: Assure) => Object.keys(a.freeFields ?? {})))
+  ) as string[];
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => assuresApi.delete(id),
@@ -265,7 +273,12 @@ export default function AssuresList() {
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Code</th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Raison Sociale</th>
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">RNE</th>
+                    {hasForme && <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Forme Juridique</th>}
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Pays</th>
+                    {hasCapital && <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Capital</th>}
+                    {freeFieldKeys.map((k) => (
+                      <th key={k} className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">{k}</th>
+                    ))}
                     <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Statut</th>
                     <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                   </tr>
@@ -284,7 +297,14 @@ export default function AssuresList() {
                       <td className="px-4 py-3 text-[13px] font-medium text-gray-900">{assure.code}</td>
                       <td className="px-4 py-3 text-[13px] text-gray-900">{assure.raisonSociale}</td>
                       <td className="px-4 py-3 text-[13px] text-gray-600 font-mono">{assure.rne || '-'}</td>
+                      {hasForme && <td className="px-4 py-3 text-[13px] text-gray-600">{assure.formeJuridique || '-'}</td>}
                       <td className="px-4 py-3 text-[13px] text-gray-600">{assure.pays || '-'}</td>
+                      {hasCapital && <td className="px-4 py-3 text-[13px] text-gray-600">{assure.capital ? assure.capital.toLocaleString('fr-TN') : '-'}</td>}
+                      {freeFieldKeys.map((k) => (
+                        <td key={k} className="px-4 py-3 text-[13px] text-gray-600">
+                          {assure.freeFields?.[k] != null ? String(assure.freeFields[k]) : '-'}
+                        </td>
+                      ))}
                       <td className="px-4 py-3 text-[13px]">
                         <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
                           assure.isActive === false ? 'bg-gray-100 text-gray-500' : 'bg-green-50 text-green-700'
@@ -552,12 +572,9 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
 
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays</label>
-              <input
-                type="text"
-                name="pays"
+              <CountrySelect
                 value={formData.pays || ''}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                onChange={(v) => setFormData((prev) => ({ ...prev, pays: v }))}
               />
             </div>
 
@@ -574,33 +591,35 @@ function AssureModal({ assure, onClose }: AssureModalProps) {
 
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise par Défaut</label>
-              <select
-                name="deviseParDefaut"
+              <CurrencySelect
                 value={formData.deviseParDefaut || 'TND'}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="TND">TND</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-              </select>
+                onChange={(v) => setFormData((prev) => ({ ...prev, deviseParDefaut: v }))}
+              />
             </div>
 
             <div className="md:col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Champs Libres (clé/valeur)</label>
               <div className="space-y-2">
-                {Object.entries(formData.freeFields || {}).map(([key, value]) => (
-                  <div key={key} className="flex gap-2">
+                {Object.entries(formData.freeFields || {}).map(([key, value], idx) => (
+                  <div key={idx} className="flex gap-2">
                     <input
                       type="text"
                       value={key}
-                      disabled
-                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px] bg-gray-50 cursor-not-allowed"
+                      placeholder="Nom du champ"
+                      onChange={(e) => {
+                        const newKey = e.target.value;
+                        const entries = Object.entries(formData.freeFields || {});
+                        const rebuilt = Object.fromEntries(
+                          entries.map(([k, v]) => (k === key ? [newKey, v] : [k, v]))
+                        );
+                        setFormData((prev) => ({ ...prev, freeFields: rebuilt }));
+                      }}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                     <input
                       type="text"
                       value={typeof value === 'string' ? value : JSON.stringify(value)}
+                      placeholder="Valeur"
                       onChange={(e) => {
                         setFormData((prev) => ({
                           ...prev,
@@ -962,8 +981,10 @@ interface BulkEditModalProps {
 function BulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
   const [pays, setPays] = useState('');
   const [formeJuridique, setFormeJuridique] = useState('');
+  const [deviseParDefaut, setDeviseParDefaut] = useState('');
   const [applyPays, setApplyPays] = useState(false);
   const [applyForme, setApplyForme] = useState(false);
+  const [applyDevise, setApplyDevise] = useState(false);
   const [statutAction, setStatutAction] = useState<'NONE' | 'ACTIVATE' | 'DEACTIVATE'>('NONE');
   const [error, setError] = useState('');
 
@@ -983,6 +1004,7 @@ function BulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
     const data: any = {};
     if (applyPays) data.pays = pays;
     if (applyForme) data.formeJuridique = formeJuridique;
+    if (applyDevise) data.deviseParDefaut = deviseParDefaut;
     if (statutAction === 'ACTIVATE') data.isActive = true;
     if (statutAction === 'DEACTIVATE') data.isActive = false;
 
@@ -1027,12 +1049,10 @@ function BulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
               />
               <div className="flex-1">
                 <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays</label>
-                <input
-                  type="text"
+                <CountrySelect
                   value={pays}
-                  onChange={(e) => setPays(e.target.value)}
+                  onChange={setPays}
                   disabled={!applyPays}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
                 />
               </div>
             </div>
@@ -1052,6 +1072,23 @@ function BulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
                   onChange={(e) => setFormeJuridique(e.target.value)}
                   disabled={!applyForme}
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={applyDevise}
+                onChange={(e) => setApplyDevise(e.target.checked)}
+                className="mt-2.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <div className="flex-1">
+                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise par Défaut</label>
+                <CurrencySelect
+                  value={deviseParDefaut}
+                  onChange={setDeviseParDefaut}
+                  disabled={!applyDevise}
                 />
               </div>
             </div>

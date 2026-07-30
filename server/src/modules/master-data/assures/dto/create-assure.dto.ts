@@ -1,5 +1,5 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, ValidateNested } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsNumber, IsBoolean, ValidateNested, IsObject } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 // Shared across Assure / Cedante / Reassureur / CoCourtier — Section 5.7 (doc consolidé).
@@ -34,7 +34,23 @@ export class CreateAssureDto {
   @IsOptional() @IsString() pays?: string;
   @IsOptional() @IsNumber() capital?: number;
   @IsOptional() @IsString() deviseParDefaut?: string;
-  @IsOptional() freeFields?: Record<string, any>;
+  @IsOptional()
+  @IsObject()
+  @Transform(({ value }) => {
+    // Allow string, number, boolean values — reject nested objects/arrays
+    // (the real attack surface). Drop oversized keys/values silently.
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const safe: Record<string, string | number | boolean> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (typeof k !== 'string' || k.trim().length === 0 || k.length > 100) continue;
+      if (v !== null && v !== undefined && typeof v !== 'object') {
+        const strVal = String(v);
+        if (strVal.length <= 500) safe[k.trim()] = v as string | number | boolean;
+      }
+    }
+    return safe;
+  })
+  freeFields?: Record<string, string | number | boolean>;
   @ApiPropertyOptional({ type: [CreateContactDto] })
   @IsOptional() @ValidateNested({ each: true }) @Type(() => CreateContactDto)
   contacts?: CreateContactDto[];

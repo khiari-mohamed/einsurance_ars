@@ -16,6 +16,7 @@ import * as XLSX from 'xlsx';
 import { assuresApi } from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
 import { useAuthStore } from '../../lib/store';
+import { BASE_URL } from '../../lib/api';
 import { Assure, AssureContact } from '../../types/assure.types';
 import { EntityType } from '../../types/ged.types';
 import ContactModal from './ContactModal';
@@ -72,7 +73,7 @@ export default function AssureDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
   
   const canOverrideCode = user?.role === 'SUPER_ADMIN';
 
@@ -133,7 +134,7 @@ export default function AssureDetail() {
     if (!value) return '';
     const lower = value.toLowerCase();
     if (lower === 'facultative') return 'Facultative';
-    if (lower === 'traitee' || lower === 'traite') return 'Traité';
+    if (lower === 'traite' || lower === 'traitee' || lower === 'traité') return 'Traité';
     return value[0]?.toUpperCase() + value.slice(1).toLowerCase();
   };
 
@@ -161,10 +162,11 @@ export default function AssureDetail() {
 
   const formatContractSubtitle = (contract: any) => {
     const parts: string[] = [];
-    const categoryLabel = normalizeCategoryLabel(contract.category);
+    const categoryLabel = normalizeCategoryLabel(contract.type);
     if (categoryLabel) parts.push(categoryLabel);
 
-    const typeLabel = normalizeTypeLabel(contract.type);
+    const reassuranceType = contract.facultativeData?.reassuranceType ?? contract.traiteData?.reassuranceType;
+    const typeLabel = normalizeTypeLabel(reassuranceType);
     if (typeLabel && typeLabel !== categoryLabel) parts.push(typeLabel);
 
     if (contract.cedante?.raisonSociale) {
@@ -270,15 +272,13 @@ export default function AssureDetail() {
       }
 
       if (typeFilter !== 'ALL') {
-        const rawCategory = (contract.category || '').toLowerCase();
-        const isFacultative = rawCategory === 'facultative';
-        const isTraite = rawCategory === 'traitee' || rawCategory === 'traite';
-        if (typeFilter === 'FACULTATIVE' && !isFacultative) return false;
-        if (typeFilter === 'TRAITE' && !isTraite) return false;
+        if (typeFilter === 'FACULTATIVE' && contract.type !== 'FACULTATIVE') return false;
+        if (typeFilter === 'TRAITE' && contract.type !== 'TRAITE') return false;
       }
 
       if (reassuranceFilter !== 'ALL') {
-        const rawType = (contract.type || '').toLowerCase();
+        const reassuranceType = contract.facultativeData?.reassuranceType ?? contract.traiteData?.reassuranceType ?? '';
+        const rawType = reassuranceType.toLowerCase();
         const isProp = rawType === 'proportionnel';
         const isNonProp = rawType === 'non_proportionnel' || rawType === 'non proportionnel';
         if (reassuranceFilter === 'PROPORTIONNEL' && !isProp) return false;
@@ -330,17 +330,13 @@ export default function AssureDetail() {
   const categoryChartData = useMemo(() => {
     let facultative = 0;
     let traite = 0;
-    let autre = 0;
     contracts.forEach((c: any) => {
-      const raw = (c.category || '').toLowerCase();
-      if (raw === 'facultative') facultative++;
-      else if (raw === 'traitee' || raw === 'traite') traite++;
-      else autre++;
+      if (c.type === 'FACULTATIVE') facultative++;
+      else if (c.type === 'TRAITE') traite++;
     });
     return [
       { name: 'Facultative', value: facultative },
       { name: 'Traité', value: traite },
-      ...(autre > 0 ? [{ name: 'Autre', value: autre }] : []),
     ].filter((d) => d.value > 0);
   }, [contracts]);
 
@@ -360,7 +356,7 @@ export default function AssureDetail() {
 
     const rows = filteredContracts.map((c: any) => ({
       Référence: formatContractTitle(c),
-      Catégorie: normalizeCategoryLabel(c.category),
+      Catégorie: normalizeCategoryLabel(c.type),
       Type: normalizeTypeLabel(c.type),
       Cédante: c.cedante?.raisonSociale || '-',
       'Police cédante': c.numeroPoliceCedante || '-',
@@ -711,16 +707,27 @@ export default function AssureDetail() {
                         >
                           <Eye size={14} />
                         </button>
-                        <a
-                          href={doc.filePath}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          download
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch(`${BASE_URL}/uploads/${doc.id}/download`, {
+                                headers: { Authorization: `Bearer ${token}` },
+                              });
+                              if (!res.ok) return;
+                              const blob = await res.blob();
+                              const url = URL.createObjectURL(blob);
+                              const a = document.createElement('a');
+                              a.href = url;
+                              a.download = doc.originalName || doc.nom || 'document';
+                              a.click();
+                              URL.revokeObjectURL(url);
+                            } catch { /* ignore */ }
+                          }}
                           className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
                           title="Télécharger"
                         >
                           <Download size={14} />
-                        </a>
+                        </button>
                       </div>
                     </div>
                   );
@@ -1056,10 +1063,51 @@ interface DocumentViewerModalProps {
 }
 
 function DocumentViewerModal({ document: doc, onClose }: DocumentViewerModalProps) {
+  const { token } = useAuthStore();
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  // BASE_URL is imported from lib/api — resolves VITE_API_URL at build time,
+  // falls back to localhost:5000 for dev. Works on any host/port/OS.
+  const downloadUrl = doc ? `${BASE_URL}/uploads/${doc.id}/download` : null;
+  const inlineUrl = doc ? `${BASE_URL}/uploads/${doc.id}/download?inline=true` : null;
+
+  const triggerDownload = async (name: string) => {
+    if (!downloadUrl) return;
+    try {
+      const res = await fetch(downloadUrl, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => {
+    if (!doc || !inlineUrl) return;
+    let objectUrl: string | null = null;
+    setLoading(true);
+    setError(false);
+    setBlobUrl(null);
+
+    fetch(inlineUrl, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => { if (!res.ok) throw new Error(); return res.blob(); })
+      .then((blob) => { objectUrl = URL.createObjectURL(blob); setBlobUrl(objectUrl); })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [doc?.id]);
+
   if (!doc) return null;
 
   const kind = getFileKind(doc);
-  const displayName = doc.originalName || doc.nom;
+  const displayName = doc.originalName || doc.nom || 'document';
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1069,31 +1117,22 @@ function DocumentViewerModal({ document: doc, onClose }: DocumentViewerModalProp
             <p className="text-[14px] font-semibold text-gray-900 truncate">{displayName}</p>
             <div className="flex items-center gap-2 mt-0.5">
               {doc.documentType && (
-                <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">
-                  {doc.documentType}
-                </span>
+                <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{doc.documentType}</span>
               )}
               {doc.statut && (
-                <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
-                  {doc.statut}
-                </span>
+                <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">{doc.statut}</span>
               )}
-              <span className="text-[10px] text-gray-400">
-                {new Date(doc.createdAt).toLocaleDateString('fr-FR')}
-              </span>
+              <span className="text-[10px] text-gray-400">{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</span>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <a
-              href={doc.filePath}
-              target="_blank"
-              rel="noopener noreferrer"
-              download
+            <button
+              onClick={() => triggerDownload(displayName)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               <Download size={14} />
               Télécharger
-            </a>
+            </button>
             <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
               <X size={18} />
             </button>
@@ -1101,43 +1140,53 @@ function DocumentViewerModal({ document: doc, onClose }: DocumentViewerModalProp
         </div>
 
         <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center p-4">
-          {kind === 'pdf' && (
-            <iframe src={doc.filePath} title={displayName} className="w-full h-full rounded-lg border border-gray-200 bg-white" />
-          )}
-
-          {kind === 'image' && (
-            <img src={doc.filePath} alt={displayName} className="max-w-full max-h-full object-contain rounded-lg" />
-          )}
-
-          {kind === 'office' && (
-            <div className="w-full h-full flex flex-col">
-              <iframe
-                src={`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(doc.filePath)}`}
-                title={displayName}
-                className="w-full h-full rounded-lg border border-gray-200 bg-white"
-              />
-              <p className="text-[11px] text-gray-400 mt-2 text-center">
-                L'aperçu Office nécessite que le fichier soit accessible via une URL publique en HTTPS.
-                Si l'aperçu ne s'affiche pas, utilisez le téléchargement.
-              </p>
+          {loading && (
+            <div className="flex flex-col items-center gap-3 text-gray-400">
+              <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+              <p className="text-[13px]">Chargement du document...</p>
             </div>
           )}
 
-          {kind === 'other' && (
-            <div className="flex flex-col items-center gap-3 text-gray-400">
-              <FileIcon size={48} />
-              <p className="text-[13px] text-gray-500">Aperçu non disponible pour ce type de fichier</p>
-              <a
-                href={doc.filePath}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
+          {error && (
+            <div className="flex flex-col items-center gap-3">
+              <FileIcon size={48} className="text-gray-300" />
+              <p className="text-[13px] text-red-500">Impossible de charger le document.</p>
+              <button
+                onClick={() => triggerDownload(displayName)}
                 className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
               >
                 <Download size={14} />
-                Télécharger le fichier
-              </a>
+                Télécharger à la place
+              </button>
             </div>
+          )}
+
+          {!loading && !error && blobUrl && (
+            <>
+              {kind === 'pdf' && (
+                <iframe src={blobUrl} title={displayName} className="w-full h-full rounded-lg border border-gray-200 bg-white" />
+              )}
+              {kind === 'image' && (
+                <img src={blobUrl} alt={displayName} className="max-w-full max-h-full object-contain rounded-lg" />
+              )}
+              {(kind === 'office' || kind === 'other') && (
+                <div className="flex flex-col items-center gap-3">
+                  <FileIcon size={48} className="text-gray-300" />
+                  <p className="text-[13px] text-gray-500">
+                    {kind === 'office'
+                      ? "Aperçu Office non disponible — téléchargez le fichier pour l'ouvrir."
+                      : 'Aperçu non disponible pour ce type de fichier.'}
+                  </p>
+                  <button
+                    onClick={() => triggerDownload(displayName)}
+                    className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                  >
+                    <Download size={14} />
+                    Télécharger le fichier
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

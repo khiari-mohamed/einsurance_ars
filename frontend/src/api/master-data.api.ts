@@ -46,6 +46,7 @@ interface BulkImportAssureItem {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
 }
 
 // Bulk edit — only the subset of fields it makes sense to apply across many
@@ -53,6 +54,7 @@ interface BulkImportAssureItem {
 interface BulkUpdateAssureData {
   pays?: string;
   formeJuridique?: string;
+  deviseParDefaut?: string;
   isActive?: boolean;
 }
 
@@ -69,6 +71,7 @@ interface BulkImportCedanteItem {
   pays?: string;
   capital?: number;
   rne?: string;
+  deviseParDefaut?: string;
 }
 
 // Bulk edit for cédantes — deliberately excludes compteComptable (locked),
@@ -76,6 +79,7 @@ interface BulkImportCedanteItem {
 interface BulkUpdateCedanteData {
   pays?: string;
   formeJuridique?: string;
+  deviseParDefaut?: string;
   isActive?: boolean;
 }
 
@@ -94,6 +98,7 @@ interface BulkImportReassureurItem {
   pays?: string;
   capital?: number;
   rne?: string;
+  deviseParDefaut?: string;
 }
 
 // Bulk edit for réassureurs — same exclusions as Cedante (compteComptable
@@ -102,6 +107,7 @@ interface BulkImportReassureurItem {
 interface BulkUpdateReassureurData {
   pays?: string;
   formeJuridique?: string;
+  deviseParDefaut?: string;
   isActive?: boolean;
 }
 

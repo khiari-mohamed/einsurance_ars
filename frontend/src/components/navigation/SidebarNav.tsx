@@ -80,7 +80,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
 
       <aside
         className={`
-          fixed lg:relative inset-y-0 left-0 z-50
+          fixed lg:relative inset-y-0 left-0 z-50 pt-16
           bg-[#f1f1f1] dark:bg-[#0a0a0f] shadow-[0_0_40px_rgba(0,0,0,0.08)]
           flex flex-col
           transition-all duration-300 ease-in-out

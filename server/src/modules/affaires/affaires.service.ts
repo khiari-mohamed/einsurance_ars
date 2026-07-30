@@ -20,16 +20,18 @@ export class AffairesService {
 
   async findAll(filters: {
     cedanteId?: string;
+    assureId?: string;
     statut?: AffaireStatut;
     type?: AffaireType;
     search?: string;
     page?: number;
     limit?: number;
   }) {
-    const { cedanteId, statut, type, search, page = 1, limit = 20 } = filters;
+    const { cedanteId, assureId, statut, type, search, page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
     const where: any = { isActive: true };
     if (cedanteId) where.cedanteId = cedanteId;
+    if (assureId) where.facultativeData = { is: { assureId } };
     if (statut) where.statut = statut;
     if (type) where.type = type;
     if (search) {

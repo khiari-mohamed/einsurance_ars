@@ -18,6 +18,10 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+/* Reserve scrollbar gutter to avoid layout shifts when scrollbars appear/disappear */
+html {
+  scrollbar-gutter: stable;
+}
 /* ─────────────────────────────────────────
    APPEARANCE SYSTEM (added)
 ───────────────────────────────────────── */

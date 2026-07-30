@@ -1,6 +1,6 @@
 // src/modules/uploads/uploads.controller.ts
 import {
-  Controller, Post, Get, Delete, Body, Param, Res, UseGuards,
+  Controller, Post, Get, Delete, Body, Param, Query, Res, UseGuards,
   UseInterceptors, UploadedFile, UploadedFiles,
 } from '@nestjs/common';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
@@ -64,10 +64,13 @@ export class UploadsController {
     @Param('documentId') documentId: string,
     @Res() res: Response,
     @CurrentUser() user: { id: string },
+    @Query('inline') inline?: string,
   ) {
     const { buffer, document } = await this.uploadsService.getFileForDownload(documentId, user?.id);
+    const filename = document.originalName || document.nom;
+    const disposition = inline === 'true' ? `inline; filename="${filename}"` : `attachment; filename="${filename}"`;
     res.setHeader('Content-Type', document.mimeType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${document.originalName || document.nom}"`);
+    res.setHeader('Content-Disposition', disposition);
     res.send(buffer);
   }
 

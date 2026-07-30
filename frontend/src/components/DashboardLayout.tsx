@@ -69,7 +69,7 @@ export default function DashboardLayout() {
     return (
       <div className="flex flex-col h-screen bg-[#f1f1f1] dark:bg-[#0a0a0f] overflow-hidden transition-colors">
         <HorizontalNav onOpenAppearance={() => setAppearanceOpen(true)} />
-        <main className="flex-1 overflow-auto bg-[#f1f1f1] dark:bg-[#0a0a0f] transition-colors">
+        <main className="flex-1 overflow-auto pt-16 bg-[#f1f1f1] dark:bg-[#0a0a0f] transition-colors">
           <Outlet />
         </main>
         <AppearanceDialog open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
@@ -85,8 +85,8 @@ export default function DashboardLayout() {
         onOpenAppearance={() => setAppearanceOpen(true)}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="h-16 bg-[#f1f1f1] dark:bg-[#0a0a0f] border-b border-gray-200 dark:border-[#262636] z-[60] flex items-center justify-between px-4 lg:px-6 relative transition-colors">
+      <div className="flex-1 flex flex-col overflow-hidden pt-16">
+        <header className="fixed top-0 left-0 right-0 h-16 bg-[#f1f1f1] dark:bg-[#0a0a0f] border-b border-gray-200 dark:border-[#262636] z-[60] flex items-center justify-between px-4 lg:px-6 transition-colors">
           <div className="flex items-center">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}

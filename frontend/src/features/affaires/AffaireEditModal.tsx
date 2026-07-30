@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Save, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import masterDataApi from '../../api/master-data.api';
+import CountrySelect from '../../components/ui/CountrySelect';
 import { affairesApi } from '../../api/affaires.api';
 import {
   Affaire, AffaireType, UpdateAffaireDto, AffaireReassureurInput, CommissionMode,
-  GuaranteeLineInput,
+  GuaranteeLineInput, ReassuranceType, ModeRenouvellement,
+  reassuranceTypeLabels, modeRenouvellementLabels,
 } from '../../types/affaire.types';
 
 interface Props {
@@ -44,6 +46,10 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
     }))
   );
 
+  const { data: assuresOptions = [] } = useQuery({
+    queryKey: ['assures'],
+    queryFn: async () => (await masterDataApi.assures.getAll({ limit: 500 })).data.data,
+  });
   const { data: reassureursOptions = [] } = useQuery({
     queryKey: ['reassureurs'],
     queryFn: async () => (await masterDataApi.reassureurs.getAll({ limit: 500 })).data.data,
@@ -185,12 +191,28 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
               <h3 className="text-[14px] font-semibold text-gray-900">Données Facultative</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Assuré</label>
+                  <select value={fac.assureId || ''} onChange={(e) => setFac({ ...fac, assureId: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">Sélectionner</option>
+                    {assuresOptions.map((a: any) => <option key={a.id} value={a.id}>{a.raisonSociale} ({a.code})</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Type de réassurance</label>
+                  <select value={fac.reassuranceType || ''} onChange={(e) => setFac({ ...fac, reassuranceType: e.target.value as ReassuranceType })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {Object.entries(reassuranceTypeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">N° Police cédante</label>
                   <input type="text" value={fac.numeroPoliceCedante || ''} onChange={(e) => setFac({ ...fac, numeroPoliceCedante: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Branche</label>
-                  <input type="text" value={fac.branche || ''} onChange={(e) => setFac({ ...fac, branche: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de renouvellement</label>
+                  <select value={fac.modeRenouvellement || ''} onChange={(e) => setFac({ ...fac, modeRenouvellement: (e.target.value || undefined) as ModeRenouvellement })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">—</option>
+                    {Object.entries(modeRenouvellementLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Effet</label>
@@ -199,6 +221,25 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Échéance</label>
                   <input type="date" value={fac.dateEcheance.split('T')[0]} onChange={(e) => setFac({ ...fac, dateEcheance: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays de l'assuré</label>
+                  <CountrySelect
+                    value={fac.paysAssure || ''}
+                    onChange={(v) => setFac({ ...fac, paysAssure: v })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Branche</label>
+                  <input type="text" value={fac.branche || ''} onChange={(e) => setFac({ ...fac, branche: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Produit</label>
+                  <input type="text" value={fac.produit || ''} onChange={(e) => setFac({ ...fac, produit: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Garantie</label>
+                  <input type="text" value={fac.garantie || ''} onChange={(e) => setFac({ ...fac, garantie: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime 100%</label>

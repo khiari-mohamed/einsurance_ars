@@ -58,6 +58,8 @@
 //   • A guided "choisir l'entité cible" step before any upload.
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
 import {
   Search, FileText, HardDrive, Upload, Download, Share2, AlertCircle,
   Filter, Grid, List, Folder, FolderOpen, ChevronRight, ChevronDown,
@@ -418,15 +420,16 @@ export default function GEDDashboard() {
       if (filters.dateFrom) params.dateFrom = filters.dateFrom;
       if (filters.dateTo) params.dateTo = filters.dateTo;
 
-      const [docsRaw, stats] = await Promise.all([
+      const [docsRaw, statsRaw] = await Promise.all([
         gedApi.getDocuments(params as any),
         gedApi.getStatistics(),
       ]);
 
-      const normalized = normalizeSearchResult(docsRaw);
+      const normalized = normalizeSearchResult((docsRaw as any).data ?? docsRaw);
       setDocuments(normalized.data);
       setTotal(normalized.total);
-      setStatistics(stats as unknown as GedStatistics);
+      const statsPayload = (statsRaw as any).data ?? statsRaw;
+      setStatistics(statsPayload as unknown as GedStatistics);
       setSelectedDocs([]);
     } catch (error) {
       console.error('Échec du chargement des documents GED:', error);
@@ -506,18 +509,43 @@ export default function GEDDashboard() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewWordHtml, setPreviewWordHtml] = useState<string | null>(null);
+  const [previewExcelSheets, setPreviewExcelSheets] = useState<{ name: string; html: string }[] | null>(null);
+  const [previewActiveSheet, setPreviewActiveSheet] = useState(0);
+  const previewBlobRef = useRef<string | null>(null);
 
   const handlePreview = async (doc: GedDocument) => {
     setPreviewDoc(doc);
     setPreviewUrl(null);
+    setPreviewWordHtml(null);
+    setPreviewExcelSheets(null);
+    setPreviewActiveSheet(0);
     setPreviewError(null);
     setPreviewLoading(true);
+
+    const mime = (doc.mimeType ?? '').toLowerCase();
+    const name = (doc.originalName ?? doc.nom ?? '').toLowerCase();
+    const isWord = mime.includes('wordprocessingml') || mime.includes('msword') || /\.docx?$/.test(name);
+    const isExcel = mime.includes('spreadsheetml') || mime.includes('excel') || /\.xlsx?$/.test(name);
+
     try {
       const blob = await gedApi.downloadDocument(doc.id);
-      const typedBlob = doc.mimeType ? blob.slice(0, blob.size, doc.mimeType) : blob;
-      setPreviewUrl(window.URL.createObjectURL(typedBlob));
-    } catch (error) {
-      console.error('Échec du chargement de l\'aperçu:', error);
+      if (isWord) {
+        const ab = await blob.arrayBuffer();
+        const result = await mammoth.convertToHtml({ arrayBuffer: ab });
+        setPreviewWordHtml(result.value);
+      } else if (isExcel) {
+        const ab = await blob.arrayBuffer();
+        const wb = XLSX.read(ab, { type: 'array' });
+        const sheets = wb.SheetNames.map((s) => ({ name: s, html: XLSX.utils.sheet_to_html(wb.Sheets[s]) }));
+        setPreviewExcelSheets(sheets);
+      } else {
+        const typedBlob = doc.mimeType ? blob.slice(0, blob.size, doc.mimeType) : blob;
+        const url = window.URL.createObjectURL(typedBlob);
+        previewBlobRef.current = url;
+        setPreviewUrl(url);
+      }
+    } catch {
       setPreviewError("Impossible de charger l'aperçu de ce document.");
     } finally {
       setPreviewLoading(false);
@@ -525,8 +553,11 @@ export default function GEDDashboard() {
   };
 
   const closePreview = () => {
-    if (previewUrl) window.URL.revokeObjectURL(previewUrl);
+    if (previewBlobRef.current) { window.URL.revokeObjectURL(previewBlobRef.current); previewBlobRef.current = null; }
     setPreviewUrl(null);
+    setPreviewWordHtml(null);
+    setPreviewExcelSheets(null);
+    setPreviewActiveSheet(0);
     setPreviewDoc(null);
     setPreviewError(null);
   };
@@ -1007,16 +1038,18 @@ export default function GEDDashboard() {
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <button
-                              onClick={() => handlePreview(doc)}
-                              className="p-2 text-gray-600 hover:bg-gray-100 rounded"
-                              title="Aperçu"
+                              onClick={() => doc.sizeBytes && doc.sizeBytes > 0 && doc.statut !== 'MANQUANT' ? handlePreview(doc) : undefined}
+                              disabled={!doc.sizeBytes || doc.sizeBytes === 0 || doc.statut === 'MANQUANT'}
+                              className="p-2 text-gray-600 hover:bg-gray-100 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                              title={!doc.sizeBytes || doc.sizeBytes === 0 ? 'Aucun fichier disponible' : 'Aperçu'}
                             >
                               <Eye className="w-4 h-4" />
                             </button>
                             <button
-                              onClick={() => handleDownload(doc)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded"
-                              title="Télécharger"
+                              onClick={() => doc.sizeBytes && doc.sizeBytes > 0 ? handleDownload(doc) : undefined}
+                              disabled={!doc.sizeBytes || doc.sizeBytes === 0 || doc.statut === 'MANQUANT'}
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded disabled:opacity-30 disabled:cursor-not-allowed"
+                              title={!doc.sizeBytes || doc.sizeBytes === 0 ? 'Aucun fichier disponible' : 'Télécharger'}
                             >
                               <Download className="w-4 h-4" />
                             </button>
@@ -1194,19 +1227,47 @@ export default function GEDDashboard() {
                   <p>{previewError}</p>
                 </div>
               )}
-              {!previewLoading && !previewError && previewUrl && previewDoc.mimeType === 'application/pdf' && (
+              {!previewLoading && !previewError && previewUrl && previewDoc?.mimeType === 'application/pdf' && (
                 <iframe src={previewUrl} title={displayName(previewDoc)} className="w-full h-full border-0" />
               )}
-              {!previewLoading && !previewError && previewUrl && previewDoc.mimeType?.startsWith('image/') && (
+              {!previewLoading && !previewError && previewUrl && previewDoc?.mimeType?.startsWith('image/') && (
                 <img src={previewUrl} alt={displayName(previewDoc)} className="max-w-full max-h-full object-contain" />
               )}
+              {!previewLoading && !previewError && previewWordHtml && (
+                <div className="w-full h-full overflow-auto bg-white p-8">
+                  <div className="prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: previewWordHtml }} />
+                </div>
+              )}
+              {!previewLoading && !previewError && previewExcelSheets && (
+                <div className="w-full h-full flex flex-col overflow-hidden">
+                  {previewExcelSheets.length > 1 && (
+                    <div className="flex gap-1 px-4 pt-2 bg-white border-b shrink-0 overflow-x-auto">
+                      {previewExcelSheets.map((s, i) => (
+                        <button
+                          key={s.name}
+                          onClick={() => setPreviewActiveSheet(i)}
+                          className={`px-3 py-1.5 text-[12px] font-medium rounded-t-lg whitespace-nowrap ${
+                            previewActiveSheet === i ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {s.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div
+                    className="flex-1 overflow-auto bg-white p-4 text-[12px] [&_table]:border-collapse [&_table]:w-full [&_td]:border [&_td]:border-gray-200 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_th]:font-medium"
+                    dangerouslySetInnerHTML={{ __html: previewExcelSheets[previewActiveSheet]?.html ?? '' }}
+                  />
+                </div>
+              )}
               {!previewLoading && !previewError && previewUrl &&
-                previewDoc.mimeType !== 'application/pdf' && !previewDoc.mimeType?.startsWith('image/') && (
+                previewDoc?.mimeType !== 'application/pdf' && !previewDoc?.mimeType?.startsWith('image/') && (
                 <div className="text-center text-gray-500 p-6">
                   <FileIcon className="w-12 h-12 mx-auto mb-2 text-gray-400" />
                   <p className="mb-3">L'aperçu en ligne n'est pas disponible pour ce type de fichier.</p>
                   <button
-                    onClick={() => handleDownload(previewDoc)}
+                    onClick={() => handleDownload(previewDoc!)}
                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 inline-flex items-center gap-2"
                   >
                     <Download className="w-4 h-4" />

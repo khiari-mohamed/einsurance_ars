@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { X, ChevronRight, ChevronLeft, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import masterDataApi from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
+import CountrySelect from '../../components/ui/CountrySelect';
+import CurrencySelect from '../../components/ui/CurrencySelect';
 import {
   CreateAffaireDto, AffaireType, ModePaiement, ReassuranceType, FormeCouverture,
   ModeRenouvellement, Periodicite, CommissionMode, AffaireReassureurInput,
@@ -15,8 +17,6 @@ import {
 interface Props {
   onClose: () => void;
 }
-
-const CURRENCIES = ['TND', 'EUR', 'USD', 'GBP'];
 
 const emptyReassureur = (): AffaireReassureurInput => ({
   reassureurId: '',
@@ -93,7 +93,11 @@ export default function AffaireCreateModal({ onClose }: Props) {
 
   const totalShare = reassureurs.reduce((sum, r) => sum + (r.partPct || 0), 0);
 
-  const validateStep1 = () => !!cedanteId;
+  const validateStep1 = () => {
+    if (!cedanteId) return false;
+    if (type === AffaireType.FACULTATIVE && !fac.assureId) return false;
+    return true;
+  };
   const validateStep2 = () => {
     if (type === AffaireType.FACULTATIVE) {
       return !!fac.assureId && !!fac.dateEffet && !!fac.dateEcheance && (fac.prime100Pct ?? 0) > 0 && (fac.tauxCession ?? 0) > 0;
@@ -213,15 +217,27 @@ export default function AffaireCreateModal({ onClose }: Props) {
                     {cedantes.map((c: any) => <option key={c.id} value={c.id}>{c.raisonSociale}</option>)}
                   </select>
                 </div>
+                {type === AffaireType.FACULTATIVE && (
+                  <div>
+                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Assuré *</label>
+                    <select
+                      value={fac.assureId || ''}
+                      onChange={(e) => setFac({ ...fac, assureId: e.target.value })}
+                      required
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Sélectionner un assuré</option>
+                      {assures.map((a: any) => <option key={a.id} value={a.id}>{a.raisonSociale} ({a.code})</option>)}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise</label>
-                  <select
+                  <CurrencySelect
                     value={currency}
-                    onChange={(e) => setCurrency(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {CURRENCIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                    onChange={setCurrency}
+                    placeholder="Sélectionner une devise..."
+                  />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de paiement</label>
@@ -242,18 +258,6 @@ export default function AffaireCreateModal({ onClose }: Props) {
             <div className="space-y-4">
               <h3 className="text-[15px] font-semibold text-gray-900 mb-4">Facultative — Données Contractuelles &amp; Financières</h3>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Assuré *</label>
-                  <select
-                    value={fac.assureId || ''}
-                    onChange={(e) => setFac({ ...fac, assureId: e.target.value })}
-                    required
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Sélectionner</option>
-                    {assures.map((a: any) => <option key={a.id} value={a.id}>{a.raisonSociale}</option>)}
-                  </select>
-                </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Type de réassurance</label>
                   <select
@@ -294,7 +298,10 @@ export default function AffaireCreateModal({ onClose }: Props) {
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays de l'assuré</label>
-                  <input type="text" value={fac.paysAssure || ''} onChange={(e) => setFac({ ...fac, paysAssure: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <CountrySelect
+                    value={fac.paysAssure || ''}
+                    onChange={(v) => setFac({ ...fac, paysAssure: v })}
+                  />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Branche</label>

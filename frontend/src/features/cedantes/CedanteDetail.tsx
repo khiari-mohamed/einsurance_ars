@@ -1,10 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft, Edit2, Trash2, Plus, Mail, Phone, Building2, CreditCard, FileText,
-  FileCheck, Shield, Globe, Paperclip, Folder, Sliders,
+  FileCheck, Shield, Globe, Paperclip, Folder, Sliders, Eye, Download, X,
+  ChevronLeft, ChevronRight, File as FileIcon,
 } from 'lucide-react';
+import { gedApi } from '../../api/ged.api';
 import { cedantesApi, conventionsApi } from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
 import {
@@ -42,6 +46,7 @@ export default function CedanteDetail() {
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [confirmState, setConfirmState] = useState<ConfirmState>({ type: null });
+  const [viewerDoc, setViewerDoc] = useState<{ id: string; name: string; mimeType?: string } | null>(null);
 
   const { data: cedante, isLoading } = useQuery({
     queryKey: ['cedantes', id],
@@ -515,45 +520,10 @@ export default function CedanteDetail() {
             )}
           </div>
 
-          {/* FIX (new): read-only GED (Documents) list — CedantesService.findOne()
-              already includes `documents: { where: { entityType: 'CEDANTE' },
-              include: { document: true } }`, but nothing rendered it. No generic
-              upload endpoint was provided in this review (only the Conventions
-              upload flow above is confirmed), so this stays display-only. Since
-              ConventionsService.attach() routes through GedService.upload() with
-              entityType: 'CEDANTE', a convention's document may also show up here
-              depending on what GedService does internally — this is flagged rather
-              than assumed, since ged.service.ts wasn't part of this review. */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Folder size={18} />
-              Documents (GED)
-            </h2>
-            {cedante.documents && cedante.documents.length > 0 ? (
-              <div className="space-y-2">
-                {cedante.documents.map((link) => (
-                  <div key={link.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <FileText size={14} className="text-gray-400 shrink-0" />
-                      <div className="min-w-0">
-                        <p className="text-[13px] text-gray-900 truncate">
-                          {link.document?.originalName || link.document?.nom}
-                        </p>
-                        {link.document?.documentType && (
-                          <p className="text-[11px] text-gray-400">{link.document.documentType}</p>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-[11px] text-gray-400 shrink-0 ml-2">
-                      {new Date(link.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[13px] text-gray-500 text-center py-4">Aucun document</p>
-            )}
-          </div>
+          <GedDocumentsSection
+            documents={cedante.documents ?? []}
+            onView={(doc) => setViewerDoc(doc)}
+          />
 
           {/* FIX: Onglet 5 — Champs libres was read-only (no way to add/edit a
               field, and the section only rendered at all if freeFields already had
@@ -705,6 +675,15 @@ export default function CedanteDetail() {
         />
       )}
 
+      {viewerDoc && (
+        <GedDocumentViewer
+          docId={viewerDoc.id}
+          docName={viewerDoc.name}
+          mimeType={viewerDoc.mimeType}
+          onClose={() => setViewerDoc(null)}
+        />
+      )}
+
       {/* Override Code Modal */}
       {isOverrideModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -766,6 +745,297 @@ function InfoField({ label, value, icon, className = '' }: InfoFieldProps) {
         {icon}
         {value || '-'}
       </p>
+    </div>
+  );
+}
+
+// ─── GED Documents Section ───────────────────────────────────────────────────
+
+const GED_PAGE_SIZE = 5;
+
+interface GedDocumentsSectionProps {
+  documents: Array<{
+    id: string;
+    document?: {
+      id: string;
+      nom: string;
+      originalName?: string | null;
+      mimeType?: string | null;
+      documentType?: string | null;
+    };
+    createdAt: string;
+  }>;
+  onView: (doc: { id: string; name: string; mimeType?: string }) => void;
+}
+
+function GedDocumentsSection({ documents, onView }: GedDocumentsSectionProps) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(documents.length / GED_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = documents.slice((safePage - 1) * GED_PAGE_SIZE, safePage * GED_PAGE_SIZE);
+
+  const handleDownload = async (docId: string, name: string) => {
+    try {
+      const blob = await gedApi.downloadDocument(docId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert('Erreur lors du téléchargement');
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+      <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <Folder size={18} />
+        Documents (GED)
+      </h2>
+      {documents.length === 0 ? (
+        <p className="text-[13px] text-gray-500 text-center py-4">Aucun document</p>
+      ) : (
+        <>
+          <div className="space-y-2">
+            {paged.map((link) => {
+              const doc = link.document;
+              const name = doc?.originalName || doc?.nom || 'document';
+              const docId = doc?.id;
+              return (
+                <div key={link.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FileIcon size={14} className="text-gray-400 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[13px] text-gray-900 truncate">{name}</p>
+                      {doc?.documentType && (
+                        <p className="text-[10px] text-gray-400 uppercase">{doc.documentType}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0 ml-2">
+                    <span className="text-[11px] text-gray-400 mr-2">
+                      {new Date(link.createdAt).toLocaleDateString('fr-FR')}
+                    </span>
+                    {docId && (
+                      <>
+                        <button
+                          onClick={() => onView({ id: docId, name, mimeType: doc?.mimeType ?? undefined })}
+                          className="p-1.5 rounded hover:bg-blue-50 text-blue-600"
+                          title="Voir"
+                        >
+                          <Eye size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDownload(docId, name)}
+                          className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                          title="Télécharger"
+                        >
+                          <Download size={14} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
+              <p className="text-[11px] text-gray-400">Page {safePage} / {totalPages}</p>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={safePage === 1}
+                  className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+                >
+                  <ChevronLeft size={13} />
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={safePage === totalPages}
+                  className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+                >
+                  <ChevronRight size={13} />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── GED Document Viewer Modal ────────────────────────────────────────────────
+
+interface GedDocumentViewerProps {
+  docId: string;
+  docName: string;
+  mimeType?: string;
+  onClose: () => void;
+}
+
+function GedDocumentViewer({ docId, docName, mimeType, onClose }: GedDocumentViewerProps) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [wordHtml, setWordHtml] = useState<string | null>(null);
+  const [excelSheets, setExcelSheets] = useState<{ name: string; html: string }[] | null>(null);
+  const [activeSheet, setActiveSheet] = useState(0);
+  const blobRef = useRef<string | null>(null);
+
+  const mime = mimeType?.toLowerCase() ?? '';
+  const name = docName.toLowerCase();
+  const isPdf = mime.includes('pdf') || name.endsWith('.pdf');
+  const isImage = mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg)$/i.test(docName);
+  const isWord = mime.includes('wordprocessingml') || mime.includes('msword') || /\.docx?$/i.test(docName);
+  const isExcel = mime.includes('spreadsheetml') || mime.includes('excel') || /\.xlsx?$/i.test(docName);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(false);
+    setBlobUrl(null);
+    setWordHtml(null);
+    setExcelSheets(null);
+    setActiveSheet(0);
+
+    gedApi.downloadDocument(docId)
+      .then(async (blob) => {
+        if (cancelled) return;
+
+        if (isWord) {
+          const arrayBuffer = await blob.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer });
+          if (!cancelled) setWordHtml(result.value);
+        } else if (isExcel) {
+          const arrayBuffer = await blob.arrayBuffer();
+          const wb = XLSX.read(arrayBuffer, { type: 'array' });
+          const sheets = wb.SheetNames.map((sheetName) => ({
+            name: sheetName,
+            html: XLSX.utils.sheet_to_html(wb.Sheets[sheetName]),
+          }));
+          if (!cancelled) setExcelSheets(sheets);
+        } else {
+          const url = URL.createObjectURL(blob);
+          blobRef.current = url;
+          if (!cancelled) setBlobUrl(url);
+        }
+      })
+      .catch(() => { if (!cancelled) setError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => {
+      cancelled = true;
+      if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null; }
+    };
+  }, [docId]);
+
+  const handleDownload = async () => {
+    try {
+      const blob = await gedApi.downloadDocument(docId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = docName;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* ignore */ }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between p-4 border-b border-gray-100 shrink-0">
+          <p className="text-[14px] font-semibold text-gray-900 truncate">{docName}</p>
+          <div className="flex items-center gap-2 shrink-0 ml-4">
+            <button
+              onClick={handleDownload}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Download size={14} />
+              Télécharger
+            </button>
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* Excel sheet tabs */}
+        {excelSheets && excelSheets.length > 1 && (
+          <div className="flex gap-1 px-4 pt-2 border-b border-gray-100 shrink-0 overflow-x-auto">
+            {excelSheets.map((s, i) => (
+              <button
+                key={s.name}
+                onClick={() => setActiveSheet(i)}
+                className={`px-3 py-1.5 text-[12px] font-medium rounded-t-lg whitespace-nowrap transition-colors ${
+                  activeSheet === i ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Body */}
+        <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center p-4">
+          {loading && (
+            <div className="flex flex-col items-center gap-3 text-gray-400">
+              <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+              <p className="text-[13px]">Chargement...</p>
+            </div>
+          )}
+          {error && (
+            <div className="flex flex-col items-center gap-3">
+              <FileIcon size={48} className="text-gray-300" />
+              <p className="text-[13px] text-red-500">Impossible de charger le document.</p>
+              <button onClick={handleDownload} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">
+                <Download size={14} /> Télécharger à la place
+              </button>
+            </div>
+          )}
+          {!loading && !error && (
+            <>
+              {isPdf && blobUrl && (
+                <iframe src={blobUrl} title={docName} className="w-full h-full rounded-lg border border-gray-200 bg-white" />
+              )}
+              {isImage && blobUrl && (
+                <img src={blobUrl} alt={docName} className="max-w-full max-h-full object-contain rounded-lg" />
+              )}
+              {isWord && wordHtml && (
+                <div className="w-full h-full overflow-auto bg-white rounded-lg border border-gray-200 p-8">
+                  <div
+                    className="prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: wordHtml }}
+                  />
+                </div>
+              )}
+              {isExcel && excelSheets && (
+                <div className="w-full h-full overflow-auto bg-white rounded-lg border border-gray-200">
+                  <div
+                    className="p-4 text-[12px] [&_table]:border-collapse [&_table]:w-full [&_td]:border [&_td]:border-gray-200 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_th]:font-medium"
+                    dangerouslySetInnerHTML={{ __html: excelSheets[activeSheet]?.html ?? '' }}
+                  />
+                </div>
+              )}
+              {!isPdf && !isImage && !isWord && !isExcel && (
+                <div className="flex flex-col items-center gap-3">
+                  <FileIcon size={48} className="text-gray-300" />
+                  <p className="text-[13px] text-gray-500">Aperçu non disponible pour ce type de fichier.</p>
+                  <button onClick={handleDownload} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">
+                    <Download size={14} /> Télécharger le fichier
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

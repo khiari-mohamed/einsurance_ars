@@ -24,6 +24,7 @@ export class AffairesController {
   @Get()
   @RequirePermissions(Permission.AFFAIRES_READ)
   @ApiQuery({ name: 'cedanteId', required: false })
+  @ApiQuery({ name: 'assureId', required: false })
   @ApiQuery({ name: 'statut', required: false, enum: AffaireStatut })
   @ApiQuery({ name: 'type', required: false, enum: AffaireType })
   @ApiQuery({ name: 'search', required: false })
@@ -31,20 +32,14 @@ export class AffairesController {
   @ApiQuery({ name: 'limit', required: false })
   findAll(
     @Query('cedanteId') cedanteId?: string,
+    @Query('assureId') assureId?: string,
     @Query('statut') statut?: AffaireStatut,
     @Query('type') type?: AffaireType,
     @Query('search') search?: string,
-    // FIX (Affaires pass): page/limit were plain @Query() with no pipe —
-    // arrived as raw strings from the HTTP layer. `skip`/`take` further down
-    // are passed straight to Prisma, which validates argument types strictly;
-    // a string here throws PrismaClientValidationError at runtime. Every
-    // other list endpoint in this codebase (co-courtiers, cedantes...) uses
-    // DefaultValuePipe + ParseIntPipe — this controller was the one
-    // inconsistent spot.
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
   ) {
-    return this.service.findAll({ cedanteId, statut, type, search, page, limit });
+    return this.service.findAll({ cedanteId, assureId, statut, type, search, page, limit });
   }
 
   @Get(':id')
