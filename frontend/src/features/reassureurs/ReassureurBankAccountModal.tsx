@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { X } from 'lucide-react';
+import { X, ChevronDown } from 'lucide-react';
 import { reassureursApi } from '../../api/master-data.api';
 import { ReassureurBankAccount, CreateReassureurBankAccountDto, getSwiftWarning } from '../../types/reassureur.types';
+import { CURRENCIES } from '../../data/currencies';
 
 interface ReassureurBankAccountModalProps {
   reassureurId: string;
@@ -22,7 +23,57 @@ interface BankAccountFormData {
   isDefault: boolean;
 }
 
-const CURRENCIES = ['TND', 'USD', 'EUR', 'GBP'];
+function CurrencySelect({ value, onChange, hasError }: { value: string; onChange: (v: string) => void; hasError: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const filtered = CURRENCIES.filter(
+    (c) => c.code.toLowerCase().includes(search.toLowerCase()) || c.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const selected = CURRENCIES.find((c) => c.code === value);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => { setOpen((v) => !v); setSearch(''); }}
+        className={`w-full flex items-center justify-between px-3 py-2 border ${
+          hasError ? 'border-red-500' : 'border-gray-200'
+        } rounded-lg text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500`}>
+        <span className={selected ? 'text-gray-900' : 'text-gray-400'}>
+          {selected ? `${selected.code} — ${selected.name}` : 'Sélectionner une devise...'}
+        </span>
+        <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-gray-100">
+            <input autoFocus type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher (code ou nom)..."
+              className="w-full px-2 py-1.5 text-[12px] border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <ul className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-2 text-[12px] text-gray-400">Aucun résultat</li>
+            ) : filtered.map((c) => (
+              <li key={c.code} onClick={() => { onChange(c.code); setOpen(false); setSearch(''); }}
+                className={`px-3 py-2 text-[12px] cursor-pointer hover:bg-blue-50 flex items-center gap-2 ${
+                  c.code === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                }`}>
+                <span className="font-mono font-semibold w-10 shrink-0">{c.code}</span>
+                <span className="text-gray-500">{c.name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ReassureurBankAccountModal({
   reassureurId,
@@ -40,7 +91,7 @@ export default function ReassureurBankAccountModal({
         rib: bankAccount.rib || '',
         iban: bankAccount.iban || '',
         swift: bankAccount.swift || '',
-        currency: bankAccount.currency || 'TND',
+        currency: bankAccount.currency || '',
         isDefault: bankAccount.isDefault || false,
       };
     }
@@ -230,17 +281,14 @@ export default function ReassureurBankAccountModal({
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
                 Devise <span className="text-red-500">*</span>
               </label>
-              <select
-                name="currency"
+              <CurrencySelect
                 value={formData.currency}
-                onChange={handleChange}
-                required
-                className={`w-full px-3 py-2 border ${errors.currency ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+                onChange={(val) => {
+                  setFormData((prev) => ({ ...prev, currency: val }));
+                  if (errors.currency) setErrors((prev) => ({ ...prev, currency: '' }));
+                }}
+                hasError={!!errors.currency}
+              />
               {errors.currency && <p className="mt-1 text-[11px] text-red-500">{errors.currency}</p>}
             </div>
 

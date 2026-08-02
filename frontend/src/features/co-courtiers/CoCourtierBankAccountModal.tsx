@@ -1,6 +1,7 @@
-import { useState } from 'react';
-import { X } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { X, ChevronDown } from 'lucide-react';
 import { CoCourtierBankAccount } from '../../types/co-courtier.types';
+import { CURRENCIES } from '../../data/currencies';
 
 export interface BankAccountFormData {
   banque: string;
@@ -14,8 +15,6 @@ export interface BankAccountFormData {
 
 interface Props {
   account: CoCourtierBankAccount | null;
-  // CDC §5.7 — "identique au Réassureur" — SWIFT/BIC obligatoire pour les
-  // entités non-résidentes (§5.6.3). Passed down so the form can enforce it.
   courtierResident?: boolean;
   onSave: (data: BankAccountFormData) => void;
   onClose: () => void;
@@ -23,7 +22,67 @@ interface Props {
 }
 
 const SWIFT_REGEX = /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/;
-const CURRENCIES = ['TND', 'EUR', 'USD', 'GBP', 'JPY'];
+
+function CurrencySelect({ value, onChange, hasError }: { value: string; onChange: (v: string) => void; hasError: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const filtered = CURRENCIES.filter(
+    (c) => c.code.toLowerCase().includes(search.toLowerCase()) || c.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const selected = CURRENCIES.find((c) => c.code === value);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen((v) => !v); setSearch(''); }}
+        className={`w-full flex items-center justify-between px-3 py-2 border ${hasError ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500`}
+      >
+        <span className={selected ? 'text-gray-900' : 'text-gray-400'}>
+          {selected ? `${selected.code} — ${selected.name}` : 'Sélectionner une devise...'}
+        </span>
+        <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-gray-100">
+            <input
+              autoFocus
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher (code ou nom)..."
+              className="w-full px-2 py-1.5 text-[12px] border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <ul className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-2 text-[12px] text-gray-400">Aucun résultat</li>
+            ) : filtered.map((c) => (
+              <li
+                key={c.code}
+                onClick={() => { onChange(c.code); setOpen(false); setSearch(''); }}
+                className={`px-3 py-2 text-[12px] cursor-pointer hover:bg-blue-50 flex items-center gap-2 ${c.code === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+              >
+                <span className="font-mono font-semibold w-10 shrink-0">{c.code}</span>
+                <span className="text-gray-500">{c.name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function CoCourtierBankAccountModal({ account, courtierResident, onSave, onClose, isSaving }: Props) {
   const [form, setForm] = useState<BankAccountFormData>({
@@ -32,12 +91,12 @@ export default function CoCourtierBankAccountModal({ account, courtierResident, 
     rib: account?.rib || '',
     iban: account?.iban || '',
     swift: account?.swift || '',
-    currency: account?.currency || 'TND',
+    currency: account?.currency || (courtierResident ? 'TND' : 'EUR'),
     isDefault: account?.isDefault || false,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type } = e.target;
     if (type === 'checkbox') {
       setForm((prev) => ({ ...prev, [name]: (e.target as HTMLInputElement).checked }));
@@ -53,6 +112,7 @@ export default function CoCourtierBankAccountModal({ account, courtierResident, 
     const nextErrors: Record<string, string> = {};
     if (!form.banque.trim()) nextErrors.banque = 'La banque est obligatoire.';
     if (!form.rib.trim() && !form.iban?.trim()) nextErrors.rib = 'RIB ou IBAN requis.';
+    if (!form.currency) nextErrors.currency = 'La devise est obligatoire.';
     if (courtierResident === false && !form.swift?.trim()) {
       nextErrors.swift = 'SWIFT/BIC obligatoire pour une entité non-résidente.';
     }
@@ -92,6 +152,7 @@ export default function CoCourtierBankAccountModal({ account, courtierResident, 
               />
               {errors.banque && <p className="mt-1 text-[11px] text-red-500">{errors.banque}</p>}
             </div>
+
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Agence</label>
               <input
@@ -101,21 +162,22 @@ export default function CoCourtierBankAccountModal({ account, courtierResident, 
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
+
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
                 Devise <span className="text-red-500">*</span>
               </label>
-              <select
-                name="currency"
+              <CurrencySelect
                 value={form.currency}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
+                onChange={(val) => {
+                  setForm((prev) => ({ ...prev, currency: val }));
+                  if (errors.currency) setErrors((prev) => ({ ...prev, currency: '' }));
+                }}
+                hasError={!!errors.currency}
+              />
+              {errors.currency && <p className="mt-1 text-[11px] text-red-500">{errors.currency}</p>}
             </div>
+
             <div className="col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">RIB</label>
               <input
@@ -126,6 +188,7 @@ export default function CoCourtierBankAccountModal({ account, courtierResident, 
               />
               {errors.rib && <p className="mt-1 text-[11px] text-red-500">{errors.rib}</p>}
             </div>
+
             <div className="col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">IBAN</label>
               <input
@@ -135,19 +198,25 @@ export default function CoCourtierBankAccountModal({ account, courtierResident, 
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
+
             <div className="col-span-2">
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
                 SWIFT / BIC {courtierResident === false && <span className="text-red-500">*</span>}
+                {courtierResident === false && <span className="text-amber-500 ml-1 text-[11px]">(généralement requis)</span>}
               </label>
               <input
                 name="swift"
                 value={form.swift}
                 onChange={handleChange}
-                placeholder="BNPAFRPPXXX"
+                placeholder="ex: BNPAFRPPXXX"
                 className={`w-full px-3 py-2 border ${errors.swift ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] font-mono focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
               />
               {errors.swift && <p className="mt-1 text-[11px] text-red-500">{errors.swift}</p>}
+              {!errors.swift && courtierResident === false && !form.swift && (
+                <p className="mt-1 text-[11px] text-amber-600">Code SWIFT généralement requis pour les courtiers non-résidents (non bloquant).</p>
+              )}
             </div>
+
             <div className="col-span-2 flex items-center gap-2">
               <input
                 type="checkbox"
@@ -159,6 +228,7 @@ export default function CoCourtierBankAccountModal({ account, courtierResident, 
               <span className="text-[13px] text-gray-700">Compte par défaut pour cette devise</span>
             </div>
           </div>
+
           <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
             <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
               Annuler

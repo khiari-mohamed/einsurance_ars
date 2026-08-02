@@ -30,6 +30,7 @@ export type BordereauDocumentType =
   | 'bank_statement'
   | 'payment_justification'
   | 'settlement_statement'
+  | 'bordereau_signe'
   | 'correspondence'
   | 'other';
 
@@ -103,6 +104,7 @@ export interface Bordereau {
   cedanteId?: string;
   cedante?: { raisonSociale: string };
   reassureurCode?: string;
+  reassureur?: { raisonSociale: string } | null;
 
   dateEmission: string;
   datePeriodeDebut?: string;

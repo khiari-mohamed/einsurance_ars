@@ -183,7 +183,15 @@ export default function BordereauDetail() {
                 <h3 className="font-semibold text-lg mb-4">Informations Générales</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div><label className="text-sm text-gray-600">Cédante</label><p className="font-medium">{bordereau.cedante?.raisonSociale || '-'}</p></div>
-                  {bordereau.reassureurCode && <div><label className="text-sm text-gray-600">Code Réassureur</label><p className="font-medium">{bordereau.reassureurCode}</p></div>}
+                  {bordereau.reassureurCode && (
+                    <div>
+                      <label className="text-sm text-gray-600">Réassureur</label>
+                      <p className="font-medium">
+                        {bordereau.reassureur?.raisonSociale ?? bordereau.reassureurCode}
+                        <span className="text-xs text-gray-400 ml-2">({bordereau.reassureurCode})</span>
+                      </p>
+                    </div>
+                  )}
                   {bordereau.affaire && <div><label className="text-sm text-gray-600">Affaire</label><p className="font-medium">{bordereau.affaire.numero}</p></div>}
                   {bordereau.datePeriodeDebut && <div><label className="text-sm text-gray-600">Période Début</label><p className="font-medium">{new Date(bordereau.datePeriodeDebut).toLocaleDateString('fr-FR')}</p></div>}
                   {bordereau.datePeriodeFin && <div><label className="text-sm text-gray-600">Période Fin</label><p className="font-medium">{new Date(bordereau.datePeriodeFin).toLocaleDateString('fr-FR')}</p></div>}

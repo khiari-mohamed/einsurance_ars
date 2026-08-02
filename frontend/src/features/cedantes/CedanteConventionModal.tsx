@@ -19,6 +19,9 @@ const MAX_FILES = 100;
 
 export default function CedanteConventionModal({ cedanteId, onClose }: CedanteConventionModalProps) {
   const queryClient = useQueryClient();
+  const attachConventionMutation = useMutation({
+    mutationFn: (formData: FormData) => conventionsApi.attach(formData),
+  });
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [dateSignature, setDateSignature] = useState('');
   const [dateEffet, setDateEffet] = useState('');
@@ -82,7 +85,7 @@ export default function CedanteConventionModal({ cedanteId, onClose }: CedanteCo
         if (dateEffet) formData.append('dateEffet', dateEffet);
         if (notes.trim()) formData.append('notes', notes.trim());
 
-        await conventionsApi.attach(formData);
+        await attachConventionMutation.mutateAsync(formData);
 
         setFiles((prev) =>
           prev.map((f) => (f.id === entry.id ? { ...f, status: 'done' } : f))
@@ -103,7 +106,7 @@ export default function CedanteConventionModal({ cedanteId, onClose }: CedanteCo
 
     // Close only if all succeeded
     const updated = files; // capture before state update settles
-    const allDone = files.every((f) => f.status === 'done');
+    const allDone = updated.every((f) => f.status === 'done');
     if (allDone) onClose();
   };
 

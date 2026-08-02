@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { bordereauxApi } from '../../api/bordereaux.api';
+import affairesApi from '../../api/affaires.api';
 import type { BordereauType, BordereauLine, CreateBordereauDto } from '../../types/bordereau.types';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import CurrencySelect from '../../components/ui/CurrencySelect';
 import masterDataApi from '../../api/master-data.api';
 
 interface Props { isOpen: boolean; onClose: () => void }
@@ -37,6 +39,11 @@ export default function BordereauCreateModal({ isOpen, onClose }: Props) {
   const { data: cedantes } = useQuery({
     queryKey: ['cedantes'],
     queryFn: async () => (await masterDataApi.cedantes.getAll()).data,
+  });
+
+  const { data: affaires } = useQuery({
+    queryKey: ['affaires', { statut: 'PLACEMENT_REALISE', limit: 200 }],
+    queryFn: () => affairesApi.getAll({ statut: 'PLACEMENT_REALISE', limit: 200 }),
   });
 
   const { data: reassureurs } = useQuery({
@@ -125,6 +132,20 @@ export default function BordereauCreateModal({ isOpen, onClose }: Props) {
                 </div>
               )}
 
+              <div>
+                <label className="block text-sm font-medium mb-2">Affaire</label>
+                <select
+                  value={formData.affaireId || ''}
+                  onChange={(e) => setFormData({ ...formData, affaireId: e.target.value || undefined })}
+                  className="w-full border rounded-lg px-3 py-2"
+                >
+                  <option value="">— Aucune —</option>
+                  {affaires?.data?.data?.map((a: any) => (
+                    <option key={a.id} value={a.id}>{a.numero} — {a.cedante?.raisonSociale ?? a.cedanteId}</option>
+                  ))}
+                </select>
+              </div>
+
               {needsReassureur && (
                 <div>
                   <label className="block text-sm font-medium mb-2">Réassureur <span className="text-red-500">*</span></label>
@@ -144,15 +165,7 @@ export default function BordereauCreateModal({ isOpen, onClose }: Props) {
 
               <div>
                 <label className="block text-sm font-medium mb-2">Devise</label>
-                <select
-                  value={formData.currency}
-                  onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2"
-                >
-                  <option value="TND">TND</option>
-                  <option value="EUR">EUR</option>
-                  <option value="USD">USD</option>
-                </select>
+                <CurrencySelect value={formData.currency ?? 'TND'} onChange={(value) => setFormData({ ...formData, currency: value })} />
               </div>
             </div>
 

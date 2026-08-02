@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
-import { BordereauStatut, BordereauType, PaymentMode, Prisma } from '@prisma/client';
+import { BordereauStatut, BordereauType, DocumentStatut, PaymentMode, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../shared/services/sequence.service';
 import { AmountToWordsService } from '../../shared/services/amount-to-words.service';
@@ -7,7 +7,7 @@ import { StorageService } from '../../shared/services/storage.service';
 import { EmailService } from '../../shared/services/email.service';
 import { PdfGeneratorService } from '../reporting/pdf-generator.service';
 import { AccountingEngineService } from '../comptabilite/accounting-engine.service';
-import { CreateBordereauDto } from './dto/create-bordereau.dto';
+import { CreateBordereauDto, BordereauLineDto } from './dto/create-bordereau.dto';
 import { UpdateBordereauDto } from './dto/update-bordereau.dto';
 import { GenerateBordereauDto } from './dto/generate-bordereau.dto';
 import { RejectBordereauDto } from './dto/reject-bordereau.dto';
@@ -189,7 +189,26 @@ export class BordereauxService {
       this.prisma.bordereau.count({ where }),
     ]);
 
-    return { data: data.map((b) => this.withDerived(b)), total, page: Number(page), limit: Number(limit) };
+    const codes = [...new Set(data.map((b) => b.reassureurCode).filter(Boolean))] as string[];
+    const reassureurs = codes.length
+      ? await this.prisma.reassureur.findMany({
+          where: { code: { in: codes } },
+          select: { code: true, raisonSociale: true },
+        })
+      : [];
+    const reassureurMap = new Map(reassureurs.map((r) => [r.code, r.raisonSociale]));
+
+    return {
+      data: data.map((b) => this.withDerived({
+        ...b,
+        reassureur: b.reassureurCode
+          ? { raisonSociale: reassureurMap.get(b.reassureurCode) ?? b.reassureurCode }
+          : null,
+      })),
+      total,
+      page: Number(page),
+      limit: Number(limit),
+    };
   }
 
   async findOne(id: string) {
@@ -242,9 +261,48 @@ export class BordereauxService {
     return this.findOne(b.id);
   }
 
+  private computeMontantTotal(type: BordereauType, lines: Array<Partial<BordereauLineDto>>): number {
+    const TRAITE_TYPES = new Set<BordereauType>([
+      BordereauType.SITUATION_TRAITE,
+      BordereauType.FACTURE_DEPOT_PRIME,
+      BordereauType.NOTE_DE_CREDIT,
+      BordereauType.ETAT_DE_TRANSFERT,
+      BordereauType.SITUATION_FINANCIERE,
+      BordereauType.FACTURE_PRIME_REASSURANCE_DEPOT,
+      BordereauType.FACTURE_PRIME_REASSURANCE_AJUSTEMENT,
+    ]);
+
+    if (type === BordereauType.SINISTRE_FACULTATIVE) {
+      return lines.reduce((s, l) => s + Number(l.sinistresPayes ?? l.primeNette ?? l.primeBrute ?? 0), 0);
+    }
+
+    if (TRAITE_TYPES.has(type)) {
+      return lines.reduce((s, l) => {
+        const credit = Number(l.primesCedees ?? 0)
+          + Number(l.recLiberes ?? 0)
+          + Number(l.sapLiberes ?? 0)
+          + Number(l.interets ?? 0);
+        const debit = Number(l.sinistresPayes ?? 0)
+          + Number(l.recConstitues ?? 0)
+          + Number(l.sapConstitues ?? 0)
+          + Number(l.participationsBenef ?? 0)
+          + Number(l.taxes ?? 0)
+          + Number(l.brokerage ?? 0)
+          + Number(l.commissionCedante ?? 0)
+          + Number(l.commissionCourtage ?? 0);
+        if (credit === 0 && debit === 0) {
+          return s + Number(l.primeNette ?? l.primeBrute ?? 0);
+        }
+        return s + Math.abs(credit - debit);
+      }, 0);
+    }
+
+    return lines.reduce((s, l) => s + Number(l.primeNette ?? l.primeBrute ?? 0), 0);
+  }
+
   async create(dto: CreateBordereauDto, userId?: string) {
     const numero = await this.sequence.next('BORDEREAU');
-    const montantTotal = dto.lines?.reduce((s, l) => s + (l.primeNette ?? l.primeBrute ?? 0), 0) ?? 0;
+    const montantTotal = this.computeMontantTotal(dto.type, dto.lines ?? []);
     const montantEnLettres = this.amountToWords.toWords(montantTotal, dto.currency ?? 'TND');
 
     const b = await this.prisma.bordereau.create({
@@ -285,7 +343,7 @@ export class BordereauxService {
     }
 
     const montantTotal = dto.lines
-      ? dto.lines.reduce((s, l) => s + (l.primeNette ?? l.primeBrute ?? 0), 0)
+      ? this.computeMontantTotal((dto.type ?? existing.type) as BordereauType, dto.lines)
       : undefined;
     const montantEnLettres = montantTotal != null
       ? this.amountToWords.toWords(montantTotal, dto.currency ?? existing.currency)
@@ -520,7 +578,12 @@ export class BordereauxService {
     await this.requireStatus(id, BordereauStatut.EN_VALIDATION);
     const b = await this.prisma.bordereau.update({
       where: { id },
-      data: { statut: BordereauStatut.VALIDE, dateValidation: new Date(), validatedByUserId: userId },
+      data: {
+        statut: BordereauStatut.VALIDE,
+        dateValidation: new Date(),
+        validatedByUserId: userId,
+        rejectionReason: null,
+      },
     });
     await this.logAudit(userId, id, 'VALIDATE', 'Bordereau validé');
     return b;
@@ -690,7 +753,10 @@ export class BordereauxService {
 
   async getDocuments(bordereauId: string) {
     return this.prisma.documentLink.findMany({
-      where: { bordereauId },
+      where: {
+        bordereauId,
+        document: { statut: { not: DocumentStatut.REJETE } },
+      },
       include: { document: true },
       orderBy: { createdAt: 'desc' },
     });
@@ -714,6 +780,7 @@ export class BordereauxService {
         sizeBytes: file.size,
         filePath: stored.filePath,
         documentType: dto.documentType,
+        statut: DocumentStatut.RECU,
         uploadedById: userId,
         links: {
           create: {
@@ -734,16 +801,48 @@ export class BordereauxService {
     if (!link || link.bordereauId !== bordereauId) {
       throw new NotFoundException('Document introuvable pour ce bordereau');
     }
-    await this.prisma.documentLink.delete({ where: { id: documentLinkId } });
+
+    let orphanFilePath: string | null = null;
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const deletedLink = await tx.documentLink.delete({ where: { id: documentLinkId } });
+      const remainingLinks = await tx.documentLink.count({ where: { documentId: deletedLink.documentId } });
+
+      if (remainingLinks === 0) {
+        const document = await tx.document.findUnique({ where: { id: deletedLink.documentId } });
+        if (document) {
+          orphanFilePath = document.filePath;
+          await tx.documentAccessLog.deleteMany({ where: { documentId: document.id } });
+          await tx.documentVersion.deleteMany({ where: { documentId: document.id } });
+          await tx.documentShare.deleteMany({ where: { documentId: document.id } });
+          await tx.document.delete({ where: { id: document.id } });
+        }
+      }
+
+      return deletedLink;
+    });
+
+    if (orphanFilePath) {
+      await this.storage.deleteFile(orphanFilePath);
+    }
+
     await this.logAudit(userId, bordereauId, 'DOCUMENT_DELETE', 'Document retiré');
-    return { deleted: true };
+    return { deleted: true, link: result };
   }
 
   async validateDocuments(bordereauId: string) {
-    const count = await this.prisma.documentLink.count({ where: { bordereauId } });
+    const links = await this.prisma.documentLink.findMany({
+      where: {
+        bordereauId,
+        document: { statut: { not: DocumentStatut.REJETE } },
+      },
+      include: { document: true },
+    });
+
+    const complete = links.length > 0;
     return {
-      complete: count > 0,
-      missing: count > 0 ? [] : ['Aucun document attaché'],
+      complete,
+      missing: complete ? [] : ['Aucun document attaché'],
     };
   }
 

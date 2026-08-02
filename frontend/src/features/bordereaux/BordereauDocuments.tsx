@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Upload, FileText, Trash2 } from 'lucide-react';
+import { Upload, FileText, Trash2, Download } from 'lucide-react';
 import { bordereauxApi } from '../../api/bordereaux.api';
+import { gedApi } from '../../api/ged.api';
 import type { BordereauDocumentType } from '../../types/bordereau.types';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
@@ -14,6 +15,7 @@ const DOCUMENT_TYPES: { value: BordereauDocumentType; label: string }[] = [
   { value: 'bank_statement', label: 'Relevé Bancaire' },
   { value: 'payment_justification', label: 'Justificatif de Paiement' },
   { value: 'settlement_statement', label: 'État de Règlement' },
+  { value: 'bordereau_signe', label: 'Bordereau contresigné' },
   { value: 'correspondence', label: 'Correspondance' },
   { value: 'other', label: 'Autre' },
 ];
@@ -49,6 +51,20 @@ export default function BordereauDocuments({ bordereauId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['bordereau-documents', bordereauId] });
     },
   });
+
+  const downloadDocument = async (documentId: string, filename?: string) => {
+    try {
+      const blob = await gedApi.downloadDocument(documentId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'document';
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err?.message || 'Impossible de télécharger le document');
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -100,6 +116,9 @@ export default function BordereauDocuments({ bordereauId }: Props) {
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" title="Télécharger" onClick={() => downloadDocument(link.document.id, link.document.originalName ?? link.document.nom)}>
+                    <Download size={16} className="text-blue-500" />
+                  </Button>
                   <Button size="sm" variant="ghost" title="Supprimer" onClick={() => { if (confirm('Retirer ce document ?')) deleteMutation.mutate(link.id); }}>
                     <Trash2 size={16} className="text-red-500" />
                   </Button>

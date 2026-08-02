@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Edit2, Trash2, Plus, Shield, Globe, FileText, Phone, Landmark,
-  Settings2, ShieldCheck, AlertCircle, Upload, X, CheckCircle2, RotateCcw,
+  Settings2, ShieldCheck, AlertCircle, Upload, X, CheckCircle2, RotateCcw, ChevronDown,
 } from 'lucide-react';
+import CountrySelect from '../../components/ui/CountrySelect';
+import { CURRENCIES } from '../../data/currencies';
 import { coCourtiersApi, conventionsApi } from '../../api/master-data.api';
 import {
   CoCourtier,
@@ -21,6 +23,67 @@ import CoCourtierFreeFieldsModal from './CoCourtierFreeFieldsModal';
 
 type TabKey = 'info' | 'contacts' | 'conventions' | 'bank' | 'free';
 
+function CurrencySelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  const filtered = CURRENCIES.filter(
+    (c) => c.code.toLowerCase().includes(search.toLowerCase()) || c.name.toLowerCase().includes(search.toLowerCase())
+  );
+  const selected = CURRENCIES.find((c) => c.code === value);
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch(''); }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen((v) => !v); setSearch(''); }}
+        className="w-full flex items-center justify-between px-3 py-2 border border-gray-200 rounded-lg text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        <span className={selected ? 'text-gray-900' : 'text-gray-400'}>
+          {selected ? `${selected.code} — ${selected.name}` : 'Sélectionner une devise...'}
+        </span>
+        <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-gray-100">
+            <input
+              autoFocus
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Rechercher (code ou nom)..."
+              className="w-full px-2 py-1.5 text-[12px] border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <ul className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <li className="px-3 py-2 text-[12px] text-gray-400">Aucun résultat</li>
+            ) : filtered.map((c) => (
+              <li
+                key={c.code}
+                onClick={() => { onChange(c.code); setOpen(false); setSearch(''); }}
+                className={`px-3 py-2 text-[12px] cursor-pointer hover:bg-blue-50 flex items-center gap-2 ${
+                  c.code === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                }`}
+              >
+                <span className="font-mono font-semibold w-10 shrink-0">{c.code}</span>
+                <span className="text-gray-500">{c.name}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: 'info', label: 'Informations Générales', icon: Shield },
   { key: 'contacts', label: 'Contacts', icon: Phone },
@@ -29,7 +92,7 @@ const TABS: { key: TabKey; label: string; icon: any }[] = [
   { key: 'free', label: 'Champs Libres', icon: Settings2 },
 ];
 
-const CURRENCIES = ['TND', 'EUR', 'USD', 'GBP', 'JPY'];
+
 
 // Strip a full backend entity down to the create-DTO shape the nested
 // deleteMany+create write on the backend actually accepts.
@@ -580,7 +643,10 @@ function InfoTab({
         </div>
         <div>
           <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays</label>
-          <input name="pays" value={form.pays || ''} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+          <CountrySelect
+            value={form.pays || ''}
+            onChange={(val) => setForm((prev) => ({ ...prev, pays: val }))}
+          />
         </div>
         <div>
           <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Capital</label>
@@ -588,11 +654,10 @@ function InfoTab({
         </div>
         <div>
           <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise par défaut</label>
-          <select name="deviseParDefaut" value={form.deviseParDefaut || 'TND'} onChange={handleChange} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-            {CURRENCIES.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+          <CurrencySelect
+            value={form.deviseParDefaut || 'TND'}
+            onChange={(val) => setForm((prev) => ({ ...prev, deviseParDefaut: val }))}
+          />
         </div>
       </div>
 

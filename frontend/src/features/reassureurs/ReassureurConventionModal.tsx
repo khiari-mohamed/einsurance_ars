@@ -1,11 +1,11 @@
 import { useState, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { X, Upload, FileText, Trash2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { conventionsApi } from '../../api/master-data.api';
 
 interface Props {
-  coCourtierId: string;
+  reassureurId: string;
   onClose: () => void;
-  onSaved: () => void;
 }
 
 interface FileEntry {
@@ -15,7 +15,8 @@ interface FileEntry {
   errorMsg?: string;
 }
 
-export default function CoCourtierConventionModal({ coCourtierId, onClose, onSaved }: Props) {
+export default function ReassureurConventionModal({ reassureurId, onClose }: Props) {
+  const queryClient = useQueryClient();
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [dateSignature, setDateSignature] = useState('');
   const [dateEffet, setDateEffet] = useState('');
@@ -31,11 +32,7 @@ export default function CoCourtierConventionModal({ coCourtierId, onClose, onSav
     const toAdd = Array.from(incoming).slice(0, remaining);
     setFiles((prev) => [
       ...prev,
-      ...toAdd.map((f) => ({
-        id: `${f.name}-${f.size}-${Date.now()}-${Math.random()}`,
-        file: f,
-        status: 'pending' as const,
-      })),
+      ...toAdd.map((f) => ({ id: `${f.name}-${f.size}-${Date.now()}-${Math.random()}`, file: f, status: 'pending' as const })),
     ]);
     if (inputRef.current) inputRef.current.value = '';
   };
@@ -43,10 +40,7 @@ export default function CoCourtierConventionModal({ coCourtierId, onClose, onSav
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setGlobalError('');
-    if (files.length === 0) {
-      setGlobalError('Veuillez sélectionner au moins un fichier.');
-      return;
-    }
+    if (files.length === 0) { setGlobalError('Veuillez sélectionner au moins un fichier.'); return; }
     setSubmitting(true);
     for (const entry of files) {
       if (entry.status === 'done') continue;
@@ -54,8 +48,8 @@ export default function CoCourtierConventionModal({ coCourtierId, onClose, onSav
       try {
         const formData = new FormData();
         formData.append('file', entry.file);
-        formData.append('partnerType', 'CO_COURTIER');
-        formData.append('partnerId', coCourtierId);
+        formData.append('partnerType', 'REASSUREUR');
+        formData.append('partnerId', reassureurId);
         if (dateSignature) formData.append('dateSignature', dateSignature);
         if (dateEffet) formData.append('dateEffet', dateEffet);
         if (notes.trim()) formData.append('notes', notes.trim());
@@ -67,8 +61,10 @@ export default function CoCourtierConventionModal({ coCourtierId, onClose, onSav
       }
     }
     setSubmitting(false);
-    const allDone = files.every((f) => f.status === 'done');
-    if (allDone) onSaved();
+    queryClient.invalidateQueries({ queryKey: ['reassureurs', reassureurId, 'conventions'] });
+    queryClient.invalidateQueries({ queryKey: ['reassureurs', reassureurId] });
+    const updated = files.filter((f) => f.status !== 'done');
+    if (updated.every((f) => f.status === 'done') || files.every((f) => f.status === 'done')) onClose();
   };
 
   const doneCount = files.filter((f) => f.status === 'done').length;
@@ -84,9 +80,7 @@ export default function CoCourtierConventionModal({ coCourtierId, onClose, onSav
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-4">
-          {globalError && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">{globalError}</div>
-          )}
+          {globalError && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">{globalError}</div>}
 
           <div>
             <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
@@ -101,33 +95,22 @@ export default function CoCourtierConventionModal({ coCourtierId, onClose, onSav
               <Upload size={24} className="text-gray-400" />
               <span className="text-[13px] text-gray-600">Cliquez ou glissez-déposez vos fichiers</span>
               <span className="text-[11px] text-gray-400">PDF, Word, Excel, images — tous formats acceptés</span>
-              <input
-                ref={inputRef}
-                type="file"
-                multiple
-                onChange={(e) => addFiles(e.target.files)}
-                className="hidden"
-              />
+              <input ref={inputRef} type="file" multiple onChange={(e) => addFiles(e.target.files)} className="hidden" />
             </div>
           </div>
 
           {files.length > 0 && (
             <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
               {files.map((entry) => (
-                <div
-                  key={entry.id}
-                  className={`flex items-center justify-between p-2.5 border rounded-lg text-[12px] ${
-                    entry.status === 'done' ? 'border-green-200 bg-green-50' :
-                    entry.status === 'error' ? 'border-red-200 bg-red-50' :
-                    entry.status === 'uploading' ? 'border-blue-200 bg-blue-50' : 'border-gray-100'
-                  }`}
-                >
+                <div key={entry.id} className={`flex items-center justify-between p-2.5 border rounded-lg text-[12px] ${
+                  entry.status === 'done' ? 'border-green-200 bg-green-50' :
+                  entry.status === 'error' ? 'border-red-200 bg-red-50' :
+                  entry.status === 'uploading' ? 'border-blue-200 bg-blue-50' : 'border-gray-100'
+                }`}>
                   <div className="flex items-center gap-2 min-w-0">
                     {entry.status === 'done' && <CheckCircle2 size={14} className="text-green-600 shrink-0" />}
                     {entry.status === 'error' && <AlertCircle size={14} className="text-red-500 shrink-0" />}
-                    {entry.status === 'uploading' && (
-                      <div className="w-3.5 h-3.5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin shrink-0" />
-                    )}
+                    {entry.status === 'uploading' && <div className="w-3.5 h-3.5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin shrink-0" />}
                     {entry.status === 'pending' && <FileText size={14} className="text-gray-400 shrink-0" />}
                     <div className="min-w-0">
                       <p className="truncate text-gray-900">{entry.file.name}</p>
@@ -135,11 +118,7 @@ export default function CoCourtierConventionModal({ coCourtierId, onClose, onSav
                     </div>
                   </div>
                   {entry.status !== 'uploading' && entry.status !== 'done' && (
-                    <button
-                      type="button"
-                      onClick={() => setFiles((p) => p.filter((f) => f.id !== entry.id))}
-                      className="p-1 rounded hover:bg-red-100 text-red-500 shrink-0 ml-2"
-                    >
+                    <button type="button" onClick={() => setFiles((p) => p.filter((f) => f.id !== entry.id))} className="p-1 rounded hover:bg-red-100 text-red-500 shrink-0 ml-2">
                       <Trash2 size={12} />
                     </button>
                   )}
@@ -151,35 +130,21 @@ export default function CoCourtierConventionModal({ coCourtierId, onClose, onSav
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date de signature</label>
-              <input
-                type="date"
-                value={dateSignature}
-                onChange={(e) => setDateSignature(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <input type="date" value={dateSignature} onChange={(e) => setDateSignature(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
             <div>
               <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date d'effet</label>
-              <input
-                type="date"
-                value={dateEffet}
-                onChange={(e) => setDateEffet(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              <input type="date" value={dateEffet} onChange={(e) => setDateEffet(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
 
           <div>
             <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Notes</label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              rows={3}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
-            {files.length > 1 && (
-              <p className="mt-1 text-[11px] text-gray-400">Ces métadonnées s'appliquent à tous les fichiers.</p>
-            )}
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+            {files.length > 1 && <p className="mt-1 text-[11px] text-gray-400">Ces métadonnées s'appliquent à tous les fichiers.</p>}
           </div>
         </form>
 

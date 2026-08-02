@@ -92,8 +92,8 @@ export default function BordereauxList() {
 
   const downloadPdfMutation = useMutation({
     mutationFn: async (id: string) => {
-      const blob = await bordereauxApi.generatePdf(id);
-      const url = window.URL.createObjectURL(blob.data as Blob);
+      const response = await bordereauxApi.generatePdf(id);
+      const url = window.URL.createObjectURL(response.data as Blob);
       const a = document.createElement('a');
       a.href = url;
       a.download = `bordereau-${id}.pdf`;
@@ -102,7 +102,13 @@ export default function BordereauxList() {
     },
   });
 
-  const rows = data?.data?.data ?? [];
+  // FIX: was data?.data?.data (triple-nested, always undefined).
+  // bordereauxApi.getAll returns api.get<{data,total,page,limit}>.
+  // useQuery stores the full axios response → data = axios response,
+  // data.data = the API envelope { data: Bordereau[], total, page, limit }.
+  const envelope = data?.data;
+  const rows: Bordereau[] = envelope?.data ?? [];
+  const total = envelope?.total ?? 0;
 
   const handleSelectAll = () => {
     setSelectedIds(selectedIds.length === rows.length ? [] : rows.map((b) => b.id));
@@ -261,7 +267,9 @@ export default function BordereauxList() {
                         <div className="text-xs text-gray-500">{new Date(b.dateEmission).toLocaleDateString('fr-FR')}</div>
                       </td>
                       <td className="px-6 py-4"><Badge className="bg-gray-100 text-gray-800">{TYPE_LABELS[b.type]}</Badge></td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{b.cedante?.raisonSociale || b.reassureurCode || '-'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-900">
+                        {b.cedante?.raisonSociale || b.reassureur?.raisonSociale || b.reassureurCode || '-'}
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-2">
                           <StatusIcon size={16} />
@@ -270,8 +278,8 @@ export default function BordereauxList() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="text-sm font-semibold text-gray-900">{b.solde.toLocaleString()} {b.currency}</div>
-                        {b.montantRegle > 0 && <div className="text-xs text-green-600">Réglé: {b.montantRegle.toLocaleString()}</div>}
+                        <div className="text-sm font-semibold text-gray-900">{Number(b.solde ?? 0).toLocaleString()} {b.currency}</div>
+                        {Number(b.montantRegle) > 0 && <div className="text-xs text-green-600">Réglé: {Number(b.montantRegle).toLocaleString()}</div>}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-center gap-2">
@@ -289,14 +297,15 @@ export default function BordereauxList() {
             </table>
           </div>
 
-          {data?.data && data.data.total > 0 && (
+          {total > 0 && (
             <div className="px-6 py-4 border-t flex items-center justify-between">
               <div className="text-sm text-gray-600">
-                Affichage de {((filters.page! - 1) * filters.limit!) + 1} à {Math.min(filters.page! * filters.limit!, data.data.total)} sur {data.data.total} résultats
+                {/* FIX: was showing "1 à 20 sur 5" — Math.min caps the upper bound */}
+                Affichage de {((filters.page! - 1) * filters.limit!) + 1} à {Math.min(filters.page! * filters.limit!, total)} sur {total} résultats
               </div>
               <div className="flex gap-2">
                 <Button size="sm" variant="outline" onClick={() => setFilters({ ...filters, page: filters.page! - 1 })} disabled={filters.page === 1}>Précédent</Button>
-                <Button size="sm" variant="outline" onClick={() => setFilters({ ...filters, page: filters.page! + 1 })} disabled={filters.page! * filters.limit! >= data.data.total}>Suivant</Button>
+                <Button size="sm" variant="outline" onClick={() => setFilters({ ...filters, page: filters.page! + 1 })} disabled={filters.page! * filters.limit! >= total}>Suivant</Button>
               </div>
             </div>
           )}
