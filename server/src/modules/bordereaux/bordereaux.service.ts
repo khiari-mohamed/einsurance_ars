@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
-import { BordereauStatut, BordereauType, DocumentStatut, PaymentMode, Prisma } from '@prisma/client';
+import { BordereauStatut, BordereauType, DocumentStatut, PaymentMode, Prisma, SituationSoldeDirection } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../shared/services/sequence.service';
+import type { SequenceEntity } from '../../shared/services/sequence.service';
 import { AmountToWordsService } from '../../shared/services/amount-to-words.service';
 import { StorageService } from '../../shared/services/storage.service';
 import { EmailService } from '../../shared/services/email.service';
@@ -15,23 +16,6 @@ import { SendBordereauDto } from './dto/send-bordereau.dto';
 import { PayBordereauDto } from './dto/pay-bordereau.dto';
 import { AttachDocumentDto } from './dto/attach-document.dto';
 
-// CHANGED: PdfService swapped for PdfGeneratorService. PdfService never
-// registers Handlebars helpers (formatDate, ifCond, default, etc.) — every
-// bordereau template needs them. Relying on PdfService "working" depended on
-// PdfGeneratorService happening to be instantiated first elsewhere in the
-// app (global Handlebars singleton mutation) — fragile, and not something to
-// build new templates against. See turn notes for the same latent issue in
-// FacultativeService / OrdrePaiementService / TraitesService (not fixed here
-// — out of scope for this pass, flagged for its own fix).
-
-// CHANGED: TEMPLATE_MAP replaced by resolveTemplate(). The five legacy
-// templates (bordereau-cedante, bordereau-reassureur, claim-bordereau,
-// payment-order, pmd-invoice, treaty-statement) are NOT Bordereau-native —
-// they're built around Affaire/Sinistre/OrdrePaiement/TraiteAffaire context
-// owned by FacultativeService/SinistresService/OrdrePaiementService/
-// TraitesService respectively. Bordereaux gets its own three adaptive
-// templates, grouped by real structural similarity in BordereauLine's
-// column set rather than one-per-BordereauType:
 function resolveTemplate(type: BordereauType): 'bordereau-cession' | 'bordereau-traite' | 'bordereau-releve' {
   switch (type) {
     case BordereauType.CESSION_CEDANTE:
@@ -66,6 +50,20 @@ const TYPE_TITLES: Record<BordereauType, string> = {
 };
 
 const DEFAULT_PAYMENT_TERM_DAYS = 30;
+
+// NEW — the 7 types whose bordereau is a netting/statement document
+// (DEBIT/CREDIT columns per CDC §6.3), as opposed to CESSION_CEDANTE /
+// CESSION_REASSUREUR / SINISTRE_FACULTATIVE which are flat premium/claim
+// totals. Shared by computeMontant() and the per-type sequence key builder.
+const TRAITE_TYPES = new Set<BordereauType>([
+  BordereauType.SITUATION_TRAITE,
+  BordereauType.FACTURE_DEPOT_PRIME,
+  BordereauType.NOTE_DE_CREDIT,
+  BordereauType.ETAT_DE_TRANSFERT,
+  BordereauType.SITUATION_FINANCIERE,
+  BordereauType.FACTURE_PRIME_REASSURANCE_DEPOT,
+  BordereauType.FACTURE_PRIME_REASSURANCE_AJUSTEMENT,
+]);
 
 type UploadedFile = {
   buffer: Buffer;
@@ -234,11 +232,6 @@ export class BordereauxService {
       : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
 
-    // NEW: reassureurCode is a denormalized string, not a relation, so the
-    // reinsurer's display name has to be resolved separately — needed for
-    // the PDF header on CESSION_REASSUREUR bordereaux (raisonSociale, not
-    // just the raw code). Additive only; findOne()'s existing shape is
-    // unchanged for everyone who doesn't read this new field.
     let reassureur: { raisonSociale: string; compteComptable: string } | null = null;
     if (b.reassureurCode) {
       reassureur = await this.prisma.reassureur.findFirst({
@@ -261,48 +254,69 @@ export class BordereauxService {
     return this.findOne(b.id);
   }
 
-  private computeMontantTotal(type: BordereauType, lines: Array<Partial<BordereauLineDto>>): number {
-    const TRAITE_TYPES = new Set<BordereauType>([
-      BordereauType.SITUATION_TRAITE,
-      BordereauType.FACTURE_DEPOT_PRIME,
-      BordereauType.NOTE_DE_CREDIT,
-      BordereauType.ETAT_DE_TRANSFERT,
-      BordereauType.SITUATION_FINANCIERE,
-      BordereauType.FACTURE_PRIME_REASSURANCE_DEPOT,
-      BordereauType.FACTURE_PRIME_REASSURANCE_AJUSTEMENT,
-    ]);
-
+  // NEW — replaces the old computeMontantTotal(): number with a version that
+  // also derives soldeDirection for the 7 traité-family types.
+  private computeMontant(
+    type: BordereauType,
+    lines: Array<Partial<BordereauLineDto>>,
+  ): { montantTotal: number; soldeDirection: SituationSoldeDirection | null } {
     if (type === BordereauType.SINISTRE_FACULTATIVE) {
-      return lines.reduce((s, l) => s + Number(l.sinistresPayes ?? l.primeNette ?? l.primeBrute ?? 0), 0);
+      const montantTotal = lines.reduce(
+        (s, l) => s + Number(l.sinistresPayes ?? l.primeNette ?? l.primeBrute ?? 0), 0,
+      );
+      return { montantTotal, soldeDirection: null };
     }
 
     if (TRAITE_TYPES.has(type)) {
-      return lines.reduce((s, l) => {
-        const credit = Number(l.primesCedees ?? 0)
-          + Number(l.recLiberes ?? 0)
-          + Number(l.sapLiberes ?? 0)
-          + Number(l.interets ?? 0);
-        const debit = Number(l.sinistresPayes ?? 0)
-          + Number(l.recConstitues ?? 0)
-          + Number(l.sapConstitues ?? 0)
-          + Number(l.participationsBenef ?? 0)
-          + Number(l.taxes ?? 0)
-          + Number(l.brokerage ?? 0)
-          + Number(l.commissionCedante ?? 0)
-          + Number(l.commissionCourtage ?? 0);
-        if (credit === 0 && debit === 0) {
-          return s + Number(l.primeNette ?? l.primeBrute ?? 0);
+      let credit = 0; // schema's own "CREDIT side" columns: primesCedees, recLiberes, sapLiberes, interets
+      let debit = 0;  // schema's own "DEBIT side" columns: sinistresPayes, recConstitues, sapConstitues, participationsBenef, taxes, brokerage (+ commissions)
+      let fallback = 0; // lines entered with only the cession-shaped fields (no debit/credit columns set)
+
+      for (const l of lines) {
+        const c = Number(l.primesCedees ?? 0) + Number(l.recLiberes ?? 0)
+          + Number(l.sapLiberes ?? 0) + Number(l.interets ?? 0);
+        const d = Number(l.sinistresPayes ?? 0) + Number(l.recConstitues ?? 0)
+          + Number(l.sapConstitues ?? 0) + Number(l.participationsBenef ?? 0)
+          + Number(l.taxes ?? 0) + Number(l.brokerage ?? 0)
+          + Number(l.commissionCedante ?? 0) + Number(l.commissionCourtage ?? 0);
+        if (c === 0 && d === 0) {
+          fallback += Number(l.primeNette ?? l.primeBrute ?? 0);
+        } else {
+          credit += c;
+          debit += d;
         }
-        return s + Math.abs(credit - debit);
-      }, 0);
+      }
+
+      const montantTotal = Math.abs(credit - debit) + Math.abs(fallback);
+
+      // ASSUMPTION (flag for business confirmation — same convention as
+      // Situation.soldeDirection, reused generically): CREDIT columns are
+      // premium-side amounts owed TO ARS by whichever party this bordereau
+      // is issued to; DEBIT columns are claims/deductions owed BY ARS. If
+      // CREDIT > DEBIT the counterparty owes ARS the difference
+      // (CEDANTE_DOIT — the enum label is reused as-is from Situation, it
+      // does not imply the counterparty is literally always a cédante). If
+      // DEBIT > CREDIT, ARS owes the counterparty (ARS_DOIT).
+      let soldeDirection: SituationSoldeDirection = SituationSoldeDirection.EQUILIBRE;
+      if (credit > debit) soldeDirection = SituationSoldeDirection.CEDANTE_DOIT;
+      else if (debit > credit) soldeDirection = SituationSoldeDirection.ARS_DOIT;
+
+      return { montantTotal, soldeDirection };
     }
 
-    return lines.reduce((s, l) => s + Number(l.primeNette ?? l.primeBrute ?? 0), 0);
+    const montantTotal = lines.reduce((s, l) => s + Number(l.primeNette ?? l.primeBrute ?? 0), 0);
+    return { montantTotal, soldeDirection: null };
+  }
+
+  // NEW — per-BordereauType sequence key. See SequenceService for the prefix
+  // table (BCC/BCR/BSF/BST/BFD/BNC/BET/BSI/BPD/BPA).
+  private sequenceKeyFor(type: BordereauType): SequenceEntity {
+    return `BORDEREAU_${type}` as SequenceEntity;
   }
 
   async create(dto: CreateBordereauDto, userId?: string) {
-    const numero = await this.sequence.next('BORDEREAU');
-    const montantTotal = this.computeMontantTotal(dto.type, dto.lines ?? []);
+    const numero = await this.sequence.next(this.sequenceKeyFor(dto.type));
+    const { montantTotal, soldeDirection } = this.computeMontant(dto.type, dto.lines ?? []);
     const montantEnLettres = this.amountToWords.toWords(montantTotal, dto.currency ?? 'TND');
 
     const b = await this.prisma.bordereau.create({
@@ -321,6 +335,7 @@ export class BordereauxService {
         notes: dto.notes,
         montantTotal,
         montantEnLettres,
+        soldeDirection,
         createdByUserId: userId,
         lines: dto.lines ? { create: dto.lines.map((l, i) => ({
           ...l,
@@ -342,11 +357,10 @@ export class BordereauxService {
       throw new BadRequestException('Seul un bordereau BROUILLON peut être modifié');
     }
 
-    const montantTotal = dto.lines
-      ? this.computeMontantTotal((dto.type ?? existing.type) as BordereauType, dto.lines)
-      : undefined;
-    const montantEnLettres = montantTotal != null
-      ? this.amountToWords.toWords(montantTotal, dto.currency ?? existing.currency)
+    const effectiveType = (dto.type ?? existing.type) as BordereauType;
+    const computed = dto.lines ? this.computeMontant(effectiveType, dto.lines) : null;
+    const montantEnLettres = computed != null
+      ? this.amountToWords.toWords(computed.montantTotal, dto.currency ?? existing.currency)
       : undefined;
 
     const b = await this.prisma.$transaction(async (tx) => {
@@ -366,7 +380,11 @@ export class BordereauxService {
           dateLimitePaiement: dto.dateLimitePaiement ? new Date(dto.dateLimitePaiement) : undefined,
           currency: dto.currency,
           notes: dto.notes,
-          ...(montantTotal != null && { montantTotal, montantEnLettres }),
+          ...(computed != null && {
+            montantTotal: computed.montantTotal,
+            montantEnLettres,
+            soldeDirection: computed.soldeDirection,
+          }),
           ...(dto.lines && {
             lines: { create: dto.lines.map((l, i) => ({
               ...l,
@@ -731,7 +749,7 @@ export class BordereauxService {
   }
 
   // ============================================================
-  // PDF — rebuilt against Bordereaux' own templates
+  // PDF
   // ============================================================
 
   async generatePdf(id: string): Promise<Buffer> {

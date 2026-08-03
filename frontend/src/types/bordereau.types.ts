@@ -120,6 +120,9 @@ export interface Bordereau {
   solde: number;         // derived server-side
   isOverdue: boolean;    // derived server-side
 
+  // NEW — only populated for the 7 traité-family types, see backend for convention
+  soldeDirection?: 'CEDANTE_DOIT' | 'ARS_DOIT' | 'EQUILIBRE' | null;
+
   rejectionReason?: string;
   recipients: string[];
   notes?: string;

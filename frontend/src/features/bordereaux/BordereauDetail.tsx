@@ -38,6 +38,12 @@ const TYPE_LABELS: Record<BordereauType, string> = {
   FACTURE_PRIME_REASSURANCE_AJUSTEMENT: 'Facture Prime Réassurance (Ajustement)',
 };
 
+const TRAITE_TYPES: BordereauType[] = [
+  'SITUATION_TRAITE', 'FACTURE_DEPOT_PRIME', 'NOTE_DE_CREDIT', 'ETAT_DE_TRANSFERT',
+  'SITUATION_FINANCIERE', 'FACTURE_PRIME_REASSURANCE_DEPOT', 'FACTURE_PRIME_REASSURANCE_AJUSTEMENT',
+];
+const isTraiteType = (t: BordereauType) => TRAITE_TYPES.includes(t);
+
 export default function BordereauDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -219,39 +225,113 @@ export default function BordereauDetail() {
             </TabsContent>
 
             <TabsContent value="lines">
-              <Card className="overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50 border-b">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libellé</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prime Brute</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Taux Cession</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Comm. Cédante</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Comm. Courtage</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prime Nette</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {bordereau.lines?.map((line, i) => (
-                        <tr key={line.id ?? i} className="hover:bg-gray-50">
-                          <td className="px-4 py-3 text-sm">{line.ordre ?? i + 1}</td>
-                          <td className="px-4 py-3 text-sm">{line.libelle}</td>
-                          <td className="px-4 py-3 text-sm text-right">{line.primeBrute?.toLocaleString() ?? '-'}</td>
-                          <td className="px-4 py-3 text-sm text-right">{line.tauxCession ? `${line.tauxCession}%` : '-'}</td>
-                          <td className="px-4 py-3 text-sm text-right">{line.commissionCedante?.toLocaleString() ?? '-'}</td>
-                          <td className="px-4 py-3 text-sm text-right">{line.commissionCourtage?.toLocaleString() ?? '-'}</td>
-                          <td className="px-4 py-3 text-sm text-right font-semibold">{line.primeNette?.toLocaleString() ?? '-'}</td>
-                        </tr>
-                      ))}
-                      {(!bordereau.lines || bordereau.lines.length === 0) && (
-                        <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Aucune ligne</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+              {isTraiteType(bordereau.type) ? (
+                <div className="space-y-4">
+                  <Card className="overflow-hidden">
+                    <div className="px-4 py-2 bg-red-50 border-b text-xs font-semibold text-red-700 uppercase">Débit</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libellé</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sinistres Payés</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">REC Constituées</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">SAP Constitués</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Part. Bénéf.</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Taxes</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Courtage</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {bordereau.lines?.map((line, i) => (
+                            <tr key={line.id ?? i} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm">{line.libelle}{line.couverture ? ` — ${line.couverture}` : ''}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.sinistresPayes != null ? Number(line.sinistresPayes).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.recConstitues != null ? Number(line.recConstitues).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.sapConstitues != null ? Number(line.sapConstitues).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.participationsBenef != null ? Number(line.participationsBenef).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.taxes != null ? Number(line.taxes).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.brokerage != null ? Number(line.brokerage).toLocaleString() : '-'}</td>
+                            </tr>
+                          ))}
+                          {(!bordereau.lines || bordereau.lines.length === 0) && (
+                            <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Aucune ligne</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+
+                  <Card className="overflow-hidden">
+                    <div className="px-4 py-2 bg-green-50 border-b text-xs font-semibold text-green-700 uppercase">Crédit</div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-gray-50 border-b">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libellé</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Primes Cédées</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">REC Libérés</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">SAP Libérés</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Intérêts</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prime Brute</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prime Nette</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {bordereau.lines?.map((line, i) => (
+                            <tr key={line.id ?? i} className="hover:bg-gray-50">
+                              <td className="px-4 py-3 text-sm">{line.libelle}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.primesCedees != null ? Number(line.primesCedees).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.recLiberes != null ? Number(line.recLiberes).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.sapLiberes != null ? Number(line.sapLiberes).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.interets != null ? Number(line.interets).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right">{line.primeBrute != null ? Number(line.primeBrute).toLocaleString() : '-'}</td>
+                              <td className="px-4 py-3 text-sm text-right font-semibold">{line.primeNette != null ? Number(line.primeNette).toLocaleString() : '-'}</td>
+                            </tr>
+                          ))}
+                          {(!bordereau.lines || bordereau.lines.length === 0) && (
+                            <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Aucune ligne</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
                 </div>
-              </Card>
+              ) : (
+                <Card className="overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50 border-b">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libellé</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prime Brute</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Taux Cession</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Comm. Cédante</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Comm. Courtage</th>
+                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Prime Nette</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {bordereau.lines?.map((line, i) => (
+                          <tr key={line.id ?? i} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-sm">{line.ordre ?? i + 1}</td>
+                            <td className="px-4 py-3 text-sm">{line.libelle}</td>
+                            <td className="px-4 py-3 text-sm text-right">{line.primeBrute != null ? Number(line.primeBrute).toLocaleString() : '-'}</td>
+                            <td className="px-4 py-3 text-sm text-right">{line.tauxCession ? `${line.tauxCession}%` : '-'}</td>
+                            <td className="px-4 py-3 text-sm text-right">{line.commissionCedante != null ? Number(line.commissionCedante).toLocaleString() : '-'}</td>
+                            <td className="px-4 py-3 text-sm text-right">{line.commissionCourtage != null ? Number(line.commissionCourtage).toLocaleString() : '-'}</td>
+                            <td className="px-4 py-3 text-sm text-right font-semibold">{line.primeNette != null ? Number(line.primeNette).toLocaleString() : '-'}</td>
+                          </tr>
+                        ))}
+                        {(!bordereau.lines || bordereau.lines.length === 0) && (
+                          <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Aucune ligne</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
             </TabsContent>
 
             <TabsContent value="documents"><BordereauDocuments bordereauId={id!} /></TabsContent>
@@ -280,11 +360,19 @@ export default function BordereauDetail() {
           <Card className="p-6">
             <h3 className="font-semibold text-lg mb-4">Résumé Financier</h3>
             <div className="space-y-3">
-              <div className="flex justify-between"><span className="text-gray-600">Montant Total</span><span className="font-semibold">{bordereau.montantTotal.toLocaleString()} {bordereau.currency}</span></div>
+              <div className="flex justify-between"><span className="text-gray-600">Montant Total</span><span className="font-semibold">{Number(bordereau.montantTotal).toLocaleString()} {bordereau.currency}</span></div>
               {bordereau.montantRegle > 0 && (
-                <div className="flex justify-between"><span className="text-gray-600">Réglé</span><span className="font-semibold text-green-600">{bordereau.montantRegle.toLocaleString()} {bordereau.currency}</span></div>
+                <div className="flex justify-between"><span className="text-gray-600">Réglé</span><span className="font-semibold text-green-600">{Number(bordereau.montantRegle).toLocaleString()} {bordereau.currency}</span></div>
               )}
-              <div className="flex justify-between pt-3 border-t"><span className="font-bold">Solde</span><span className="font-bold text-lg">{bordereau.solde.toLocaleString()} {bordereau.currency}</span></div>
+              <div className="flex justify-between pt-3 border-t"><span className="font-bold">Solde</span><span className="font-bold text-lg">{Number(bordereau.solde).toLocaleString()} {bordereau.currency}</span></div>
+              {bordereau.soldeDirection && bordereau.soldeDirection !== 'EQUILIBRE' && (
+                <div className="flex justify-between items-center pt-2">
+                  <span className="text-sm text-gray-600">Sens du solde</span>
+                  <Badge className={bordereau.soldeDirection === 'CEDANTE_DOIT' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'}>
+                    {bordereau.soldeDirection === 'CEDANTE_DOIT' ? 'Contrepartie doit à ARS' : 'ARS doit à la contrepartie'}
+                  </Badge>
+                </div>
+              )}
             </div>
           </Card>
 

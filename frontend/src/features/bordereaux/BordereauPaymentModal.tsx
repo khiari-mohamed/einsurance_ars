@@ -61,9 +61,9 @@ export default function BordereauPaymentModal({ isOpen, onClose, bordereau }: Pr
 
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <div><span className="text-gray-600">Solde actuel:</span><p className="text-xl font-bold text-blue-900">{bordereau.solde.toLocaleString()} {bordereau.currency}</p></div>
+              <div><span className="text-gray-600">Solde actuel:</span><p className="text-xl font-bold text-blue-900">{Number(bordereau.solde).toLocaleString()} {bordereau.currency}</p></div>
               {bordereau.montantRegle > 0 && (
-                <div><span className="text-gray-600">Déjà réglé:</span><p className="text-lg font-semibold text-green-600">{bordereau.montantRegle.toLocaleString()} {bordereau.currency}</p></div>
+                <div><span className="text-gray-600">Déjà réglé:</span><p className="text-lg font-semibold text-green-600">{Number(bordereau.montantRegle).toLocaleString()} {bordereau.currency}</p></div>
               )}
             </div>
           </div>
@@ -75,7 +75,7 @@ export default function BordereauPaymentModal({ isOpen, onClose, bordereau }: Pr
                 <input type="number" step="0.001" value={formData.montant} onChange={(e) => setFormData({ ...formData, montant: parseFloat(e.target.value) || 0 })} className="w-full border rounded-lg px-4 py-2 pr-16" required min="0.001" />
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">{bordereau.currency}</span>
               </div>
-              {formData.montant < bordereau.solde && <p className="text-sm text-orange-600 mt-1">Paiement partiel. Solde restant: {(bordereau.solde - formData.montant).toLocaleString()} {bordereau.currency}</p>}
+              {formData.montant < bordereau.solde && <p className="text-sm text-orange-600 mt-1">Paiement partiel. Solde restant: {(Number(bordereau.solde) - formData.montant).toLocaleString()} {bordereau.currency}</p>}
               {formData.montant >= bordereau.solde && <p className="text-sm text-green-600 mt-1">✓ Ce paiement clôturera le bordereau (statut → Acquitté)</p>}
             </div>
 

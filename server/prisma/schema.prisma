@@ -1622,6 +1622,9 @@ model Bordereau {
   recipients         String[]      @default([])   // snapshot of last send() recipients — reused by reminders
   notes              String?
 
+  // NEW — Solde direction for traité-family bordereaux only.
+  soldeDirection     SituationSoldeDirection?
+
   createdByUserId    String?
   validatedByUserId  String?
 

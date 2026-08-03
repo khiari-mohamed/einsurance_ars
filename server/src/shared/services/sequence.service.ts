@@ -15,16 +15,24 @@ export type SequenceEntity =
   | 'DECAISSEMENT'
   | 'JOURNAL_ENTRY'
   | 'SITUATION'
-  | 'LETTRAGE';
+  | 'LETTRAGE'
+  // NEW — per-BordereauType numbering. Key format is literally
+  // `BORDEREAU_${BordereauType}`, which lets BordereauxService build the key
+  // with a simple template string instead of a separate mapping function.
+  // 'BORDEREAU' (flat, above) is kept for backward compatibility with any
+  // already-issued numbers — it's just no longer the key bordereaux.service.ts
+  // writes new ones under.
+  | 'BORDEREAU_CESSION_CEDANTE'
+  | 'BORDEREAU_CESSION_REASSUREUR'
+  | 'BORDEREAU_SINISTRE_FACULTATIVE'
+  | 'BORDEREAU_SITUATION_TRAITE'
+  | 'BORDEREAU_FACTURE_DEPOT_PRIME'
+  | 'BORDEREAU_NOTE_DE_CREDIT'
+  | 'BORDEREAU_ETAT_DE_TRANSFERT'
+  | 'BORDEREAU_SITUATION_FINANCIERE'
+  | 'BORDEREAU_FACTURE_PRIME_REASSURANCE_DEPOT'
+  | 'BORDEREAU_FACTURE_PRIME_REASSURANCE_AJUSTEMENT';
 
-// Prefixes confirmed in the June 26 audit (Critique 3) for Référentiel entity types.
-// NOTE: the client checked BOTH "prefix per type" AND "global numbering" simultaneously
-// on the original questionnaire (5.6.1) — still an open, unresolved contradiction
-// (Audit Critique 3). This implementation is Option A: independent, per-type,
-// restarting counters (CAS-0001, CAS-0002... / REA-0001, REA-0002... run in parallel,
-// NOT sharing one counter). If the client confirms Option B (a single shared global
-// counter across all 4 types), this needs a structural change — one shared Sequence
-// row instead of 4 independent ones — not just a prefix change.
 const PREFIXES: Record<SequenceEntity, string> = {
   CEDANTE: 'CAS',
   REASSUREUR: 'REA',
@@ -41,6 +49,21 @@ const PREFIXES: Record<SequenceEntity, string> = {
   JOURNAL_ENTRY: 'JNL',
   SITUATION: 'SIT',
   LETTRAGE: 'LET',
+
+  // NEW — one distinct 3-letter prefix per BordereauType, independent
+  // restarting counters (same Option-A convention as the 4 Référentiel
+  // entity types above — see the comment on those regarding the
+  // still-unresolved global-vs-per-type numbering question).
+  BORDEREAU_CESSION_CEDANTE: 'BCC',
+  BORDEREAU_CESSION_REASSUREUR: 'BCR',
+  BORDEREAU_SINISTRE_FACULTATIVE: 'BSF',
+  BORDEREAU_SITUATION_TRAITE: 'BST',
+  BORDEREAU_FACTURE_DEPOT_PRIME: 'BFD',
+  BORDEREAU_NOTE_DE_CREDIT: 'BNC',
+  BORDEREAU_ETAT_DE_TRANSFERT: 'BET',
+  BORDEREAU_SITUATION_FINANCIERE: 'BSI',
+  BORDEREAU_FACTURE_PRIME_REASSURANCE_DEPOT: 'BPD',
+  BORDEREAU_FACTURE_PRIME_REASSURANCE_AJUSTEMENT: 'BPA',
 };
 
 const PAD_LENGTH = 4;
@@ -49,10 +72,6 @@ const PAD_LENGTH = 4;
 export class SequenceService {
   constructor(private prisma: PrismaService) {}
 
-  /**
-   * Generates the next sequential code for a given entity type.
-   * Examples: next('CEDANTE') -> 'CAS-0001', 'CAS-0002'...
-   */
   async next(entityType: SequenceEntity): Promise<string> {
     const prefix = PREFIXES[entityType];
     if (!prefix) {
@@ -73,22 +92,11 @@ export class SequenceService {
     return `${result.prefix}-${padded}`;
   }
 
-  /**
-   * Gets the current last value without incrementing (for admin monitoring).
-   */
   async currentValue(entityType: SequenceEntity): Promise<number> {
     const seq = await this.prisma.sequence.findUnique({ where: { entityType } });
     return seq?.lastValue ?? 0;
   }
 
-  /**
-   * FIX (was missing entirely): after an admin manually overrides an auto-generated
-   * code (e.g. CAS-0005 -> CAS-0099), the underlying counter must be bumped forward
-   * so a future auto-generated code can't eventually walk back up to 0099 and collide
-   * with the manually-assigned one. Previously, all four *.service.ts overrideCode()
-   * methods had a docstring CLAIMING this behavior, but never actually implemented it
-   * — this was dead documentation. Never moves the counter backwards.
-   */
   async bump(entityType: SequenceEntity, minValue: number): Promise<void> {
     const prefix = PREFIXES[entityType];
     if (!prefix) {
@@ -108,10 +116,6 @@ export class SequenceService {
     });
   }
 
-  /**
-   * ADMIN ONLY: Resets the sequence for a specific entity type.
-   * Use carefully via a dedicated admin endpoint.
-   */
   async reset(entityType: SequenceEntity, resetTo: number = 0): Promise<void> {
     const prefix = PREFIXES[entityType];
     if (!prefix) {

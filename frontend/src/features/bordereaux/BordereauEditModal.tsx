@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { bordereauxApi } from '../../api/bordereaux.api';
 import affairesApi from '../../api/affaires.api';
-import type { Bordereau, BordereauLine, UpdateBordereauDto } from '../../types/bordereau.types';
+import { AffaireStatut } from '../../types/affaire.types';
+import type { Bordereau, BordereauLine, BordereauType, UpdateBordereauDto } from '../../types/bordereau.types';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import CurrencySelect from '../../components/ui/CurrencySelect';
@@ -15,12 +16,34 @@ interface Props {
   bordereau: Bordereau;
 }
 
-// Server enforces BROUILLON-only editing (BordereauxService.update() throws
-// otherwise) — mirrored client-side by BordereauDetail only rendering the
-// "Modifier" button when statut === 'BROUILLON', same pattern as the other
-// workflow-gated actions in this module.
+// NEW — mirrors bordereaux.service.ts's TRAITE_TYPES set.
+const TRAITE_TYPES: BordereauType[] = [
+  'SITUATION_TRAITE', 'FACTURE_DEPOT_PRIME', 'NOTE_DE_CREDIT', 'ETAT_DE_TRANSFERT',
+  'SITUATION_FINANCIERE', 'FACTURE_PRIME_REASSURANCE_DEPOT', 'FACTURE_PRIME_REASSURANCE_AJUSTEMENT',
+];
+const isTraiteType = (t: BordereauType) => TRAITE_TYPES.includes(t);
 
 const emptyLine = (): BordereauLine => ({ libelle: '', ordre: 0 });
+
+// NEW — display-only mirror of BordereauxService.computeMontant().
+function computeDisplayTotal(type: BordereauType, lines: BordereauLine[]): number {
+  if (type === 'SINISTRE_FACULTATIVE') {
+    return lines.reduce((s, l) => s + (l.sinistresPayes ?? l.primeNette ?? l.primeBrute ?? 0), 0);
+  }
+  if (isTraiteType(type)) {
+    let credit = 0, debit = 0, fallback = 0;
+    for (const l of lines) {
+      const c = (l.primesCedees ?? 0) + (l.recLiberes ?? 0) + (l.sapLiberes ?? 0) + (l.interets ?? 0);
+      const d = (l.sinistresPayes ?? 0) + (l.recConstitues ?? 0) + (l.sapConstitues ?? 0)
+        + (l.participationsBenef ?? 0) + (l.taxes ?? 0) + (l.brokerage ?? 0)
+        + (l.commissionCedante ?? 0) + (l.commissionCourtage ?? 0);
+      if (c === 0 && d === 0) fallback += (l.primeNette ?? l.primeBrute ?? 0);
+      else { credit += c; debit += d; }
+    }
+    return Math.abs(credit - debit) + Math.abs(fallback);
+  }
+  return lines.reduce((s, l) => s + (l.primeNette ?? l.primeBrute ?? 0), 0);
+}
 
 export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props) {
   const queryClient = useQueryClient();
@@ -39,7 +62,6 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
     bordereau.lines?.length ? bordereau.lines.map((l) => ({ ...l })) : [emptyLine()],
   );
 
-  // Re-sync if a different bordereau is opened while the modal instance persists
   useEffect(() => {
     setFormData({
       affaireId: bordereau.affaireId,
@@ -60,8 +82,8 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
   });
 
   const { data: affaires } = useQuery({
-    queryKey: ['affaires', { statut: 'PLACEMENT_REALISE', limit: 200 }],
-    queryFn: () => affairesApi.getAll({ statut: 'PLACEMENT_REALISE', limit: 200 }),
+    queryKey: ['affaires', { statut: AffaireStatut.PLACEMENT_REALISE, limit: 200 }],
+    queryFn: () => affairesApi.getAll({ statut: AffaireStatut.PLACEMENT_REALISE, limit: 200 }),
   });
 
   const { data: reassureurs } = useQuery({
@@ -70,7 +92,8 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
     enabled: bordereau.type === 'CESSION_REASSUREUR' || bordereau.type === 'ETAT_DE_TRANSFERT',
   });
 
-  const totalPrimeNette = lines.reduce((s, l) => s + (l.primeNette ?? l.primeBrute ?? 0), 0);
+  const displayTotal = computeDisplayTotal(bordereau.type, lines);
+  const traite = isTraiteType(bordereau.type);
 
   const updateMutation = useMutation({
     mutationFn: (data: UpdateBordereauDto) => bordereauxApi.update(bordereau.id, data),
@@ -86,6 +109,8 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
   };
   const addLine = () => setLines((prev) => [...prev, emptyLine()]);
   const removeLine = (index: number) => setLines((prev) => prev.filter((_, i) => i !== index));
+
+  const numField = (v: string) => (v ? Number(v) : undefined);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -190,38 +215,116 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
               </div>
               <div className="border rounded-lg divide-y">
                 {lines.map((line, i) => (
-                  <div key={i} className="p-3 grid grid-cols-12 gap-2 items-end">
-                    <div className="col-span-3">
-                      <label className="text-xs text-gray-500">Libellé</label>
-                      <input value={line.libelle} onChange={(e) => updateLine(i, { libelle: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" required />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="text-xs text-gray-500">Prime Brute</label>
-                      <input type="number" step="0.001" value={line.primeBrute ?? ''} onChange={(e) => updateLine(i, { primeBrute: e.target.value ? Number(e.target.value) : undefined })} className="w-full border rounded px-2 py-1 text-sm" />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="text-xs text-gray-500">Commission Cédante</label>
-                      <input type="number" step="0.001" value={line.commissionCedante ?? ''} onChange={(e) => updateLine(i, { commissionCedante: e.target.value ? Number(e.target.value) : undefined })} className="w-full border rounded px-2 py-1 text-sm" />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="text-xs text-gray-500">Commission Courtage</label>
-                      <input type="number" step="0.001" value={line.commissionCourtage ?? ''} onChange={(e) => updateLine(i, { commissionCourtage: e.target.value ? Number(e.target.value) : undefined })} className="w-full border rounded px-2 py-1 text-sm" />
-                    </div>
-                    <div className="col-span-2">
-                      <label className="text-xs text-gray-500">Prime Nette</label>
-                      <input type="number" step="0.001" value={line.primeNette ?? ''} onChange={(e) => updateLine(i, { primeNette: e.target.value ? Number(e.target.value) : undefined })} className="w-full border rounded px-2 py-1 text-sm" />
-                    </div>
-                    <div className="col-span-1 flex justify-end">
-                      <Button type="button" size="sm" variant="ghost" onClick={() => removeLine(i)} disabled={lines.length === 1}>
-                        <Trash2 size={14} className="text-red-500" />
-                      </Button>
-                    </div>
+                  <div key={i} className="p-3">
+                    {!traite ? (
+                      <div className="grid grid-cols-12 gap-2 items-end">
+                        <div className="col-span-3">
+                          <label className="text-xs text-gray-500">Libellé</label>
+                          <input value={line.libelle} onChange={(e) => updateLine(i, { libelle: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" required />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-xs text-gray-500">Prime Brute</label>
+                          <input type="number" step="0.001" value={line.primeBrute ?? ''} onChange={(e) => updateLine(i, { primeBrute: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-xs text-gray-500">Commission Cédante</label>
+                          <input type="number" step="0.001" value={line.commissionCedante ?? ''} onChange={(e) => updateLine(i, { commissionCedante: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-xs text-gray-500">Commission Courtage</label>
+                          <input type="number" step="0.001" value={line.commissionCourtage ?? ''} onChange={(e) => updateLine(i, { commissionCourtage: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-xs text-gray-500">Prime Nette</label>
+                          <input type="number" step="0.001" value={line.primeNette ?? ''} onChange={(e) => updateLine(i, { primeNette: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                        </div>
+                        <div className="col-span-1 flex justify-end">
+                          <Button type="button" size="sm" variant="ghost" onClick={() => removeLine(i)} disabled={lines.length === 1}>
+                            <Trash2 size={14} className="text-red-500" />
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="grid grid-cols-12 gap-2 items-end mb-2">
+                          <div className="col-span-5">
+                            <label className="text-xs text-gray-500">Libellé</label>
+                            <input value={line.libelle} onChange={(e) => updateLine(i, { libelle: e.target.value })} className="w-full border rounded px-2 py-1 text-sm" required />
+                          </div>
+                          <div className="col-span-6">
+                            <label className="text-xs text-gray-500">Couverture</label>
+                            <input value={line.couverture ?? ''} onChange={(e) => updateLine(i, { couverture: e.target.value || undefined })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div className="col-span-1 flex justify-end">
+                            <Button type="button" size="sm" variant="ghost" onClick={() => removeLine(i)} disabled={lines.length === 1}>
+                              <Trash2 size={14} className="text-red-500" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="text-xs font-semibold text-red-700 mb-1">Débit</div>
+                        <div className="grid grid-cols-6 gap-2 mb-3">
+                          <div>
+                            <label className="text-xs text-gray-500">Sinistres Payés</label>
+                            <input type="number" step="0.001" value={line.sinistresPayes ?? ''} onChange={(e) => updateLine(i, { sinistresPayes: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">REC Constituées</label>
+                            <input type="number" step="0.001" value={line.recConstitues ?? ''} onChange={(e) => updateLine(i, { recConstitues: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">SAP Constitués</label>
+                            <input type="number" step="0.001" value={line.sapConstitues ?? ''} onChange={(e) => updateLine(i, { sapConstitues: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Part. Bénéf.</label>
+                            <input type="number" step="0.001" value={line.participationsBenef ?? ''} onChange={(e) => updateLine(i, { participationsBenef: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Taxes</label>
+                            <input type="number" step="0.001" value={line.taxes ?? ''} onChange={(e) => updateLine(i, { taxes: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Courtage</label>
+                            <input type="number" step="0.001" value={line.brokerage ?? ''} onChange={(e) => updateLine(i, { brokerage: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                        </div>
+
+                        <div className="text-xs font-semibold text-green-700 mb-1">Crédit</div>
+                        <div className="grid grid-cols-6 gap-2">
+                          <div>
+                            <label className="text-xs text-gray-500">Primes Cédées</label>
+                            <input type="number" step="0.001" value={line.primesCedees ?? ''} onChange={(e) => updateLine(i, { primesCedees: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">REC Libérés</label>
+                            <input type="number" step="0.001" value={line.recLiberes ?? ''} onChange={(e) => updateLine(i, { recLiberes: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">SAP Libérés</label>
+                            <input type="number" step="0.001" value={line.sapLiberes ?? ''} onChange={(e) => updateLine(i, { sapLiberes: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Intérêts</label>
+                            <input type="number" step="0.001" value={line.interets ?? ''} onChange={(e) => updateLine(i, { interets: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Prime Brute</label>
+                            <input type="number" step="0.001" value={line.primeBrute ?? ''} onChange={(e) => updateLine(i, { primeBrute: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-gray-500">Prime Nette</label>
+                            <input type="number" step="0.001" value={line.primeNette ?? ''} onChange={(e) => updateLine(i, { primeNette: numField(e.target.value) })} className="w-full border rounded px-2 py-1 text-sm" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
               <div className="mt-2 text-right text-sm">
-                <span className="text-gray-600">Total (prime nette / brute) : </span>
-                <span className="font-semibold">{totalPrimeNette.toLocaleString()} {formData.currency}</span>
+                <span className="text-gray-600">Total {traite ? '(solde net |débit − crédit|)' : '(prime nette / brute)'} : </span>
+                <span className="font-semibold">{displayTotal.toLocaleString()} {formData.currency}</span>
               </div>
             </div>
 
