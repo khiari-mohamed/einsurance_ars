@@ -57,16 +57,16 @@ export default function EcrituresBancaires() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Journal Banque</h1>
-        <button onClick={exportToCsv} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+        <h1 className="font-display text-2xl font-semibold text-foreground">Journal Banque</h1>
+        <button onClick={exportToCsv} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90">
           <Download size={20} /> Exporter
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-card rounded-[var(--radius)] border border-border">
         <div className="p-4 border-b">
           <label className="block text-sm font-medium mb-1">Compte bancaire</label>
-          <select value={selectedCompte} onChange={(e) => setSelectedCompte(e.target.value)} className="px-3 py-2 border rounded-lg">
+          <select value={selectedCompte} onChange={(e) => setSelectedCompte(e.target.value)} className="px-3 py-2 border border-border bg-background rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
             <option value="532">Tous les comptes de trésorerie (53...)</option>
             {bankAccounts.map((b) => <option key={b.id} value={b.compte}>{b.compte} - {b.libelle}</option>)}
           </select>
@@ -74,20 +74,20 @@ export default function EcrituresBancaires() {
 
         <div className="overflow-x-auto">
           {isLoading ? (
-            <p className="text-center py-8 text-gray-500">Chargement...</p>
+            <p className="text-center py-8 text-muted-foreground">Chargement...</p>
           ) : lines.length === 0 ? (
-            <p className="text-center py-8 text-gray-500">Aucune écriture pour ce compte</p>
+            <p className="text-center py-8 text-muted-foreground">Aucune écriture pour ce compte</p>
           ) : (
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Date</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Écriture</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Compte</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Libellé</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Débit</th>
-                  <th className="px-4 py-3 text-right text-sm font-medium text-gray-700">Crédit</th>
-                  <th className="px-4 py-3 text-center text-sm font-medium text-gray-700">Statut</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Date</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Écriture</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Compte</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Libellé</th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Débit</th>
+                  <th className="px-4 py-3 text-right text-sm font-medium text-muted-foreground">Crédit</th>
+                  <th className="px-4 py-3 text-center text-sm font-medium text-muted-foreground">Statut</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -100,7 +100,7 @@ export default function EcrituresBancaires() {
                     <td className="px-4 py-3 text-sm text-right font-medium">{l.debit ? formatCurrency(l.debit, l.currency) : '-'}</td>
                     <td className="px-4 py-3 text-sm text-right font-medium">{l.credit ? formatCurrency(l.credit, l.currency) : '-'}</td>
                     <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-1 rounded text-xs ${l.journalEntry?.statut === 'VALIDE' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                      <span className={`px-2 py-1 rounded text-xs border ${l.journalEntry?.statut === 'VALIDE' ? 'bg-success/15 text-success border-success/30' : 'bg-muted text-foreground border-border'}`}>
                         {l.journalEntry?.statut}
                       </span>
                     </td>

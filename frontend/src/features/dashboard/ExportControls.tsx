@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { FileSpreadsheet, FileDown, Printer } from 'lucide-react';
 
 interface ExportControlsProps {
   dashboardRef: React.RefObject<HTMLDivElement>;
@@ -62,14 +63,17 @@ export function ExportControls({ dashboardRef, data }: ExportControlsProps) {
 
   return (
     <div className="flex items-center space-x-2">
-      <button onClick={exportExcel} className="px-3 py-1 bg-green-100 text-green-800 rounded-lg text-sm hover:bg-green-200">
-        📊 Excel
+      <button onClick={exportExcel} className="inline-flex items-center gap-1.5 px-3 py-1 bg-success/15 text-success border border-success/20 rounded-lg text-sm hover:bg-success/25 transition-colors">
+        <FileSpreadsheet size={14} strokeWidth={1.75} />
+        Excel
       </button>
-      <button onClick={exportPDF} disabled={exporting} className="px-3 py-1 bg-red-100 text-red-800 rounded-lg text-sm hover:bg-red-200 disabled:opacity-50">
-        {exporting ? '⏳ Exporting...' : '📄 PDF'}
+      <button onClick={exportPDF} disabled={exporting} className="inline-flex items-center gap-1.5 px-3 py-1 bg-destructive/15 text-destructive border border-destructive/20 rounded-lg text-sm hover:bg-destructive/25 transition-colors disabled:opacity-50">
+        <FileDown size={14} strokeWidth={1.75} className={exporting ? 'animate-pulse' : ''} />
+        {exporting ? 'Exporting...' : 'PDF'}
       </button>
-      <button onClick={() => window.print()} className="px-3 py-1 bg-blue-100 text-blue-800 rounded-lg text-sm hover:bg-blue-200">
-        🖨️ Print
+      <button onClick={() => window.print()} className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary/15 text-primary border border-primary/20 rounded-lg text-sm hover:bg-primary/25 transition-colors">
+        <Printer size={14} strokeWidth={1.75} />
+        Print
       </button>
     </div>
   );

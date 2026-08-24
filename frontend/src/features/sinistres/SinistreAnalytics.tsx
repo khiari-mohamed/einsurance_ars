@@ -4,12 +4,15 @@ import { sinistresApi } from '../../api/sinistres.api';
 import { formatCurrency } from '../../lib/currency';
 import { STATUT_LABELS } from '../../types/sinistre.types';
 
+// Chart 1 (gold) réservé aux données clés du graphe d'évolution.
+// Les 4 autres slots (rose / sage / bleu / violet) couvrent le reste
+// de la variété de séries/statuts — jamais de couleur hors palette.
 const PIE_GRADIENTS: [string, string][] = [
-  ['#66B2FF', '#0066CC'],
-  ['#6EE7C9', '#00997A'],
-  ['#FFD666', '#D99A00'],
-  ['#FFA873', '#E8630A'],
-  ['#B4B0F0', '#6C63C7'],
+  ['hsl(var(--chart-1))', 'hsl(var(--chart-1) / 0.65)'],
+  ['hsl(var(--chart-2))', 'hsl(var(--chart-2) / 0.65)'],
+  ['hsl(var(--chart-3))', 'hsl(var(--chart-3) / 0.65)'],
+  ['hsl(var(--chart-4))', 'hsl(var(--chart-4) / 0.65)'],
+  ['hsl(var(--chart-5))', 'hsl(var(--chart-5) / 0.65)'],
 ];
 
 function GlassChartTooltip({ active, payload, label, dotColors, formatValue }: any) {
@@ -17,16 +20,16 @@ function GlassChartTooltip({ active, payload, label, dotColors, formatValue }: a
   const title = label ?? payload[0]?.payload?.status ?? payload[0]?.name ?? payload[0]?.payload?.name;
   const fmt = (v: any) => (formatValue ? formatValue(v) : (typeof v === 'number' ? v.toLocaleString('fr-FR') : v));
   return (
-    <div className="backdrop-blur-xl bg-white/90 border border-white/70 rounded-xl shadow-2xl px-4 py-3 min-w-[170px]">
-      {title && <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">{title}</p>}
+    <div className="backdrop-blur-xl bg-popover/90 border border-border rounded-[calc(var(--radius)-4px)] shadow-[0_8px_30px_rgba(0,0,0,0.35)] px-4 py-3 min-w-[170px]">
+      {title && <p className="text-[11px] font-mono-label text-muted-foreground mb-2">{title}</p>}
       <div className="space-y-1.5">
         {payload.map((entry: any, i: number) => (
           <div key={i} className="flex items-center justify-between gap-4 text-sm">
-            <span className="flex items-center gap-2 text-gray-600">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: dotColors?.[entry.dataKey] || entry.payload?.fill || entry.color || '#9CA3AF' }} />
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: dotColors?.[entry.dataKey] || entry.payload?.fill || entry.color || 'hsl(var(--muted-foreground))' }} />
               {entry.name || entry.payload?.status}
             </span>
-            <span className="font-semibold text-gray-900">{fmt(entry.value)}</span>
+            <span className="font-semibold text-foreground">{fmt(entry.value)}</span>
           </div>
         ))}
       </div>
@@ -37,7 +40,7 @@ function GlassChartTooltip({ active, payload, label, dotColors, formatValue }: a
 function renderActivePieShape(props: any) {
   const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
   return (
-    <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 10} startAngle={startAngle} endAngle={endAngle} fill={fill} cornerRadius={8} style={{ filter: 'drop-shadow(0px 8px 16px rgba(15,23,42,0.28))' }} />
+    <Sector cx={cx} cy={cy} innerRadius={innerRadius} outerRadius={outerRadius + 10} startAngle={startAngle} endAngle={endAngle} fill={fill} cornerRadius={8} style={{ filter: 'drop-shadow(0px 8px 16px rgba(0,0,0,0.45))' }} />
   );
 }
 
@@ -72,65 +75,70 @@ export default function SinistreAnalytics() {
 
   return (
     <div className="p-8 space-y-6">
-      <h1 className="text-3xl font-bold text-gray-800">Analytiques Sinistres</h1>
+      <h1 className="font-display text-3xl font-semibold text-foreground">Analytiques Sinistres</h1>
 
       {kpis && (
         <div className="grid grid-cols-4 gap-4">
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-600">Réserves Totales</div>
-            <div className="text-2xl font-bold text-blue-600">{formatCurrency(kpis.reservesTotales)}</div>
+          {/* Réserves Totales — donnée clé, seule à porter l'accent or plein */}
+          <div className="relative bg-card p-4 rounded-[var(--radius)] border border-primary/30 overflow-hidden">
+            <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary/15 rounded-full blur-2xl pointer-events-none" />
+            <div className="relative text-sm text-muted-foreground">Réserves Totales</div>
+            <div className="relative text-2xl font-display font-semibold text-primary">{formatCurrency(kpis.reservesTotales)}</div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-600">Part Réassureurs</div>
-            <div className="text-2xl font-bold text-orange-600">{formatCurrency(kpis.partReassureursTotale)}</div>
+
+          <div className="bg-card p-4 rounded-[var(--radius)] border border-border">
+            <div className="text-sm text-muted-foreground">Part Réassureurs</div>
+            <div className="text-2xl font-display font-semibold" style={{ color: 'hsl(var(--chart-4))' }}>{formatCurrency(kpis.partReassureursTotale)}</div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-600">SAP Total</div>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(kpis.sapTotal)}</div>
+
+          <div className="bg-card p-4 rounded-[var(--radius)] border border-border">
+            <div className="text-sm text-muted-foreground">SAP Total</div>
+            <div className="text-2xl font-display font-semibold" style={{ color: 'hsl(var(--chart-3))' }}>{formatCurrency(kpis.sapTotal)}</div>
           </div>
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-sm text-gray-600">Total Sinistres ({kpis.year})</div>
-            <div className="text-2xl font-bold">{kpis.totalSinistres}</div>
+
+          <div className="bg-card p-4 rounded-[var(--radius)] border border-border">
+            <div className="text-sm text-muted-foreground">Total Sinistres ({kpis.year})</div>
+            <div className="text-2xl font-display font-semibold text-foreground">{kpis.totalSinistres}</div>
           </div>
         </div>
       )}
 
       <div className="grid grid-cols-2 gap-6">
-        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
-          <div className="absolute -top-16 -right-16 w-56 h-56 bg-blue-200/25 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-20 -left-10 w-48 h-48 bg-orange-200/20 rounded-full blur-3xl pointer-events-none" />
-          <h3 className="relative text-lg font-semibold mb-4">Évolution (12 mois)</h3>
+        <div className="relative bg-card/80 backdrop-blur-xl rounded-[var(--radius)] p-6 border border-border overflow-hidden">
+          <div className="absolute -top-16 -right-16 w-56 h-56 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -left-10 w-48 h-48 bg-[hsl(var(--chart-3)/0.10)] rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-display font-semibold text-foreground mb-4">Évolution (12 mois)</h3>
           <div className="relative">
             <ResponsiveContainer width="100%" height={300}>
               <ComposedChart data={evolution}>
                 <defs>
                   <linearGradient id="areaGradAmount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#1976d2" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#1976d2" stopOpacity={0} />
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="areaGradCount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ff9800" stopOpacity={0.25} />
-                    <stop offset="100%" stopColor="#ff9800" stopOpacity={0} />
+                    <stop offset="0%" stopColor="hsl(var(--chart-4))" stopOpacity={0.25} />
+                    <stop offset="100%" stopColor="hsl(var(--chart-4))" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="#E5E7EB" />
-                <XAxis dataKey="period" tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
-                <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<GlassChartTooltip formatValue={formatCurrency} dotColors={{ amount: '#1976d2', count: '#ff9800' }} />} cursor={{ stroke: '#CBD5E1', strokeDasharray: '4 4' }} />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: 12 }} formatter={(value: string) => <span className="text-sm text-gray-600">{value}</span>} />
+                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="hsl(var(--border))" />
+                <XAxis dataKey="period" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={{ stroke: 'hsl(var(--border))' }} tickLine={false} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<GlassChartTooltip formatValue={formatCurrency} dotColors={{ amount: 'hsl(var(--chart-1))', count: 'hsl(var(--chart-4))' }} />} cursor={{ stroke: 'hsl(var(--border))', strokeDasharray: '4 4' }} />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: 12 }} formatter={(value: string) => <span className="text-sm text-muted-foreground">{value}</span>} />
                 <Area type="monotone" dataKey="amount" stroke="none" fill="url(#areaGradAmount)" isAnimationActive animationDuration={900} />
                 <Area type="monotone" dataKey="count" stroke="none" fill="url(#areaGradCount)" isAnimationActive animationDuration={900} />
-                <Line type="monotone" dataKey="amount" stroke="#1976d2" name="Montant" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#1976d2' }} activeDot={{ r: 6 }} animationDuration={900} />
-                <Line type="monotone" dataKey="count" stroke="#ff9800" name="Nombre" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#ff9800' }} activeDot={{ r: 6 }} animationDuration={900} animationBegin={120} />
+                <Line type="monotone" dataKey="amount" stroke="hsl(var(--chart-1))" name="Montant" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'hsl(var(--card))', stroke: 'hsl(var(--chart-1))' }} activeDot={{ r: 6 }} animationDuration={900} />
+                <Line type="monotone" dataKey="count" stroke="hsl(var(--chart-4))" name="Nombre" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: 'hsl(var(--card))', stroke: 'hsl(var(--chart-4))' }} activeDot={{ r: 6 }} animationDuration={900} animationBegin={120} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
-          <div className="absolute -top-16 -left-16 w-56 h-56 bg-purple-200/20 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-teal-200/20 rounded-full blur-3xl pointer-events-none" />
-          <h3 className="relative text-lg font-semibold mb-4">Par Statut</h3>
+        <div className="relative bg-card/80 backdrop-blur-xl rounded-[var(--radius)] p-6 border border-border overflow-hidden">
+          <div className="absolute -top-16 -left-16 w-56 h-56 bg-[hsl(var(--chart-5)/0.10)] rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-[hsl(var(--chart-3)/0.10)] rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-display font-semibold text-foreground mb-4">Par Statut</h3>
           <div className="relative">
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
@@ -142,58 +150,58 @@ export default function SinistreAnalytics() {
                     </linearGradient>
                   ))}
                 </defs>
-                <Pie data={byStatus} dataKey="count" nameKey="status" cx="50%" cy="50%" innerRadius={64} outerRadius={104} paddingAngle={3} cornerRadius={6} activeShape={renderActivePieShape} label={({ name, percent }: any) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`} labelLine={{ stroke: '#D1D5DB' } as any}>
+                <Pie data={byStatus} dataKey="count" nameKey="status" cx="50%" cy="50%" innerRadius={64} outerRadius={104} paddingAngle={3} cornerRadius={6} activeShape={renderActivePieShape} label={({ name, percent }: any) => `${name}: ${((percent || 0) * 100).toFixed(1)}%`} labelLine={{ stroke: 'hsl(var(--border))' } as any}>
                   {byStatus?.map((_entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={`url(#sinistrePieGrad${index % PIE_GRADIENTS.length})`} stroke="#ffffff" strokeWidth={2} />
+                    <Cell key={`cell-${index}`} fill={`url(#sinistrePieGrad${index % PIE_GRADIENTS.length})`} stroke="hsl(var(--card))" strokeWidth={2} />
                   ))}
                 </Pie>
                 <Tooltip content={<GlassChartTooltip />} />
-                <Legend iconType="circle" wrapperStyle={{ paddingTop: 12 }} formatter={(value: string) => <span className="text-sm text-gray-600">{value}</span>} />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: 12 }} formatter={(value: string) => <span className="text-sm text-muted-foreground">{value}</span>} />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
-          <div className="absolute -top-16 -right-16 w-56 h-56 bg-blue-200/25 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-20 -left-10 w-48 h-48 bg-blue-100/25 rounded-full blur-3xl pointer-events-none" />
-          <h3 className="relative text-lg font-semibold mb-4">Top Cédantes</h3>
+        <div className="relative bg-card/80 backdrop-blur-xl rounded-[var(--radius)] p-6 border border-border overflow-hidden">
+          <div className="absolute -top-16 -right-16 w-56 h-56 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -left-10 w-48 h-48 bg-[hsl(var(--chart-4)/0.08)] rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-display font-semibold text-foreground mb-4">Top Cédantes</h3>
           <div className="relative">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={byCedante}>
                 <defs>
                   <linearGradient id="barGradCedante" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#64B5F6" />
-                    <stop offset="100%" stopColor="#1565C0" />
+                    <stop offset="0%" stopColor="hsl(var(--chart-1))" />
+                    <stop offset="100%" stopColor="hsl(var(--chart-1) / 0.55)" />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="#E5E7EB" />
-                <XAxis dataKey="cedante" angle={-45} textAnchor="end" height={100} tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
-                <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<GlassChartTooltip formatValue={formatCurrency} dotColors={{ amount: '#1565C0' }} />} cursor={{ fill: 'rgba(25,118,210,0.05)' } as any} />
+                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="hsl(var(--border))" />
+                <XAxis dataKey="cedante" angle={-45} textAnchor="end" height={100} tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={{ stroke: 'hsl(var(--border))' }} tickLine={false} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<GlassChartTooltip formatValue={formatCurrency} dotColors={{ amount: 'hsl(var(--chart-1))' }} />} cursor={{ fill: 'hsl(var(--primary) / 0.05)' } as any} />
                 <Bar dataKey="amount" name="Montant" fill="url(#barGradCedante)" radius={[8, 8, 0, 0]} maxBarSize={44} animationDuration={800} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl p-6 shadow-[0_8px_30px_rgba(15,23,42,0.08)] border border-white/60 overflow-hidden">
-          <div className="absolute -top-16 -left-16 w-56 h-56 bg-orange-200/25 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-amber-100/25 rounded-full blur-3xl pointer-events-none" />
-          <h3 className="relative text-lg font-semibold mb-4">Analyse d'Âge (sinistres ouverts)</h3>
+        <div className="relative bg-card/80 backdrop-blur-xl rounded-[var(--radius)] p-6 border border-border overflow-hidden">
+          <div className="absolute -top-16 -left-16 w-56 h-56 bg-[hsl(var(--chart-2)/0.10)] rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 -right-16 w-48 h-48 bg-[hsl(var(--chart-2)/0.06)] rounded-full blur-3xl pointer-events-none" />
+          <h3 className="relative text-lg font-display font-semibold text-foreground mb-4">Analyse d'Âge (sinistres ouverts)</h3>
           <div className="relative">
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={agingData}>
                 <defs>
                   <linearGradient id="barGradAge" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#FFB74D" />
-                    <stop offset="100%" stopColor="#EF6C00" />
+                    <stop offset="0%" stopColor="hsl(var(--chart-2))" />
+                    <stop offset="100%" stopColor="hsl(var(--chart-2) / 0.55)" />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="#E5E7EB" />
-                <XAxis dataKey="name" tick={{ fill: '#6B7280', fontSize: 12 }} axisLine={{ stroke: '#E5E7EB' }} tickLine={false} />
-                <YAxis tick={{ fill: '#9CA3AF', fontSize: 12 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<GlassChartTooltip formatValue={formatCurrency} dotColors={{ amount: '#EF6C00' }} />} cursor={{ fill: 'rgba(255,152,0,0.06)' } as any} />
+                <CartesianGrid vertical={false} strokeDasharray="3 6" stroke="hsl(var(--border))" />
+                <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={{ stroke: 'hsl(var(--border))' }} tickLine={false} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <Tooltip content={<GlassChartTooltip formatValue={formatCurrency} dotColors={{ amount: 'hsl(var(--chart-2))' }} />} cursor={{ fill: 'hsl(var(--chart-2) / 0.06)' } as any} />
                 <Bar dataKey="amount" name="Montant" fill="url(#barGradAge)" radius={[8, 8, 0, 0]} maxBarSize={44} animationDuration={800} />
               </BarChart>
             </ResponsiveContainer>

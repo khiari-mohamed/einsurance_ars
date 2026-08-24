@@ -3,17 +3,17 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/utils';
 
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2',
+  'inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/80',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/80',
-        outline: 'text-foreground border border-input',
-        success: 'bg-green-500 text-white hover:bg-green-600',
-        warning: 'bg-yellow-500 text-white hover:bg-yellow-600',
-        info: 'bg-blue-500 text-white hover:bg-blue-600',
+        default: 'bg-primary text-primary-foreground border-primary-border hover:bg-primary/90',
+        secondary: 'bg-secondary text-secondary-foreground border-secondary-border hover:bg-secondary/70',
+        destructive: 'bg-destructive/15 text-destructive border-destructive/25 hover:bg-destructive/25',
+        outline: 'bg-transparent text-foreground border-border',
+        success: 'bg-success/15 text-success border-success/25 hover:bg-success/25',
+        warning: 'bg-warning/15 text-warning border-warning/25 hover:bg-warning/25',
+        info: 'bg-[hsl(var(--chart-4)/0.15)] text-[hsl(var(--chart-4))] border-[hsl(var(--chart-4)/0.3)] hover:bg-[hsl(var(--chart-4)/0.25)]',
       },
     },
     defaultVariants: {

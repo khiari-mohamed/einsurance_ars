@@ -73,7 +73,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden"
           onClick={onClose}
         />
       )}
@@ -81,7 +81,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
       <aside
         className={`
           fixed lg:relative inset-y-0 left-0 z-50 pt-16
-          bg-[#f1f1f1] dark:bg-[#0a0a0f] shadow-[0_0_40px_rgba(0,0,0,0.08)]
+          bg-sidebar text-sidebar-foreground border-r border-sidebar-border
           flex flex-col
           transition-all duration-300 ease-in-out
           will-change-[width,transform]
@@ -92,40 +92,42 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
         `}
       >
         {/* ── Logo / header ─────────────────────────────────────────────── */}
-        <div className="h-16 px-4 flex items-center justify-between border-b border-gray-200 dark:border-[#262636] flex-shrink-0 overflow-hidden">
+        <div className="h-16 px-4 flex items-center justify-between border-b border-sidebar-border flex-shrink-0 overflow-hidden">
           <div
             className={`flex items-center gap-3 transition-opacity duration-200 ${
               isOpen ? 'opacity-100' : 'opacity-0 lg:opacity-0 pointer-events-none'
             }`}
           >
-            <img
-              src="/Image1.png"
-              alt="ARS"
-              className="w-8 h-8 object-contain flex-shrink-0"
-            />
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary/25 to-transparent border border-primary/25 flex items-center justify-center flex-shrink-0 overflow-hidden">
+              <img
+                src="/Image1.png"
+                alt="ARS"
+                className="w-6 h-6 object-contain"
+              />
+            </div>
             <div className="min-w-0">
-              <p className="text-[14px] font-bold text-gray-900 dark:text-white leading-tight whitespace-nowrap">
+              <p className="font-display text-[14px] font-semibold text-sidebar-foreground leading-tight whitespace-nowrap tracking-wide">
                 {t('sidebar.appName')}
               </p>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap">
+              <p className="font-mono-label text-[9px] text-primary whitespace-nowrap">
                 {t('sidebar.appSubtitle')}
               </p>
             </div>
           </div>
 
           {/* Collapsed: show only icon */}
-          <img
-            src="/Image1.png"
-            alt="ARS"
-            className={`w-7 h-7 object-contain flex-shrink-0 ${
-              isOpen ? 'hidden' : 'hidden lg:block'
+          <div
+            className={`w-8 h-8 rounded-lg bg-gradient-to-br from-primary/25 to-transparent border border-primary/25 flex items-center justify-center flex-shrink-0 ${
+              isOpen ? 'hidden' : 'hidden lg:flex'
             }`}
-          />
+          >
+            <img src="/Image1.png" alt="ARS" className="w-5 h-5 object-contain" />
+          </div>
 
           {/* Mobile close button */}
           <button
             onClick={onClose}
-            className="lg:hidden p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-[#1e1e2c] text-gray-500 dark:text-gray-400 transition-colors flex-shrink-0"
+            className="lg:hidden p-1.5 rounded-lg hover:bg-sidebar-accent text-muted-foreground transition-colors flex-shrink-0"
           >
             <X size={16} />
           </button>
@@ -134,7 +136,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
         {/* ── Navigation ───────────────────────────────────────────────── */}
         <nav
           className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden
-            scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-[#262636] scrollbar-track-transparent"
+            scrollbar-thin scrollbar-thumb-[hsl(var(--sidebar-border))] scrollbar-track-transparent"
         >
           {filteredNavigation.map((item) => {
             const Icon = item.icon;
@@ -162,7 +164,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
                       transition-all duration-150 group
                       ${isActive
                         ? 'font-medium'
-                        : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1e1e2c] hover:text-gray-900 dark:hover:text-white'
+                        : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
                       }
                     `}
                     style={
@@ -195,7 +197,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
                         transition-all duration-150 text-left
                         ${isParentActive
                           ? 'font-medium'
-                          : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1e1e2c] hover:text-gray-900 dark:hover:text-white'
+                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
                         }
                       `}
                       style={
@@ -247,7 +249,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
                                   text-[12px] transition-all duration-150
                                   ${active
                                     ? 'font-medium'
-                                    : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1e1e2c] hover:text-gray-900 dark:hover:text-white'
+                                    : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
                                   }
                                 `}
                                 style={
@@ -257,7 +259,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
                                 }
                               >
                                 <span
-                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-gray-400 dark:bg-gray-600"
+                                  className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-sidebar-border"
                                   style={active ? { backgroundColor: 'var(--ars-primary)' } : undefined}
                                 />
                                 {subLabel}
@@ -274,12 +276,12 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
         </nav>
 
         {/* ── User footer ──────────────────────────────────────────────── */}
-        <div className="p-3 border-t border-gray-200 dark:border-[#262636] flex-shrink-0 overflow-hidden">
-          <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-[#1e1e2c] transition-colors group">
+        <div className="p-3 border-t border-sidebar-border flex-shrink-0 overflow-hidden">
+          <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-sidebar-accent transition-colors group">
             {/* Avatar */}
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 select-none"
-              style={{ backgroundColor: 'var(--ars-primary)' }}
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 select-none"
+              style={{ backgroundColor: 'var(--ars-primary)', color: 'hsl(var(--primary-foreground))' }}
             >
               {initials()}
             </div>
@@ -290,10 +292,10 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
                 isOpen ? 'opacity-100' : 'opacity-0 lg:opacity-0'
               }`}
             >
-              <p className="text-[12px] font-semibold text-gray-900 dark:text-white truncate leading-tight">
+              <p className="text-[12px] font-semibold text-sidebar-foreground truncate leading-tight">
                 {displayName()}
               </p>
-              <p className="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+              <p className="text-[10px] text-muted-foreground truncate">
                 {user?.role?.replace(/_/g, ' ')}
               </p>
             </div>
@@ -303,7 +305,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
               onClick={onOpenAppearance}
               title={t('sidebar.appearanceTooltip')}
               className={`
-                p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-[#262636] text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-200
+                p-1.5 rounded-md hover:bg-sidebar-border text-muted-foreground hover:text-sidebar-foreground
                 transition-all flex-shrink-0
                 ${isOpen ? 'opacity-0 group-hover:opacity-100' : 'opacity-0 lg:opacity-0'}
               `}
@@ -316,7 +318,7 @@ export default function SidebarNav({ isOpen, onClose, onOpenAppearance }: Sideba
               onClick={logout}
               title={t('sidebar.logoutTooltip')}
               className={`
-                p-1.5 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400
+                p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive
                 transition-all flex-shrink-0
                 ${isOpen
                   ? 'opacity-0 group-hover:opacity-100'

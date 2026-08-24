@@ -14,7 +14,7 @@ import SituationBuilder from './SituationBuilder';
 const soldeColors: Record<SituationSoldeDirection, string> = {
   [SituationSoldeDirection.CEDANTE_DOIT]: 'bg-green-100 text-green-700',
   [SituationSoldeDirection.ARS_DOIT]: 'bg-orange-100 text-orange-700',
-  [SituationSoldeDirection.EQUILIBRE]: 'bg-gray-100 text-gray-700',
+  [SituationSoldeDirection.EQUILIBRE]: 'bg-muted text-foreground border border-border',
 };
 
 // NEW (Finances pass): a real list view for Situations was entirely

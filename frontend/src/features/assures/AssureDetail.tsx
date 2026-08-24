@@ -6,7 +6,7 @@ import {
   ArrowLeft, Edit2, Trash2, Plus, Mail, Phone, Building2, FileText, FileCheck,
   Search, Filter, X, Download, FileSpreadsheet, Eye, ChevronLeft, ChevronRight,
   File as FileIcon, Image as ImageIcon, BarChart3, Users,
-  PieChart as PieChartIcon,
+  PieChart as PieChartIcon, AlertTriangle,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip as RechartsTooltip,
@@ -47,7 +47,16 @@ type ReassuranceFilter = 'ALL' | 'PROPORTIONNEL' | 'NON_PROPORTIONNEL';
 type DocKind = 'pdf' | 'image' | 'office' | 'other';
 
 const ITEMS_PER_PAGE = 6;
-const CHART_COLORS = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626'];
+// Ported onto the ink & gold chart palette (chart-1..5 tokens) instead of a
+// disconnected hex list, so this pie/bar stay in sync with the rest of the
+// app if the accent color is ever changed via the theme's chart tokens.
+const CHART_COLORS = [
+  'hsl(var(--chart-1))',
+  'hsl(var(--chart-5))',
+  'hsl(var(--chart-3))',
+  'hsl(var(--chart-2))',
+  'hsl(var(--chart-4))',
+];
 
 function getFileKind(doc: AssureDocumentItem): DocKind {
   const mime = (doc.mimeType || '').toLowerCase();
@@ -385,13 +394,13 @@ export default function AssureDetail() {
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <div className="text-gray-500">Chargement...</div>
+        <div className="text-muted-foreground">Chargement...</div>
       </div>
     );
   }
 
   if (!assure) {
-    return <div className="p-6 text-center text-gray-500">Client non trouvé</div>;
+    return <div className="p-6 text-center text-muted-foreground">Client non trouvé</div>;
   }
 
   return (
@@ -401,23 +410,23 @@ export default function AssureDetail() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/assures')}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-lg hover:bg-secondary transition-colors"
           >
-            <ArrowLeft size={20} />
+            <ArrowLeft size={20} className="text-foreground" />
           </button>
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-semibold text-[15px] shadow-sm">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary to-[hsl(var(--chart-5))] flex items-center justify-center text-primary-foreground font-semibold text-[15px]">
               {assure.raisonSociale?.slice(0, 2).toUpperCase() || 'AS'}
             </div>
             <div>
-              <h1 className="text-[24px] font-semibold text-gray-900">{assure.raisonSociale}</h1>
+              <h1 className="font-display text-[24px] font-semibold text-foreground">{assure.raisonSociale}</h1>
               <div className="flex items-center gap-3 mt-1">
-                <p className="text-[13px] text-gray-500">Code: {assure.code}</p>
+                <p className="text-[13px] text-muted-foreground">Code: {assure.code}</p>
                 {assure.oldCode && (
-                  <p className="text-[11px] text-gray-400">Ancien code: {assure.oldCode}</p>
+                  <p className="text-[11px] text-muted-foreground">Ancien code: {assure.oldCode}</p>
                 )}
                 {assure.codeModifiedAt && (
-                  <p className="text-[11px] text-gray-400">
+                  <p className="text-[11px] text-muted-foreground">
                     Modifié le {new Date(assure.codeModifiedAt).toLocaleDateString()}
                   </p>
                 )}
@@ -429,7 +438,7 @@ export default function AssureDetail() {
           {canOverrideCode && (
             <button
               onClick={() => setIsOverrideModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-warning hover:bg-warning/10 rounded-lg transition-colors"
             >
               <Edit2 size={16} />
               Modifier le code
@@ -438,7 +447,7 @@ export default function AssureDetail() {
           {assure.isActive !== false && (
             <button
               onClick={handleDeactivate}
-              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
             >
               <Trash2 size={16} />
               Désactiver
@@ -450,35 +459,35 @@ export default function AssureDetail() {
       {/* Overview: stat cards + charts */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
-          icon={<FileCheck size={18} className="text-blue-600" />}
+          icon={<FileCheck size={18} className="text-primary" />}
           label="Total contrats"
           value={contracts.length}
-          bg="bg-blue-50"
+          bg="bg-primary/10"
         />
         <StatCard
-          icon={<BarChart3 size={18} className="text-purple-600" />}
+          icon={<BarChart3 size={18} className="text-[hsl(var(--chart-5))]" />}
           label="Facultatives"
           value={categoryChartData.find((d) => d.name === 'Facultative')?.value ?? 0}
-          bg="bg-purple-50"
+          bg="bg-[hsl(var(--chart-5)/0.10)]"
         />
         <StatCard
-          icon={<BarChart3 size={18} className="text-emerald-600" />}
+          icon={<BarChart3 size={18} className="text-[hsl(var(--chart-3))]" />}
           label="Traités"
           value={categoryChartData.find((d) => d.name === 'Traité')?.value ?? 0}
-          bg="bg-emerald-50"
+          bg="bg-[hsl(var(--chart-3)/0.10)]"
         />
         <StatCard
-          icon={<Users size={18} className="text-amber-600" />}
+          icon={<Users size={18} className="text-warning" />}
           label="Contacts"
           value={assure.contacts?.length ?? 0}
-          bg="bg-amber-50"
+          bg="bg-warning/10"
         />
       </div>
 
       {contracts.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <h2 className="text-[14px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <div className="bg-card border border-border rounded-2xl p-6">
+            <h2 className="font-display text-[14px] font-semibold text-foreground mb-4 flex items-center gap-2">
               <PieChartIcon size={16} />
               Répartition par catégorie
             </h2>
@@ -496,24 +505,38 @@ export default function AssureDetail() {
                     <Cell key={index} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                   ))}
                 </Pie>
-                <Legend />
-                <RechartsTooltip />
+                <Legend wrapperStyle={{ color: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                <RechartsTooltip
+                  contentStyle={{
+                    background: 'hsl(var(--popover))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: 'calc(var(--radius) - 2px)',
+                    color: 'hsl(var(--popover-foreground))',
+                  }}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <h2 className="text-[14px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <div className="bg-card border border-border rounded-2xl p-6">
+            <h2 className="font-display text-[14px] font-semibold text-foreground mb-4 flex items-center gap-2">
               <BarChart3 size={16} />
               Contrats par année d'effet
             </h2>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={yearChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="year" tick={{ fontSize: 12 }} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                <RechartsTooltip />
-                <Bar dataKey="contrats" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="year" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} />
+                <RechartsTooltip
+                  contentStyle={{
+                    background: 'hsl(var(--popover))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: 'calc(var(--radius) - 2px)',
+                    color: 'hsl(var(--popover-foreground))',
+                  }}
+                />
+                <Bar dataKey="contrats" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -524,8 +547,8 @@ export default function AssureDetail() {
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Informations générales */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
+          <div className="bg-card border border-border rounded-2xl p-6">
+            <h2 className="font-display text-[16px] font-semibold text-foreground mb-4 flex items-center gap-2">
               <Building2 size={18} />
               Informations générales
             </h2>
@@ -539,8 +562,8 @@ export default function AssureDetail() {
               <InfoField label="Capital" value={assure.capital ? `${assure.capital} TND` : '-'} />
             </div>
             {assure.freeFields && Object.keys(assure.freeFields).length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <h3 className="text-[12px] font-medium text-gray-500 mb-2">Champs libres</h3>
+              <div className="mt-4 pt-4 border-t border-border">
+                <h3 className="text-[12px] font-medium text-muted-foreground mb-2">Champs libres</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {Object.entries(assure.freeFields).map(([key, value]) => (
                     <InfoField key={key} label={key} value={String(value)} />
@@ -551,9 +574,9 @@ export default function AssureDetail() {
           </div>
 
           {/* Contacts */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+          <div className="bg-card border border-border rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
+              <h2 className="font-display text-[16px] font-semibold text-foreground flex items-center gap-2">
                 <Phone size={18} />
                 Contacts
               </h2>
@@ -562,7 +585,7 @@ export default function AssureDetail() {
                   setEditingContact(null);
                   setIsContactModalOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
               >
                 <Plus size={16} />
                 Ajouter
@@ -571,19 +594,19 @@ export default function AssureDetail() {
             {assure.contacts && assure.contacts.length > 0 ? (
               <div className="space-y-3">
                 {assure.contacts.map((contact: AssureContact) => (
-                  <div key={contact.id} className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div key={contact.id} className="p-3 border border-border rounded-lg hover:bg-secondary/40 transition-colors">
                     <div className="flex items-start justify-between mb-2">
                       <div>
-                        <p className="text-[13px] font-medium text-gray-900">
+                        <p className="text-[13px] font-medium text-foreground">
                           {contact.prenom} {contact.nom}
                           {contact.isDefault && (
-                            <span className="ml-2 text-[10px] px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                            <span className="ml-2 text-[10px] px-2 py-0.5 bg-primary/15 text-primary border border-primary/20 rounded-full">
                               Principal
                             </span>
                           )}
                         </p>
                         {contact.poste && (
-                          <p className="text-[11px] text-gray-500">{contact.poste}</p>
+                          <p className="text-[11px] text-muted-foreground">{contact.poste}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-1">
@@ -592,52 +615,52 @@ export default function AssureDetail() {
                             setEditingContact(contact);
                             setIsContactModalOpen(true);
                           }}
-                          className="p-1 rounded hover:bg-blue-50 text-blue-600"
+                          className="p-1 rounded hover:bg-primary/10 text-primary"
                         >
                           <Edit2 size={14} />
                         </button>
                         <button
                           onClick={() => handleDeleteContact(contact.id)}
-                          className="p-1 rounded hover:bg-red-50 text-red-600"
+                          className="p-1 rounded hover:bg-destructive/10 text-destructive"
                         >
                           <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
                     {contact.email && (
-                      <p className="text-[12px] text-gray-600 flex items-center gap-1 mb-1">
+                      <p className="text-[12px] text-muted-foreground flex items-center gap-1 mb-1">
                         <Mail size={12} />
                         {contact.email}
                       </p>
                     )}
                     {/* FIX: telephone -> telephoneFixe / telephoneMobile */}
                     {contact.telephoneFixe && (
-                      <p className="text-[12px] text-gray-600 flex items-center gap-1">
+                      <p className="text-[12px] text-muted-foreground flex items-center gap-1">
                         <Phone size={12} />
-                        {contact.telephoneFixe} <span className="text-gray-400">(fixe)</span>
+                        {contact.telephoneFixe} <span className="text-muted-foreground/70">(fixe)</span>
                       </p>
                     )}
                     {contact.telephoneMobile && (
-                      <p className="text-[12px] text-gray-600 flex items-center gap-1">
+                      <p className="text-[12px] text-muted-foreground flex items-center gap-1">
                         <Phone size={12} />
-                        {contact.telephoneMobile} <span className="text-gray-400">(mobile)</span>
+                        {contact.telephoneMobile} <span className="text-muted-foreground/70">(mobile)</span>
                       </p>
                     )}
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-[13px] text-gray-500 text-center py-4">Aucun contact</p>
+              <p className="text-[13px] text-muted-foreground text-center py-4">Aucun contact</p>
             )}
           </div>
 
           {assure.freeFields?.notes && (
-            <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-              <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="bg-card border border-border rounded-2xl p-6">
+              <h2 className="font-display text-[16px] font-semibold text-foreground mb-4 flex items-center gap-2">
                 <FileText size={18} />
                 Notes
               </h2>
-              <p className="text-[13px] text-gray-600 whitespace-pre-wrap">{assure.freeFields.notes}</p>
+              <p className="text-[13px] text-muted-foreground whitespace-pre-wrap">{assure.freeFields.notes}</p>
             </div>
           )}
         </div>
@@ -645,34 +668,34 @@ export default function AssureDetail() {
         {/* Right Column */}
         <div className="space-y-6">
           {/* Status Card */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <h2 className="text-[16px] font-semibold text-gray-900 mb-4">Statut</h2>
+          <div className="bg-card border border-border rounded-2xl p-6">
+            <h2 className="font-display text-[16px] font-semibold text-foreground mb-4">Statut</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[13px] text-gray-600">Actif</span>
-                <span className={`px-2.5 py-1 text-[11px] font-medium rounded-full ${assure.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <span className="text-[13px] text-muted-foreground">Actif</span>
+                <span className={`px-2.5 py-1 text-[11px] font-medium rounded-full border ${assure.isActive ? 'bg-success/15 text-success border-success/20' : 'bg-destructive/15 text-destructive border-destructive/20'}`}>
                   {assure.isActive ? 'Oui' : 'Non'}
                 </span>
               </div>
               {assure.codeModifiedBy && (
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] text-gray-600">Code modifié par</span>
-                  <span className="text-[13px] text-gray-900">{assure.codeModifiedBy}</span>
+                  <span className="text-[13px] text-muted-foreground">Code modifié par</span>
+                  <span className="text-[13px] text-foreground">{assure.codeModifiedBy}</span>
                 </div>
               )}
             </div>
           </div>
 
           {/* Documents */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+          <div className="bg-card border border-border rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
+              <h2 className="font-display text-[16px] font-semibold text-foreground flex items-center gap-2">
                 <FileText size={18} />
                 Documents
               </h2>
               <button
                 onClick={() => setIsDocumentUploadOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
               >
                 <Plus size={16} />
                 Ajouter
@@ -686,23 +709,23 @@ export default function AssureDetail() {
                   return (
                     <div
                       key={doc.id}
-                      className="flex items-center justify-between p-2.5 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors"
+                      className="flex items-center justify-between p-2.5 border border-border rounded-lg hover:bg-secondary/40 transition-colors"
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <Icon size={16} className="text-gray-400 shrink-0" />
+                        <Icon size={16} className="text-muted-foreground shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-[12px] font-medium text-gray-900 truncate">
+                          <p className="text-[12px] font-medium text-foreground truncate">
                             {doc.originalName || doc.nom}
                           </p>
                           {doc.documentType && (
-                            <p className="text-[10px] text-gray-500">{doc.documentType}</p>
+                            <p className="text-[10px] text-muted-foreground">{doc.documentType}</p>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => setViewerDocument(doc)}
-                          className="p-1.5 rounded hover:bg-blue-50 text-blue-600"
+                          className="p-1.5 rounded hover:bg-primary/10 text-primary"
                           title="Aperçu"
                         >
                           <Eye size={14} />
@@ -723,7 +746,7 @@ export default function AssureDetail() {
                               URL.revokeObjectURL(url);
                             } catch { /* ignore */ }
                           }}
-                          className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
+                          className="p-1.5 rounded hover:bg-secondary text-muted-foreground"
                           title="Télécharger"
                         >
                           <Download size={14} />
@@ -734,19 +757,19 @@ export default function AssureDetail() {
                 })}
               </div>
             ) : (
-              <p className="text-[13px] text-gray-500 text-center py-4">Aucun document</p>
+              <p className="text-[13px] text-muted-foreground text-center py-4">Aucun document</p>
             )}
           </div>
         </div>
       </div>
 
       {/* Contrats — full width: search, filters, table, pagination, export */}
-      <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6 mt-6">
+      <div className="bg-card border border-border rounded-2xl p-6 mt-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
+          <h2 className="font-display text-[16px] font-semibold text-foreground flex items-center gap-2">
             <FileCheck size={18} />
             Contrats
-            <span className="text-[12px] font-normal text-gray-400">
+            <span className="text-[12px] font-normal text-muted-foreground">
               ({filteredContracts.length}/{contracts.length})
             </span>
           </h2>
@@ -754,13 +777,13 @@ export default function AssureDetail() {
             <button
               onClick={() => setShowFilters((v) => !v)}
               className={`relative flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-lg transition-colors ${
-                showFilters ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-100'
+                showFilters ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-secondary'
               }`}
             >
               <Filter size={14} />
               Filtres
               {activeFilterCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center text-[9px] font-semibold bg-blue-600 text-white rounded-full">
+                <span className="absolute -top-1.5 -right-1.5 w-4 h-4 flex items-center justify-center text-[9px] font-semibold bg-primary text-primary-foreground rounded-full">
                   {activeFilterCount}
                 </span>
               )}
@@ -768,7 +791,7 @@ export default function AssureDetail() {
             <button
               onClick={handleExportExcel}
               disabled={filteredContracts.length === 0}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-success bg-success/10 hover:bg-success/20 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <FileSpreadsheet size={14} />
               Export Excel
@@ -778,18 +801,18 @@ export default function AssureDetail() {
 
         {/* Search bar */}
         <div className="relative mb-3">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Rechercher un contrat (référence, cédante, police...)"
-            className="w-full pl-9 pr-9 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full pl-9 pr-9 py-2 border border-input bg-background text-foreground rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
           />
           {searchTerm && (
             <button
               onClick={() => setSearchTerm('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X size={14} />
             </button>
@@ -798,13 +821,13 @@ export default function AssureDetail() {
 
         {/* Filter panel */}
         {showFilters && (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 p-4 mb-4 bg-gray-50 rounded-lg">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 p-4 mb-4 bg-secondary/40 rounded-lg">
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">Catégorie</label>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Catégorie</label>
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value as ContractTypeFilter)}
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-[12px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-2.5 py-1.5 border border-input rounded-lg text-[12px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="ALL">Toutes</option>
                 <option value="FACULTATIVE">Facultative</option>
@@ -812,11 +835,11 @@ export default function AssureDetail() {
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">Réassurance</label>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Réassurance</label>
               <select
                 value={reassuranceFilter}
                 onChange={(e) => setReassuranceFilter(e.target.value as ReassuranceFilter)}
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-[12px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-2.5 py-1.5 border border-input rounded-lg text-[12px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="ALL">Toutes</option>
                 <option value="PROPORTIONNEL">Proportionnel</option>
@@ -824,11 +847,11 @@ export default function AssureDetail() {
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">Cédante</label>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Cédante</label>
               <select
                 value={cedanteFilter}
                 onChange={(e) => setCedanteFilter(e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-[12px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-2.5 py-1.5 border border-input rounded-lg text-[12px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="ALL">Toutes</option>
                 {cedanteOptions.map((name) => (
@@ -839,28 +862,28 @@ export default function AssureDetail() {
               </select>
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">Date effet — de</label>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Date effet — de</label>
               <input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-[12px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-2.5 py-1.5 border border-input rounded-lg text-[12px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div>
-              <label className="block text-[11px] font-medium text-gray-500 mb-1">Date effet — à</label>
+              <label className="block text-[11px] font-medium text-muted-foreground mb-1">Date effet — à</label>
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-[12px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-2.5 py-1.5 border border-input rounded-lg text-[12px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             {activeFilterCount > 0 && (
               <div className="md:col-span-5 flex justify-end">
                 <button
                   onClick={resetFilters}
-                  className="flex items-center gap-1 text-[12px] text-gray-500 hover:text-red-600"
+                  className="flex items-center gap-1 text-[12px] text-muted-foreground hover:text-destructive"
                 >
                   <X size={12} />
                   Réinitialiser les filtres
@@ -875,11 +898,11 @@ export default function AssureDetail() {
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="pb-2 text-[11px] font-medium text-gray-500 uppercase">Référence</th>
-                  <th className="pb-2 text-[11px] font-medium text-gray-500 uppercase">Catégorie</th>
-                  <th className="pb-2 text-[11px] font-medium text-gray-500 uppercase">Cédante</th>
-                  <th className="pb-2 text-[11px] font-medium text-gray-500 uppercase">Police cédante</th>
+                <tr className="border-b border-border">
+                  <th className="pb-2 text-[11px] font-medium text-muted-foreground uppercase">Référence</th>
+                  <th className="pb-2 text-[11px] font-medium text-muted-foreground uppercase">Catégorie</th>
+                  <th className="pb-2 text-[11px] font-medium text-muted-foreground uppercase">Cédante</th>
+                  <th className="pb-2 text-[11px] font-medium text-muted-foreground uppercase">Police cédante</th>
                 </tr>
               </thead>
               <tbody>
@@ -887,16 +910,16 @@ export default function AssureDetail() {
                   <tr
                     key={contract.id}
                     onClick={() => navigate(`/affaires/${contract.id}`)}
-                    className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition-colors"
+                    className="border-b border-border/50 hover:bg-secondary/40 cursor-pointer transition-colors"
                   >
-                    <td className="py-2.5 text-[13px] font-medium text-gray-900">
+                    <td className="py-2.5 text-[13px] font-medium text-foreground">
                       {formatContractTitle(contract)}
                     </td>
-                    <td className="py-2.5 text-[12px] text-gray-600">{formatContractSubtitle(contract)}</td>
-                    <td className="py-2.5 text-[12px] text-gray-600">
+                    <td className="py-2.5 text-[12px] text-muted-foreground">{formatContractSubtitle(contract)}</td>
+                    <td className="py-2.5 text-[12px] text-muted-foreground">
                       {contract.cedante?.raisonSociale || '-'}
                     </td>
-                    <td className="py-2.5 text-[12px] text-gray-600">
+                    <td className="py-2.5 text-[12px] text-muted-foreground">
                       {contract.numeroPoliceCedante || '-'}
                     </td>
                   </tr>
@@ -905,29 +928,29 @@ export default function AssureDetail() {
             </table>
           </div>
         ) : (
-          <p className="text-[13px] text-gray-500 text-center py-8">Aucun contrat ne correspond à cette recherche</p>
+          <p className="text-[13px] text-muted-foreground text-center py-8">Aucun contrat ne correspond à cette recherche</p>
         )}
 
         {/* Pagination */}
         {filteredContracts.length > ITEMS_PER_PAGE && (
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
-            <p className="text-[12px] text-gray-500">
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+            <p className="text-[12px] text-muted-foreground">
               Page {safePage} / {totalPages}
             </p>
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={safePage === 1}
-                className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="p-1.5 rounded-lg border border-border hover:bg-secondary/40 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <ChevronLeft size={14} />
+                <ChevronLeft size={14} className="text-muted-foreground" />
               </button>
               <button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={safePage === totalPages}
-                className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="p-1.5 rounded-lg border border-border hover:bg-secondary/40 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <ChevronRight size={14} />
+                <ChevronRight size={14} className="text-muted-foreground" />
               </button>
             </div>
           </div>
@@ -949,39 +972,40 @@ export default function AssureDetail() {
 
       {/* Override Code Modal */}
       {isOverrideModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="p-6 border-b border-gray-100">
-              <h2 className="text-[18px] font-semibold text-gray-900">Modifier le code</h2>
-              <p className="text-[13px] text-gray-500 mt-1">Format: CLI-XXXX (ex: CLI-0042)</p>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-2xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.65)] w-full max-w-md">
+            <div className="p-6 border-b border-border">
+              <h2 className="font-display text-[18px] font-semibold text-foreground">Modifier le code</h2>
+              <p className="text-[13px] text-muted-foreground mt-1">Format: CLI-XXXX (ex: CLI-0042)</p>
             </div>
             <div className="p-6">
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Nouveau code</label>
+              <label className="block text-[12px] font-medium text-foreground mb-1.5">Nouveau code</label>
               <input
                 type="text"
                 value={newCode}
                 onChange={(e) => setNewCode(e.target.value.toUpperCase())}
                 placeholder="CLI-0001"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-input bg-background text-foreground rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
               />
-              <p className="text-[11px] text-amber-600 mt-2">
-                ⚠️ Cette action est irréversible et sera enregistrée dans l'historique d'audit.
+              <p className="text-[11px] text-warning mt-2 flex items-center gap-1.5">
+                <AlertTriangle size={13} className="flex-shrink-0" />
+                Cette action est irréversible et sera enregistrée dans l'historique d'audit.
               </p>
             </div>
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-border">
               <button
                 onClick={() => {
                   setIsOverrideModalOpen(false);
                   setNewCode('');
                 }}
-                className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-[13px] font-medium text-foreground hover:bg-secondary rounded-lg transition-colors"
               >
                 Annuler
               </button>
               <button
                 onClick={handleOverrideCode}
                 disabled={overrideCodeMutation.isPending}
-                className="px-4 py-2 text-[13px] font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-[13px] font-medium bg-warning text-warning-foreground rounded-lg hover:bg-warning/90 transition-colors disabled:opacity-50"
               >
                 {overrideCodeMutation.isPending ? 'Modification...' : 'Confirmer'}
               </button>
@@ -1029,8 +1053,8 @@ interface InfoFieldProps {
 function InfoField({ label, value, icon, className = '' }: InfoFieldProps) {
   return (
     <div className={className}>
-      <p className="text-[11px] text-gray-500 uppercase font-medium mb-1">{label}</p>
-      <p className="text-[13px] text-gray-900 flex items-center gap-1.5">
+      <p className="text-[11px] text-muted-foreground uppercase font-medium mb-1">{label}</p>
+      <p className="text-[13px] text-foreground flex items-center gap-1.5">
         {icon}
         {value || '-'}
       </p>
@@ -1047,11 +1071,11 @@ interface StatCardProps {
 
 function StatCard({ icon, label, value, bg }: StatCardProps) {
   return (
-    <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-4 flex items-center gap-3">
+    <div className="bg-card border border-border rounded-2xl p-4 flex items-center gap-3">
       <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center shrink-0`}>{icon}</div>
       <div>
-        <p className="text-[20px] font-semibold text-gray-900 leading-none">{value}</p>
-        <p className="text-[11px] text-gray-500 mt-1">{label}</p>
+        <p className="font-display text-[20px] font-semibold text-foreground leading-none">{value}</p>
+        <p className="text-[11px] text-muted-foreground mt-1">{label}</p>
       </div>
     </div>
   );
@@ -1111,49 +1135,49 @@ function DocumentViewerModal({ document: doc, onClose }: DocumentViewerModalProp
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-100 shrink-0">
+      <div className="bg-card border border-border rounded-2xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.65)] w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
           <div className="min-w-0">
-            <p className="text-[14px] font-semibold text-gray-900 truncate">{displayName}</p>
+            <p className="text-[14px] font-semibold text-foreground truncate">{displayName}</p>
             <div className="flex items-center gap-2 mt-0.5">
               {doc.documentType && (
-                <span className="text-[10px] px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full">{doc.documentType}</span>
+                <span className="text-[10px] px-2 py-0.5 bg-secondary text-muted-foreground rounded-full">{doc.documentType}</span>
               )}
               {doc.statut && (
-                <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">{doc.statut}</span>
+                <span className="text-[10px] px-2 py-0.5 bg-primary/15 text-primary rounded-full">{doc.statut}</span>
               )}
-              <span className="text-[10px] text-gray-400">{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</span>
+              <span className="text-[10px] text-muted-foreground">{new Date(doc.createdAt).toLocaleDateString('fr-FR')}</span>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => triggerDownload(displayName)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-foreground hover:bg-secondary rounded-lg transition-colors"
             >
               <Download size={14} />
               Télécharger
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground">
               <X size={18} />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center p-4">
+        <div className="flex-1 overflow-auto bg-secondary/20 flex items-center justify-center p-4">
           {loading && (
-            <div className="flex flex-col items-center gap-3 text-gray-400">
-              <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+            <div className="flex flex-col items-center gap-3 text-muted-foreground">
+              <div className="w-8 h-8 border-2 border-border border-t-primary rounded-full animate-spin" />
               <p className="text-[13px]">Chargement du document...</p>
             </div>
           )}
 
           {error && (
             <div className="flex flex-col items-center gap-3">
-              <FileIcon size={48} className="text-gray-300" />
-              <p className="text-[13px] text-red-500">Impossible de charger le document.</p>
+              <FileIcon size={48} className="text-muted-foreground/50" />
+              <p className="text-[13px] text-destructive">Impossible de charger le document.</p>
               <button
                 onClick={() => triggerDownload(displayName)}
-                className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-colors"
               >
                 <Download size={14} />
                 Télécharger à la place
@@ -1164,22 +1188,22 @@ function DocumentViewerModal({ document: doc, onClose }: DocumentViewerModalProp
           {!loading && !error && blobUrl && (
             <>
               {kind === 'pdf' && (
-                <iframe src={blobUrl} title={displayName} className="w-full h-full rounded-lg border border-gray-200 bg-white" />
+                <iframe src={blobUrl} title={displayName} className="w-full h-full rounded-lg border border-border bg-card" />
               )}
               {kind === 'image' && (
                 <img src={blobUrl} alt={displayName} className="max-w-full max-h-full object-contain rounded-lg" />
               )}
               {(kind === 'office' || kind === 'other') && (
                 <div className="flex flex-col items-center gap-3">
-                  <FileIcon size={48} className="text-gray-300" />
-                  <p className="text-[13px] text-gray-500">
+                  <FileIcon size={48} className="text-muted-foreground/50" />
+                  <p className="text-[13px] text-muted-foreground">
                     {kind === 'office'
                       ? "Aperçu Office non disponible — téléchargez le fichier pour l'ouvrir."
                       : 'Aperçu non disponible pour ce type de fichier.'}
                   </p>
                   <button
                     onClick={() => triggerDownload(displayName)}
-                    className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                    className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-lg transition-colors"
                   >
                     <Download size={14} />
                     Télécharger le fichier

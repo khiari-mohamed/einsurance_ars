@@ -41,9 +41,9 @@ export default function WorkflowHistory() {
 
   return (
     <div className="p-4 lg:p-6 max-w-4xl mx-auto">
-      <h1 className="text-[22px] font-semibold text-gray-900 mb-6">Historique Workflow</h1>
+      <h1 className="font-display text-[22px] font-semibold text-foreground mb-6">Historique Workflow</h1>
 
-      <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+      <div className="bg-card rounded-[var(--radius)] border border-border">
         {isLoading ? (
           <div className="p-8 text-center text-gray-500">Chargement...</div>
         ) : entries.length === 0 ? (

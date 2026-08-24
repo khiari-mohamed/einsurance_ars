@@ -30,7 +30,7 @@ interface PersistedAppearance {
 
 const DEFAULTS: PersistedAppearance = {
   theme: 'system',
-  primaryColor: '#d52b36',
+  primaryColor: '#c5a15d',
   layout: 'sidebar',
   direction: 'ltr',
   language: 'fr',

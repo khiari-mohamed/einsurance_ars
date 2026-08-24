@@ -44,31 +44,31 @@ export default function ReassureurFreeFieldsModal({ reassureurId, freeFields, on
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-[18px] font-semibold text-gray-900">Champs libres</h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+    <div className="fixed inset-0 bg-background/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="rounded-2xl border border-border bg-card shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="font-display text-lg font-semibold text-foreground">Champs libres</h2>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
-          {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">{error}</div>}
+          {error && <div className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/25 text-[13px] text-destructive">{error}</div>}
 
-          <p className="text-[12px] text-gray-500 mb-4">Champs configurables librement (CDC §5.7, onglet 5). Une clé vide sera ignorée.</p>
+          <p className="text-[12px] text-muted-foreground mb-4">Champs configurables librement (CDC §5.7, onglet 5). Une clé vide sera ignorée.</p>
 
           <div className="space-y-3">
             {rows.map((row, i) => (
               <div key={i} className="flex items-start gap-2">
                 <input type="text" placeholder="Nom du champ" value={row.key}
                   onChange={(e) => setRows((p) => p.map((r, j) => j === i ? { ...r, key: e.target.value } : r))}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="flex-1 px-3 py-2 rounded-xl border border-border bg-secondary text-foreground text-[13px] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" />
                 <input type="text" placeholder="Valeur" value={row.value}
                   onChange={(e) => setRows((p) => p.map((r, j) => j === i ? { ...r, value: e.target.value } : r))}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="flex-1 px-3 py-2 rounded-xl border border-border bg-secondary text-foreground text-[13px] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20" />
                 <button type="button" onClick={() => setRows((p) => p.filter((_, j) => j !== i))}
-                  className="p-2 rounded-lg hover:bg-red-50 text-red-500 shrink-0">
+                  className="p-2 rounded-xl hover:bg-destructive/10 text-destructive shrink-0">
                   <Trash2 size={16} />
                 </button>
               </div>
@@ -76,16 +76,16 @@ export default function ReassureurFreeFieldsModal({ reassureurId, freeFields, on
           </div>
 
           <button type="button" onClick={() => setRows((p) => [...p, { key: '', value: '' }])}
-            className="mt-3 flex items-center gap-1.5 text-[12px] font-medium text-blue-600 hover:text-blue-700">
+            className="mt-3 flex items-center gap-1.5 text-[12px] font-medium text-primary hover:text-primary/80">
             <Plus size={14} /> Ajouter un champ
           </button>
 
-          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-border">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-secondary/60 rounded-xl transition-colors">
               Annuler
             </button>
             <button type="submit" disabled={mutation.isPending}
-              className="px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50">
+              className="px-4 py-2 text-[13px] font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50">
               {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
             </button>
           </div>

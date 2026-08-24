@@ -36,32 +36,32 @@ export default function GrandLivre() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Grand Livre</h1>
-        <button onClick={exportCsv} className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm"><Download size={16} /> Exporter</button>
+        <button onClick={exportCsv} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90"><Download size={16} /> Exporter</button>
       </div>
 
       <div className="flex gap-3 mb-4">
-        <input placeholder="Préfixe de compte (ex: 401, 411, 532)" value={compte} onChange={(e) => setCompte(e.target.value)} className="px-3 py-2 border rounded-lg text-sm w-64" />
-        <input type="number" placeholder="Année" value={year} onChange={(e) => setYear(e.target.value)} className="px-3 py-2 border rounded-lg text-sm w-32" />
+        <input placeholder="Préfixe de compte (ex: 401, 411, 532)" value={compte} onChange={(e) => setCompte(e.target.value)} className="px-3 py-2 border border-border bg-background rounded-lg text-sm w-64 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
+        <input type="number" placeholder="Année" value={year} onChange={(e) => setYear(e.target.value)} className="px-3 py-2 border border-border bg-background rounded-lg text-sm w-32 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-card rounded-[var(--radius)] border border-border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Écriture</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Compte</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tiers</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libellé</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Débit</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Crédit</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Date</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Écriture</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Compte</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Tiers</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Libellé</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Débit</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Crédit</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {isLoading ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Chargement...</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Chargement...</td></tr>
             ) : lines.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Aucune écriture</td></tr>
+              <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Aucune écriture</td></tr>
             ) : (
               lines.map((l) => (
                 <tr key={l.id} className="hover:bg-gray-50">

@@ -43,7 +43,7 @@ function CurrencySelect({ value, onChange }: { value: string; onChange: (v: stri
       <button
         type="button"
         onClick={() => { setOpen((v) => !v); setSearch(''); }}
-        className="w-full flex items-center justify-between px-3 py-2 border border-gray-200 rounded-lg text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full flex items-center justify-between px-3 py-2 border border-border rounded-lg text-[13px] bg-background focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
       >
         <span className={selected ? 'text-gray-900' : 'text-gray-400'}>
           {selected ? `${selected.code} — ${selected.name}` : 'Sélectionner une devise...'}
@@ -51,7 +51,7 @@ function CurrencySelect({ value, onChange }: { value: string; onChange: (v: stri
         <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+        <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-lg overflow-hidden">
           <div className="p-2 border-b border-gray-100">
             <input
               autoFocus
@@ -59,7 +59,7 @@ function CurrencySelect({ value, onChange }: { value: string; onChange: (v: stri
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Rechercher (code ou nom)..."
-              className="w-full px-2 py-1.5 text-[12px] border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-2 py-1.5 text-[12px] border border-border bg-background rounded-md focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
             />
           </div>
           <ul className="max-h-48 overflow-y-auto">
@@ -351,7 +351,7 @@ export default function CoCourtierDetail() {
         })}
       </div>
 
-      <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+          <div className="bg-card rounded-[var(--radius)] border border-border p-6">
         {activeTab === 'info' && (
           <InfoTab
             coCourtier={coCourtier}
@@ -435,9 +435,9 @@ export default function CoCourtierDetail() {
 
       {overrideCodeOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="text-[16px] font-semibold text-gray-900">Modifier le code (Admin)</h2>
+          <div className="bg-card rounded-[var(--radius)] border border-border w-full max-w-sm overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <h2 className="text-[16px] font-semibold text-foreground">Modifier le code (Admin)</h2>
               <button onClick={() => setOverrideCodeOpen(false)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
                 <X size={18} />
               </button>

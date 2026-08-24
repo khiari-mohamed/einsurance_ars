@@ -37,7 +37,7 @@ export default function LoginPage() {
     <AuthLayout title="Connexion" subtitle="Accédez à votre espace professionnel ARS Tunisie">
       <div className="space-y-5">
         {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-2xl border border-[#d1503a]/25 bg-[#d1503a]/10 px-4 py-3 text-sm text-[#c23f2b]">
             {error}
           </div>
         )}
@@ -45,16 +45,16 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label className="mb-2 block text-sm font-medium text-[#171f1a]">
               Adresse e-mail
             </label>
             <div className="relative">
-              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93917f]" />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                className="h-12 w-full rounded-2xl border border-[#e8e2d2] bg-white pl-11 pr-4 text-sm text-[#171f1a] outline-none transition placeholder:text-[#93917f] focus:border-[#c5a15d] focus:ring-4 focus:ring-[#c5a15d]/20"
                 placeholder="prenom.nom@arstunisie.com"
                 autoComplete="email"
                 required
@@ -65,21 +65,21 @@ export default function LoginPage() {
           {/* Password */}
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <label className="block text-sm font-medium text-slate-700">Mot de passe</label>
+              <label className="block text-sm font-medium text-[#171f1a]">Mot de passe</label>
               <Link
                 to="/forgot-password"
-                className="text-xs font-medium text-red-600 transition hover:text-red-700"
+                className="text-xs font-medium text-[#8f7038] transition hover:text-[#6b5529]"
               >
                 Mot de passe oublié ?
               </Link>
             </div>
             <div className="relative">
-              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93917f]" />
               <input
                 type={showPwd ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                className="h-12 w-full rounded-2xl border border-[#e8e2d2] bg-white pl-11 pr-12 text-sm text-[#171f1a] outline-none transition placeholder:text-[#93917f] focus:border-[#c5a15d] focus:ring-4 focus:ring-[#c5a15d]/20"
                 placeholder="Saisissez votre mot de passe"
                 autoComplete="current-password"
                 required
@@ -87,7 +87,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPwd((v) => !v)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#93917f] transition hover:text-[#5b6358]"
                 tabIndex={-1}
                 aria-label={showPwd ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
               >
@@ -99,11 +99,11 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-red-600 to-red-500 text-sm font-semibold text-white transition hover:from-red-700 hover:to-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#c5a15d] to-[#b8914e] text-sm font-semibold text-[#0e1712] transition hover:from-[#b8914e] hover:to-[#a8813f] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? (
               <>
-                <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                <div className="h-4 w-4 rounded-full border-2 border-[#0e1712]/30 border-t-[#0e1712] animate-spin" />
                 <span>Connexion en cours…</span>
               </>
             ) : (
@@ -115,9 +115,9 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="rounded-2xl border border-red-100 bg-red-50/50 px-4 py-3 text-sm text-slate-600">
+        <div className="rounded-2xl border border-[#c5a15d]/20 bg-[#c5a15d]/5 px-4 py-3 text-sm text-[#5b6358]">
           Pas encore de compte ?{' '}
-          <Link to="/register" className="font-semibold text-red-600 transition hover:text-red-700">
+          <Link to="/register" className="font-semibold text-[#8f7038] transition hover:text-[#6b5529]">
             Créer un compte
           </Link>
         </div>

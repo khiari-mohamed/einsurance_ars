@@ -134,7 +134,7 @@ export default function EncaissementForm({ encaissementId, affaireId, onSuccess,
             </div>
 
             <div>
-              <Label>Taux de réalisation {currency !== 'TND' && <span className="text-gray-400 text-xs">(optionnel — résolu depuis le référentiel BCT si vide)</span>}</Label>
+              <Label>Taux de réalisation {currency !== 'TND' && <span className="text-muted-foreground text-xs">(optionnel — résolu depuis le référentiel BCT si vide)</span>}</Label>
               <Input type="number" step="0.000001" {...register('tauxRealisation', { valueAsNumber: true })} disabled={currency === 'TND'} placeholder={currency === 'TND' ? '1' : 'Auto'} />
             </div>
 

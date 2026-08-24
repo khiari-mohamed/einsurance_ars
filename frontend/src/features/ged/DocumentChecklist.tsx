@@ -140,7 +140,7 @@ export default function DocumentChecklist({ affaireId, affaireNumero }: Document
 
   if (error || !checklist) {
     return (
-      <div className="bg-white rounded-lg shadow-lg p-6 text-center text-gray-600">
+      <div className="bg-card rounded-[var(--radius)] border border-border p-6 text-center text-muted-foreground">
         <AlertCircle className="mx-auto mb-2 text-orange-500" size={28} />
         <p>{error ?? 'Checklist introuvable pour cette affaire.'}</p>
       </div>
@@ -150,7 +150,7 @@ export default function DocumentChecklist({ affaireId, affaireNumero }: Document
   const completionPercentage = Math.round(checklist.completionPct);
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
+    <div className="bg-card rounded-[var(--radius)] border border-border p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h3 className="text-xl font-bold">Checklist Documentaire</h3>

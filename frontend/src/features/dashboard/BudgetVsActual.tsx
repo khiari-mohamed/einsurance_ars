@@ -55,9 +55,9 @@ export default function BudgetVsActualDashboard() {
   };
 
   const getVarianceColor = (variance: number) => {
-    if (variance >= 0) return 'text-green-600';
-    if (variance >= -10) return 'text-yellow-600';
-    return 'text-red-600';
+    if (variance >= 0) return 'text-success';
+    if (variance >= -10) return 'text-warning';
+    return 'text-destructive';
   };
 
   const getVarianceIcon = (variance: number) => {
@@ -65,7 +65,7 @@ export default function BudgetVsActualDashboard() {
   };
 
   if (loading) {
-    return <div className="p-4">Loading budget data...</div>;
+    return <div className="p-4 text-muted-foreground">Loading budget data...</div>;
   }
 
   const totalVariance = budget && actual 
@@ -77,8 +77,8 @@ export default function BudgetVsActualDashboard() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold">Budget vs Actual</h2>
-          <p className="text-gray-600">Annual performance tracking</p>
+          <h2 className="font-display text-2xl font-semibold text-foreground">Budget vs Actual</h2>
+          <p className="text-muted-foreground">Annual performance tracking</p>
         </div>
         <div className="flex gap-2">
           <Input
@@ -97,32 +97,32 @@ export default function BudgetVsActualDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-6">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-sm text-gray-600">Total Budget</div>
-            <Target className="w-5 h-5 text-blue-600" />
+            <div className="text-sm text-muted-foreground">Total Budget</div>
+            <Target className="w-5 h-5 text-primary" />
           </div>
-          <div className="text-2xl font-bold">
+          <div className="font-display text-2xl font-semibold text-foreground">
             {budget?.totalBudget.toLocaleString()} TND
           </div>
         </Card>
 
         <Card className="p-6">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-sm text-gray-600">Actual Revenue</div>
-            <DollarSign className="w-5 h-5 text-green-600" />
+            <div className="text-sm text-muted-foreground">Actual Revenue</div>
+            <DollarSign className="w-5 h-5 text-success" />
           </div>
-          <div className="text-2xl font-bold">
+          <div className="font-display text-2xl font-semibold text-foreground">
             {actual?.totalRevenue.toLocaleString()} TND
           </div>
         </Card>
 
         <Card className="p-6">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-sm text-gray-600">Variance</div>
+            <div className="text-sm text-muted-foreground">Variance</div>
             {createElement(getVarianceIcon(totalVariance), {
               className: `w-5 h-5 ${getVarianceColor(totalVariance)}`,
             })}
           </div>
-          <div className={`text-2xl font-bold ${getVarianceColor(totalVariance)}`}>
+          <div className={`font-display text-2xl font-semibold ${getVarianceColor(totalVariance)}`}>
             {totalVariance >= 0 ? '+' : ''}{totalVariance.toFixed(1)}%
           </div>
         </Card>
@@ -130,7 +130,7 @@ export default function BudgetVsActualDashboard() {
 
       {/* By Cedant */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Performance by Cedant</h3>
+        <h3 className="font-display text-lg font-semibold mb-4 text-foreground">Performance by Cedant</h3>
         <div className="space-y-3">
           {budget && actual && Object.keys(budget.budgetByCedant).map((cedant) => {
             const budgetAmount = budget.budgetByCedant[cedant] || 0;
@@ -139,24 +139,24 @@ export default function BudgetVsActualDashboard() {
             const achievement = budgetAmount > 0 ? (actualAmount / budgetAmount) * 100 : 0;
 
             return (
-              <div key={cedant} className="border-b pb-3 last:border-0">
+              <div key={cedant} className="border-b border-border pb-3 last:border-0">
                 <div className="flex justify-between items-center mb-2">
-                  <div className="font-medium">{cedant}</div>
+                  <div className="font-medium text-foreground">{cedant}</div>
                   <div className={`text-sm font-semibold ${getVarianceColor(variance)}`}>
                     {variance >= 0 ? '+' : ''}{variance.toFixed(1)}%
                   </div>
                 </div>
-                <div className="flex justify-between text-sm text-gray-600 mb-2">
+                <div className="flex justify-between text-sm text-muted-foreground mb-2">
                   <span>Budget: {budgetAmount.toLocaleString()} TND</span>
                   <span>Actual: {actualAmount.toLocaleString()} TND</span>
                 </div>
-                <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
                   <div
-                    className={`h-full ${achievement >= 100 ? 'bg-green-600' : achievement >= 75 ? 'bg-yellow-600' : 'bg-red-600'}`}
+                    className={`h-full ${achievement >= 100 ? 'bg-success' : achievement >= 75 ? 'bg-warning' : 'bg-destructive'}`}
                     style={{ width: `${Math.min(achievement, 100)}%` }}
                   />
                 </div>
-                <div className="text-xs text-gray-600 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   {achievement.toFixed(0)}% achieved
                 </div>
               </div>
@@ -167,7 +167,7 @@ export default function BudgetVsActualDashboard() {
 
       {/* By Branch */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Performance by Branch</h3>
+        <h3 className="font-display text-lg font-semibold mb-4 text-foreground">Performance by Branch</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {budget && actual && Object.keys(budget.budgetByBranch).map((branch) => {
             const budgetAmount = budget.budgetByBranch[branch] || 0;
@@ -175,12 +175,12 @@ export default function BudgetVsActualDashboard() {
             const variance = calculateVariance(actualAmount, budgetAmount);
 
             return (
-              <div key={branch} className="border rounded-lg p-4">
-                <div className="text-sm font-semibold mb-2">{branch}</div>
-                <div className="text-xs text-gray-600 mb-1">
+              <div key={branch} className="border border-border rounded-lg p-4">
+                <div className="text-sm font-semibold mb-2 text-foreground">{branch}</div>
+                <div className="text-xs text-muted-foreground mb-1">
                   Budget: {budgetAmount.toLocaleString()}
                 </div>
-                <div className="text-xs text-gray-600 mb-2">
+                <div className="text-xs text-muted-foreground mb-2">
                   Actual: {actualAmount.toLocaleString()}
                 </div>
                 <div className={`text-sm font-bold ${getVarianceColor(variance)}`}>

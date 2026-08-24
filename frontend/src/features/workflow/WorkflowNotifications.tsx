@@ -72,9 +72,9 @@ export default function WorkflowNotifications() {
   return (
     <div className="p-4 lg:p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <Bell className="text-blue-600" size={28} />
+        <Bell className="text-primary" size={28} />
         <div>
-          <h1 className="text-[22px] font-semibold text-gray-900">Tâches &amp; Notifications</h1>
+          <h1 className="font-display text-[22px] font-semibold text-foreground">Tâches &amp; Notifications</h1>
           <p className="text-[13px] text-gray-500 mt-0.5">{pendingCount} en attente • {overdueCount} en retard</p>
         </div>
       </div>
@@ -90,7 +90,7 @@ export default function WorkflowNotifications() {
             key={opt.key}
             onClick={() => setFilter(opt.key)}
             className={`px-3 py-1.5 text-[12px] font-medium rounded-lg transition-colors ${
-              filter === opt.key ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+              filter === opt.key ? 'bg-primary text-primary-foreground' : 'bg-card border border-border text-muted-foreground hover:bg-muted'
             }`}
           >
             {opt.label}
@@ -98,7 +98,7 @@ export default function WorkflowNotifications() {
         ))}
       </div>
 
-      <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] divide-y divide-gray-100">
+      <div className="bg-card rounded-[var(--radius)] border border-border divide-y divide-border">
         {isLoading ? (
           <div className="p-8 text-center text-gray-500">Chargement...</div>
         ) : visibleTasks.length === 0 ? (

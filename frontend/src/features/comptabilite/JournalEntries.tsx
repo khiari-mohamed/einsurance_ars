@@ -34,30 +34,30 @@ export default function JournalEntries() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Écritures Comptables</h1>
-        <select value={statut} onChange={(e) => setStatut(e.target.value as any)} className="px-3 py-2 border rounded-lg text-sm">
+        <select value={statut} onChange={(e) => setStatut(e.target.value as any)} className="px-3 py-2 border border-border bg-background rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
           <option value="">Toutes</option>
           <option value="BROUILLON">Brouillon</option>
           <option value="VALIDE">Validées</option>
         </select>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-card rounded-[var(--radius)] border border-border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Numéro</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Affaire</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Statut</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Numéro</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Type</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Affaire</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Date</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Statut</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {isLoading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Chargement...</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Chargement...</td></tr>
             ) : entries.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Aucune écriture</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Aucune écriture</td></tr>
             ) : (
               entries.map((e) => (
                 <>
@@ -67,7 +67,7 @@ export default function JournalEntries() {
                     <td className="px-4 py-3 text-sm">{e.affaire?.numero || '-'}</td>
                     <td className="px-4 py-3 text-sm">{formatDate(e.createdAt)}</td>
                     <td className="px-4 py-3 text-sm">
-                      <span className={`px-2 py-1 rounded text-xs ${e.statut === 'VALIDE' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}`}>{e.statut}</span>
+                      <span className={`px-2 py-1 rounded text-xs border ${e.statut === 'VALIDE' ? 'bg-success/15 text-success border-success/30' : 'bg-warning/15 text-warning border-warning/30'}`}>{e.statut}</span>
                     </td>
                     <td className="px-4 py-3 text-sm space-x-2" onClick={(ev) => ev.stopPropagation()}>
                       {e.statut === 'BROUILLON' && (
@@ -80,9 +80,9 @@ export default function JournalEntries() {
                   </tr>
                   {expandedId === e.id && (
                     <tr><td colSpan={6} className="px-4 py-3 bg-gray-50">
-                      <p className="text-xs text-gray-500 mb-2">{e.description}</p>
+                      <p className="text-xs text-muted-foreground mb-2">{e.description}</p>
                       <table className="w-full text-xs">
-                        <thead><tr className="text-gray-500"><th className="text-left py-1">Compte</th><th className="text-right py-1">Débit</th><th className="text-right py-1">Crédit</th></tr></thead>
+                        <thead><tr className="text-muted-foreground"><th className="text-left py-1">Compte</th><th className="text-right py-1">Débit</th><th className="text-right py-1">Crédit</th></tr></thead>
                         <tbody>
                           {e.lines.map((l: any) => (
                             <tr key={l.id} className="border-t"><td className="py-1 font-mono">{l.planComptable?.compte} — {l.libelle}</td><td className="py-1 text-right">{l.debit ? formatCurrency(l.debit) : '-'}</td><td className="py-1 text-right">{l.credit ? formatCurrency(l.credit) : '-'}</td></tr>

@@ -33,9 +33,9 @@ export default function SinistreSAP({ sinistre }: Props) {
           <div className="text-2xl font-bold text-orange-900">{formatCurrency(sinistre.reserves ?? 0)}</div>
           <p className="text-xs text-orange-700 mt-1">Modifiable via l'onglet Fiche.</p>
         </div>
-        <div className="bg-blue-50 p-4 rounded-lg">
-          <div className="text-sm text-blue-600 font-medium">SAP au 31/12</div>
-          <div className="text-2xl font-bold text-blue-900">{formatCurrency(sinistre.sap ?? 0)}</div>
+        <div className="bg-primary/10 border border-primary/30 p-4 rounded-lg">
+          <div className="text-sm text-primary font-medium">SAP au 31/12</div>
+          <div className="text-2xl font-bold text-foreground">{formatCurrency(sinistre.sap ?? 0)}</div>
           <p className="text-xs text-blue-700 mt-1">Valeur année-comptable, ajustée ci-dessous avec traçabilité.</p>
         </div>
         <div className="bg-green-50 p-4 rounded-lg">

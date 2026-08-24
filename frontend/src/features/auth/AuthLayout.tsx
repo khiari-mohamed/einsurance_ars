@@ -17,7 +17,7 @@ export default function AuthLayout({ children, title, subtitle }: AuthLayoutProp
       <div className="hidden lg:flex lg:w-[48%] xl:w-[45%] relative overflow-hidden">
         {/* Fallback gradient shown when image fails (on-premise / no internet) */}
         {imgFailed ? (
-          <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-red-950" />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#09110d] via-[#0c1410] to-[#1c1710]" />
         ) : (
           <img
             src="https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1200"
@@ -26,7 +26,7 @@ export default function AuthLayout({ children, title, subtitle }: AuthLayoutProp
             className="absolute inset-0 h-full w-full object-cover"
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-950/95 via-slate-900/90 to-red-900/80" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#09110d]/95 via-[#0e1712]/90 to-[#3a2f14]/80" />
 
         <div className="relative z-10 flex w-full flex-col justify-between p-10 xl:p-14">
           {/* Logo */}
@@ -38,7 +38,7 @@ export default function AuthLayout({ children, title, subtitle }: AuthLayoutProp
             />
             <div>
               <h1 className="text-xl font-bold tracking-tight text-white">ARS Tunisie</h1>
-              <p className="text-xs font-medium uppercase tracking-[0.22em] text-red-200/80">
+              <p className="text-xs font-medium uppercase tracking-[0.22em] text-[#e3c888]/80">
                 Plateforme de Réassurance
               </p>
             </div>
@@ -49,11 +49,11 @@ export default function AuthLayout({ children, title, subtitle }: AuthLayoutProp
             <h2 className="mb-4 text-3xl font-bold leading-tight text-white xl:text-4xl">
               Votre portail de
               <br />
-              <span className="bg-gradient-to-r from-red-400 via-red-200 to-white bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-[#c5a15d] via-[#e3c888] to-white bg-clip-text text-transparent">
                 réassurance intelligent
               </span>
             </h2>
-            <p className="mb-10 text-base leading-relaxed text-slate-300">
+            <p className="mb-10 text-base leading-relaxed text-[#c7c2b3]">
               Gérez vos opérations, vos accès et vos workflows dans une interface claire,
               premium et conçue pour les usages professionnels d'ARS Tunisie.
             </p>
@@ -77,29 +77,29 @@ export default function AuthLayout({ children, title, subtitle }: AuthLayoutProp
             </div>
           </div>
 
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-[#83806f]">
             © {new Date().getFullYear()} ARS Tunisie. Tous droits réservés.
           </p>
         </div>
       </div>
 
       {/* ── Right panel ────────────────────────────────────────────── */}
-      <div className="flex flex-1 items-center justify-center bg-gradient-to-br from-slate-50 via-white to-red-50/40 p-4 sm:p-6 md:p-8 lg:p-12">
+      <div className="flex flex-1 items-center justify-center bg-gradient-to-br from-[#faf8f3] via-white to-[#c5a15d]/5 p-4 sm:p-6 md:p-8 lg:p-12">
         <div className="w-full max-w-[440px]">
           {/* Mobile logo */}
           <div className="mb-8 text-center lg:hidden">
             <img src="/Image1.png" alt="ARS Tunisie" className="mx-auto mb-3 h-11 w-auto" />
-            <h1 className="text-xl font-bold text-slate-900">ARS Tunisie</h1>
-            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">
+            <h1 className="text-xl font-bold text-[#171f1a]">ARS Tunisie</h1>
+            <p className="mt-1 text-xs uppercase tracking-[0.18em] text-[#5b6358]">
               Plateforme de Réassurance
             </p>
           </div>
 
           {/* Card */}
-          <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-8">
+          <div className="rounded-[28px] border border-[#e8e2d2] bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)] sm:p-8">
             <div className="mb-6">
-              <h2 className="text-2xl font-bold tracking-tight text-slate-900">{title}</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500">{subtitle}</p>
+              <h2 className="text-2xl font-bold tracking-tight text-[#171f1a]">{title}</h2>
+              <p className="mt-1 text-sm leading-6 text-[#5b6358]">{subtitle}</p>
             </div>
             {children}
           </div>
@@ -120,12 +120,12 @@ function FeatureItem({
 }) {
   return (
     <div className="group flex items-start gap-3.5">
-      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-red-300 backdrop-blur-sm transition-colors group-hover:bg-white/15">
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-[#e3c888] backdrop-blur-sm transition-colors group-hover:bg-white/15">
         {icon}
       </div>
       <div>
         <h3 className="text-sm font-semibold text-white">{title}</h3>
-        <p className="mt-0.5 text-xs leading-relaxed text-slate-400">{description}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-[#9a988a]">{description}</p>
       </div>
     </div>
   );

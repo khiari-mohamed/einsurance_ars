@@ -117,20 +117,20 @@ export default function PMDInstalmentSchedule({
   const isValid = Math.abs(totalPourcentage - 100) < 0.01;
 
   return (
-    <div className="bg-white rounded-lg border p-6">
+    <div className="bg-card rounded-[var(--radius)] border border-border p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <Calendar className="text-blue-600" size={24} />
+          <Calendar className="text-primary" size={24} />
           <div>
             <h3 className="text-lg font-bold">Échéancier PMD (Prime Minimum et Dépôt)</h3>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               PMD Total: {pmdTotal.toLocaleString()} {devise}
             </p>
           </div>
         </div>
         <button
           onClick={addInstalment}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
         >
           <Plus size={16} />
           Ajouter Échéance
@@ -139,13 +139,13 @@ export default function PMDInstalmentSchedule({
 
       <div className="space-y-4">
         {instalments.map((inst, index) => (
-          <div key={index} className="p-4 border rounded-lg bg-gray-50">
+          <div key={index} className="p-4 border border-border rounded-lg bg-muted/50">
             <div className="flex items-center justify-between mb-3">
               <h4 className="font-semibold">Échéance #{inst.numero}</h4>
               {instalments.length > 1 && (
                 <button
                   onClick={() => removeInstalment(index)}
-                  className="p-1 text-red-600 hover:bg-red-50 rounded"
+                  className="p-1 text-destructive hover:bg-destructive/10 rounded"
                 >
                   <Trash2 size={16} />
                 </button>
@@ -159,7 +159,7 @@ export default function PMDInstalmentSchedule({
                   type="number"
                   value={inst.montant}
                   onChange={(e) => updateInstalment(index, 'montant', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                 />
               </div>
               <div>
@@ -169,7 +169,7 @@ export default function PMDInstalmentSchedule({
                   step="0.01"
                   value={inst.pourcentage.toFixed(2)}
                   onChange={(e) => updateInstalment(index, 'pourcentage', parseFloat(e.target.value) || 0)}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                 />
               </div>
               <div>
@@ -178,7 +178,7 @@ export default function PMDInstalmentSchedule({
                   type="date"
                   value={inst.dateEcheance}
                   onChange={(e) => updateInstalment(index, 'dateEcheance', e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                 />
               </div>
               <div>
@@ -186,7 +186,7 @@ export default function PMDInstalmentSchedule({
                 <select
                   value={inst.statut}
                   onChange={(e) => updateInstalment(index, 'statut', e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                 >
                   <option value="en_attente">En Attente</option>
                   <option value="paye">Payé</option>
@@ -222,10 +222,10 @@ export default function PMDInstalmentSchedule({
       </div>
 
       {/* Summary */}
-      <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border-2 border-blue-200">
+      <div className="mt-6 p-4 bg-primary/10 rounded-lg border border-primary/30">
         <div className="grid grid-cols-3 gap-4">
           <div>
-            <p className="text-sm text-gray-600 mb-1">Total Montant</p>
+            <p className="text-sm text-muted-foreground mb-1">Total Montant</p>
             <p className="text-xl font-bold text-blue-600">
               {totalMontant.toLocaleString()} {devise}
             </p>

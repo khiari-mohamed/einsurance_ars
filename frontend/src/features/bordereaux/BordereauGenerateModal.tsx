@@ -78,10 +78,10 @@ export default function BordereauGenerateModal({ isOpen, onClose }: Props) {
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg"><Zap className="text-yellow-600" size={24} /></div>
+              <div className="p-2 bg-primary/15 rounded-lg"><Zap className="text-primary" size={24} /></div>
               <div>
                 <h2 className="text-2xl font-bold">Génération Automatique</h2>
-                <p className="text-gray-600">À partir des données d'une affaire placée</p>
+                <p className="text-muted-foreground">À partir des données d'une affaire placée</p>
               </div>
             </div>
             <Button variant="ghost" size="sm" onClick={onClose}><X size={20} /></Button>
@@ -96,10 +96,10 @@ export default function BordereauGenerateModal({ isOpen, onClose }: Props) {
                     key={t.value}
                     type="button"
                     onClick={() => setFormData({ ...formData, type: t.value, reassureurId: '' })}
-                    className={`p-4 border-2 rounded-lg text-left transition-all ${formData.type === t.value ? 'border-yellow-600 bg-yellow-50' : 'border-gray-200 hover:border-gray-300'}`}
+                    className={`p-4 border-2 rounded-lg text-left transition-all ${formData.type === t.value ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}
                   >
                     <p className="font-semibold">{t.label}</p>
-                    <p className="text-sm text-gray-600 mt-1">{t.description}</p>
+                    <p className="text-sm text-muted-foreground mt-1">{t.description}</p>
                   </button>
                 ))}
               </div>
@@ -107,7 +107,7 @@ export default function BordereauGenerateModal({ isOpen, onClose }: Props) {
 
             <div>
               <label className="block text-sm font-medium mb-2">Affaire (placée) <span className="text-red-500">*</span></label>
-              <select value={formData.affaireId} onChange={(e) => setFormData({ ...formData, affaireId: e.target.value })} className="w-full border rounded-lg px-3 py-2" required>
+                <select value={formData.affaireId} onChange={(e) => setFormData({ ...formData, affaireId: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" required>
                 <option value="">Sélectionner une affaire</option>
                 {affaires?.data?.data?.map((a: any) => (
                   <option key={a.id} value={a.id}>{a.numero} — {a.cedante?.raisonSociale}</option>
@@ -118,7 +118,7 @@ export default function BordereauGenerateModal({ isOpen, onClose }: Props) {
             {formData.type === 'CESSION_REASSUREUR' && (
               <div>
                 <label className="block text-sm font-medium mb-2">Réassureur (optionnel — sinon un bordereau par réassureur)</label>
-                <select value={formData.reassureurId} onChange={(e) => setFormData({ ...formData, reassureurId: e.target.value })} className="w-full border rounded-lg px-3 py-2">
+                <select value={formData.reassureurId} onChange={(e) => setFormData({ ...formData, reassureurId: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
                   <option value="">Tous les réassureurs de l'affaire</option>
                   {reassureurs?.data?.map((r: any) => <option key={r.id} value={r.id}>{r.raisonSociale}</option>)}
                 </select>
@@ -128,20 +128,20 @@ export default function BordereauGenerateModal({ isOpen, onClose }: Props) {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Date Début</label>
-                <input type="date" value={formData.datePeriodeDebut} onChange={(e) => setFormData({ ...formData, datePeriodeDebut: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                <input type="date" value={formData.datePeriodeDebut} onChange={(e) => setFormData({ ...formData, datePeriodeDebut: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Date Fin</label>
-                <input type="date" value={formData.datePeriodeFin} onChange={(e) => setFormData({ ...formData, datePeriodeFin: e.target.value })} className="w-full border rounded-lg px-3 py-2" min={formData.datePeriodeDebut} />
+                <input type="date" value={formData.datePeriodeFin} onChange={(e) => setFormData({ ...formData, datePeriodeFin: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" min={formData.datePeriodeDebut} />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Date Limite Paiement</label>
-                <input type="date" value={formData.dateLimitePaiement} onChange={(e) => setFormData({ ...formData, dateLimitePaiement: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                <input type="date" value={formData.dateLimitePaiement} onChange={(e) => setFormData({ ...formData, dateLimitePaiement: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
               </div>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-900">
+            <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
+              <p className="text-sm text-foreground">
                 <strong>Note :</strong> l'affaire doit être au statut <code>PLACEMENT_REALISE</code>. Pour "Sinistre Facultative", seuls les sinistres validés (ou plus avancés) sur la période sont inclus.
               </p>
             </div>

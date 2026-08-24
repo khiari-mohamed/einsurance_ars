@@ -65,7 +65,7 @@ export default function CommissionsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{formatCurrency(totalUnpaid)}</div>
-            <p className="text-xs text-gray-500">{unpaidCount} ligne(s)</p>
+            <p className="text-xs text-muted-foreground">{unpaidCount} ligne(s)</p>
           </CardContent>
         </Card>
         <Card>

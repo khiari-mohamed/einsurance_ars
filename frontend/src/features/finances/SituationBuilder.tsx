@@ -114,7 +114,7 @@ export default function SituationBuilder({ onCreated }: Props) {
             </div>
           </div>
 
-          <p className="text-[11px] text-gray-400">
+          <p className="text-[11px] text-muted-foreground">
             Seules les affaires placées, au mode de paiement "Par Situation", sont éligibles. La compilation calcule
             automatiquement le débit (primes cédées nettes de commission) et le crédit (sinistres réglés) par affaire.
           </p>
@@ -136,7 +136,7 @@ export default function SituationBuilder({ onCreated }: Props) {
 
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-green-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600">DÉBIT (Primes)</p>
+                <p className="text-sm text-muted-foreground">DÉBIT (Primes)</p>
                 <p className="text-xl font-bold text-green-700">{formatCurrency(result.totalDebit ?? 0, result.currency)}</p>
               </div>
               <div className="bg-red-50 p-4 rounded-lg">

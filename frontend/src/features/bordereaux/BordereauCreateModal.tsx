@@ -155,7 +155,7 @@ export default function BordereauCreateModal({ isOpen, onClose }: Props) {
   const needsReassureur = formData.type === 'CESSION_REASSUREUR' || formData.type === 'ETAT_DE_TRANSFERT';
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <Card className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
@@ -165,11 +165,11 @@ export default function BordereauCreateModal({ isOpen, onClose }: Props) {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium mb-2">Type de Bordereau <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium text-foreground mb-2">Type de Bordereau <span className="text-destructive">*</span></label>
               <select
                 value={formData.type}
                 onChange={(e) => setFormData({ ...formData, type: e.target.value as BordereauType })}
-                className="w-full border rounded-lg px-3 py-2"
+                className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                 required
               >
                 {BORDEREAU_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
@@ -183,7 +183,7 @@ export default function BordereauCreateModal({ isOpen, onClose }: Props) {
                   <select
                     value={formData.cedanteId || ''}
                     onChange={(e) => setFormData({ ...formData, cedanteId: e.target.value || undefined })}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                   >
                     <option value="">— Aucune —</option>
                     {cedantes?.data?.map((c: any) => <option key={c.id} value={c.id}>{c.raisonSociale}</option>)}
@@ -196,7 +196,7 @@ export default function BordereauCreateModal({ isOpen, onClose }: Props) {
                 <select
                   value={formData.affaireId || ''}
                   onChange={(e) => setFormData({ ...formData, affaireId: e.target.value || undefined })}
-                  className="w-full border rounded-lg px-3 py-2"
+                  className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                 >
                   <option value="">— Aucune —</option>
                   {affaires?.data?.data?.map((a: any) => (
@@ -207,11 +207,11 @@ export default function BordereauCreateModal({ isOpen, onClose }: Props) {
 
               {needsReassureur && (
                 <div>
-                  <label className="block text-sm font-medium mb-2">Réassureur <span className="text-red-500">*</span></label>
+                    <label className="block text-sm font-medium text-foreground mb-2">Réassureur <span className="text-destructive">*</span></label>
                   <select
                     value={formData.reassureurCode || ''}
                     onChange={(e) => setFormData({ ...formData, reassureurCode: e.target.value || undefined })}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                     required
                   >
                     <option value="">Sélectionner un réassureur</option>
@@ -231,16 +231,16 @@ export default function BordereauCreateModal({ isOpen, onClose }: Props) {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Période Début</label>
-                <input type="date" value={formData.datePeriodeDebut || ''} onChange={(e) => setFormData({ ...formData, datePeriodeDebut: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                <input type="date" value={formData.datePeriodeDebut || ''} onChange={(e) => setFormData({ ...formData, datePeriodeDebut: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Période Fin</label>
-                <input type="date" value={formData.datePeriodeFin || ''} onChange={(e) => setFormData({ ...formData, datePeriodeFin: e.target.value })} className="w-full border rounded-lg px-3 py-2" min={formData.datePeriodeDebut} />
+                <input type="date" value={formData.datePeriodeFin || ''} onChange={(e) => setFormData({ ...formData, datePeriodeFin: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" min={formData.datePeriodeDebut} />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Date Limite Paiement</label>
-                <input type="date" value={formData.dateLimitePaiement || ''} onChange={(e) => setFormData({ ...formData, dateLimitePaiement: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
-                <p className="text-xs text-gray-500 mt-1">Par défaut : +30 jours à l'envoi, si non renseigné</p>
+                <input type="date" value={formData.dateLimitePaiement || ''} onChange={(e) => setFormData({ ...formData, dateLimitePaiement: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
+                <p className="text-xs text-muted-foreground mt-1">Par défaut : +30 jours à l'envoi, si non renseigné</p>
               </div>
             </div>
 

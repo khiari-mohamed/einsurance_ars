@@ -1,8 +1,8 @@
 export default function CompanySettings() {
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Paramètres Société</h1>
-      <div className="bg-white p-6 rounded-lg shadow max-w-2xl">
+      <h1 className="font-display text-3xl font-semibold text-foreground mb-6">Paramètres Société</h1>
+      <div className="bg-card p-6 rounded-[var(--radius)] border border-border max-w-2xl">
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium mb-1">Nom de la société</label>

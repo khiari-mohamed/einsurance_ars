@@ -49,12 +49,12 @@ export default function Export() {
   return (
     <div className="p-6 max-w-3xl">
       <h1 className="text-2xl font-bold mb-1">Fichier d'Intégration</h1>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-muted-foreground mb-6">
         Exporte les écritures validées non encore transmises. Une fois exportée, une écriture n'est plus reproposée
         dans un export ultérieur — utilisez "Réannuler" ci-dessous si un lot doit être régénéré.
       </p>
 
-      <div className="bg-white rounded-lg shadow p-4 space-y-3 mb-6">
+      <div className="bg-card rounded-[var(--radius)] border border-border p-4 space-y-3 mb-6">
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-sm font-medium">Format</label>
@@ -76,13 +76,13 @@ export default function Export() {
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full border rounded px-3 py-2 text-sm" />
           </div>
         </div>
-        <button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50">
+        <button onClick={() => generateMutation.mutate()} disabled={generateMutation.isPending} className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50">
           <Download size={16} /> {generateMutation.isPending ? 'Génération...' : 'Générer et Télécharger'}
         </button>
       </div>
 
       <h2 className="font-semibold mb-2">Historique des exports</h2>
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-card rounded-[var(--radius)] border border-border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50">
             <tr>
@@ -92,7 +92,7 @@ export default function Export() {
           </thead>
           <tbody className="divide-y">
             {(batches?.data ?? []).length === 0 ? (
-              <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-500">Aucun export généré</td></tr>
+              <tr><td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">Aucun export généré</td></tr>
             ) : (
               batches!.data.map((b: any) => (
                 <tr key={b.id} className="hover:bg-gray-50">
@@ -101,7 +101,7 @@ export default function Export() {
                   <td className="px-3 py-2">{b.entryCount}</td>
                   <td className="px-3 py-2">{formatDate(b.createdAt)}</td>
                   <td className="px-3 py-2 space-x-2">
-                    <button onClick={() => redownloadMutation.mutate(b.id)} className="text-blue-600 hover:underline inline-flex items-center gap-1"><Download size={13} /> Retélécharger</button>
+                    <button onClick={() => redownloadMutation.mutate(b.id)} className="text-primary hover:underline inline-flex items-center gap-1"><Download size={13} /> Retélécharger</button>
                     <button onClick={() => voidMutation.mutate(b.id)} className="text-red-600 hover:underline inline-flex items-center gap-1"><XCircle size={13} /> Annuler le lot</button>
                   </td>
                 </tr>

@@ -55,7 +55,7 @@ export default function ReferentielHistory() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-8 py-6">
+      <div className="bg-card border-b border-border px-8 py-6">
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/assures')}
@@ -64,7 +64,7 @@ export default function ReferentielHistory() {
             <ChevronLeft size={20} className="text-gray-600" />
           </button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">Historique Référentiel</h1>
+            <h1 className="font-display text-3xl font-semibold text-foreground">Historique Référentiel</h1>
             <p className="text-gray-600 mt-1">
               Journal de tous les désactivations pour les clients, compagnies, réassureurs et courtiers
             </p>
@@ -75,7 +75,7 @@ export default function ReferentielHistory() {
       {/* Content */}
       <div className="p-8">
         {/* Filters */}
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
+        <div className="bg-card rounded-[var(--radius)] border border-border p-6 mb-6">
           <div className="flex items-end gap-4">
             <div className="flex-1">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -110,7 +110,7 @@ export default function ReferentielHistory() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+            <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition flex items-center gap-2">
               <Download size={16} />
               Exporter
             </button>

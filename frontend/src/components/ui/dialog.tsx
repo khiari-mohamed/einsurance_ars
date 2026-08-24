@@ -21,7 +21,7 @@ export function Dialog({ open, onOpenChange, children }: { open: boolean; onOpen
 
   const overlay = (
     <div className="fixed inset-0 z-[100000] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={() => onOpenChange(false)} />
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => onOpenChange(false)} />
       {children}
     </div>
   );
@@ -30,7 +30,11 @@ export function Dialog({ open, onOpenChange, children }: { open: boolean; onOpen
 }
 
 export function DialogContent({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn('relative z-[100000] bg-white rounded-lg shadow-lg p-6', className)}>{children}</div>;
+  return (
+    <div className={cn('relative z-[100000] rounded-2xl border border-border bg-card p-6 text-card-foreground shadow-lg', className)}>
+      {children}
+    </div>
+  );
 }
 
 export function DialogHeader({ className, children }: { className?: string; children: React.ReactNode }) {
@@ -38,5 +42,5 @@ export function DialogHeader({ className, children }: { className?: string; chil
 }
 
 export function DialogTitle({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <h2 className={cn('text-lg font-semibold leading-none tracking-tight', className)}>{children}</h2>;
+  return <h2 className={cn('font-display text-lg font-semibold leading-none tracking-tight text-foreground', className)}>{children}</h2>;
 }

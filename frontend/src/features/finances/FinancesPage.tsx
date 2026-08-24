@@ -116,11 +116,11 @@ export default function FinancesPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Solde Net</CardTitle>
-              <DollarSign className="h-4 w-4 text-blue-600" />
+              <DollarSign className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
               <div className={`text-2xl font-bold ${stats.soldeNet >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(stats.soldeNet)}</div>
-              <p className="text-xs text-gray-500">Année en cours</p>
+              <p className="text-xs text-muted-foreground">Année en cours</p>
             </CardContent>
           </Card>
           <Card>

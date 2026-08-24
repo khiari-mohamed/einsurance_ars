@@ -62,7 +62,7 @@ export default function PaymentOrdersPage() {
 
       <div className="grid grid-cols-4 gap-4">
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Brouillon</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{stats.brouillon}</div></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Validés</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-blue-600">{stats.valide}</div></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Validés</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-primary">{stats.valide}</div></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">Exécutés</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-purple-600">{stats.execute}</div></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm font-medium">SWIFT Reçu</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold text-green-600">{stats.swift}</div></CardContent></Card>
       </div>

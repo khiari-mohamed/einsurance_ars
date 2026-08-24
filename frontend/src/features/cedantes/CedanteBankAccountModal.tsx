@@ -63,41 +63,41 @@ function CurrencySelect({
         type="button"
         onClick={() => { setOpen((v) => !v); setSearch(''); }}
         className={`w-full flex items-center justify-between px-3 py-2 border ${
-          hasError ? 'border-red-500' : 'border-gray-200'
-        } rounded-lg text-[13px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500`}
+          hasError ? 'border-destructive' : 'border-border'
+        } rounded-lg text-[13px] bg-secondary outline-none transition focus:ring-2 focus:ring-primary/20 focus:border-primary`}
       >
-        <span className={selected ? 'text-gray-900' : 'text-gray-400'}>
+        <span className={selected ? 'text-foreground' : 'text-muted-foreground'}>
           {selected ? `${selected.code} — ${selected.name}` : 'Sélectionner une devise...'}
         </span>
-        <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-          <div className="p-2 border-b border-gray-100">
+        <div className="absolute z-50 mt-1 w-full bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-border">
             <input
               autoFocus
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Rechercher (code ou nom)..."
-              className="w-full px-2 py-1.5 text-[12px] border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-2 py-1.5 text-[12px] border border-border bg-secondary text-foreground rounded-md outline-none transition focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
           <ul className="max-h-48 overflow-y-auto">
             {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-[12px] text-gray-400">Aucun résultat</li>
+              <li className="px-3 py-2 text-[12px] text-muted-foreground">Aucun résultat</li>
             ) : (
               filtered.map((c) => (
                 <li
                   key={c.code}
                   onClick={() => { onChange(c.code); setOpen(false); setSearch(''); }}
-                  className={`px-3 py-2 text-[12px] cursor-pointer hover:bg-blue-50 flex items-center gap-2 ${
-                    c.code === value ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                  className={`px-3 py-2 text-[12px] cursor-pointer hover:bg-primary/10 flex items-center gap-2 ${
+                    c.code === value ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground'
                   }`}
                 >
                   <span className="font-mono font-semibold w-10 shrink-0">{c.code}</span>
-                  <span className="text-gray-500">{c.name}</span>
+                  <span className="text-muted-foreground">{c.name}</span>
                 </li>
               ))
             )}
@@ -216,14 +216,14 @@ export default function CedanteBankAccountModal({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-[18px] font-semibold text-gray-900">
+      <div className="rounded-2xl border border-border bg-card shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="font-display text-[18px] font-semibold text-foreground">
             {bankAccount ? 'Modifier le compte bancaire' : 'Nouveau compte bancaire'}
           </h2>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+            className="p-2 rounded-lg hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors"
           >
             <X size={20} />
           </button>
@@ -231,15 +231,15 @@ export default function CedanteBankAccountModal({
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
           {errors.submit && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
+            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-[13px] text-destructive">
               {errors.submit}
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                Banque <span className="text-red-500">*</span>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">
+                Banque <span className="text-destructive">*</span>
               </label>
               <input
                 type="text"
@@ -247,25 +247,25 @@ export default function CedanteBankAccountModal({
                 value={formData.banque}
                 onChange={handleChange}
                 required
-                className={`w-full px-3 py-2 border ${errors.banque ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                className={`w-full px-3 py-2 border ${errors.banque ? 'border-destructive' : 'border-border'} bg-secondary text-foreground rounded-lg text-[13px] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20`}
               />
-              {errors.banque && <p className="mt-1 text-[11px] text-red-500">{errors.banque}</p>}
+              {errors.banque && <p className="mt-1 text-[11px] text-destructive">{errors.banque}</p>}
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Agence</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Agence</label>
               <input
                 type="text"
                 name="agence"
                 value={formData.agence}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary text-foreground rounded-lg text-[13px] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                RIB <span className="text-red-500">*</span>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">
+                RIB <span className="text-destructive">*</span>
               </label>
               <input
                 type="text"
@@ -273,37 +273,37 @@ export default function CedanteBankAccountModal({
                 value={formData.rib}
                 onChange={handleChange}
                 required
-                className={`w-full px-3 py-2 border ${errors.rib ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                className={`w-full px-3 py-2 border ${errors.rib ? 'border-destructive' : 'border-border'} bg-secondary text-foreground rounded-lg text-[13px] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20`}
               />
-              {errors.rib && <p className="mt-1 text-[11px] text-red-500">{errors.rib}</p>}
+              {errors.rib && <p className="mt-1 text-[11px] text-destructive">{errors.rib}</p>}
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">IBAN</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">IBAN</label>
               <input
                 type="text"
                 name="iban"
                 value={formData.iban}
                 onChange={handleChange}
                 placeholder="Optionnel pour compte tunisien"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary text-foreground rounded-lg text-[13px] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">SWIFT / BIC</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">SWIFT / BIC</label>
               <input
                 type="text"
                 name="swift"
                 value={formData.swift}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary text-foreground rounded-lg text-[13px] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                Devise <span className="text-red-500">*</span>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">
+                Devise <span className="text-destructive">*</span>
               </label>
               <CurrencySelect
                 value={formData.currency}
@@ -313,7 +313,7 @@ export default function CedanteBankAccountModal({
                 }}
                 hasError={!!errors.currency}
               />
-              {errors.currency && <p className="mt-1 text-[11px] text-red-500">{errors.currency}</p>}
+              {errors.currency && <p className="mt-1 text-[11px] text-destructive">{errors.currency}</p>}
             </div>
 
             <div className="md:col-span-2">
@@ -323,28 +323,28 @@ export default function CedanteBankAccountModal({
                   name="isDefault"
                   checked={formData.isDefault}
                   onChange={handleChange}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                  className="w-4 h-4 text-primary border-border rounded focus:ring-2 focus:ring-primary/20"
                 />
-                <span className="text-[13px] font-medium text-gray-700">Compte principal</span>
+                <span className="text-[13px] font-medium text-muted-foreground">Compte principal</span>
               </label>
-              <p className="mt-1 text-[11px] text-gray-400">
+              <p className="mt-1 text-[11px] text-muted-foreground/70">
                 Un seul compte principal par devise n'est pas imposé — cocher ceci décochera le principal existant.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-border">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-secondary/60 rounded-lg transition-colors"
             >
               Annuler
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-[13px] font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
             </button>

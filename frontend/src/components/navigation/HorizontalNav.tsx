@@ -39,9 +39,11 @@ export default function HorizontalNav({ onOpenAppearance }: Props) {
   }, []);
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-16 bg-white dark:bg-[#16161f] border-b border-gray-200 dark:border-[#262636] flex items-center px-4 lg:px-6 gap-1 z-[60] transition-colors">
-      <img src="/Image1.png" alt="ARS" className="w-8 h-8 object-contain flex-shrink-0 mr-2" />
-      <span className="font-bold text-gray-900 dark:text-white text-[14px] mr-4 hidden lg:block whitespace-nowrap">
+    <header className="fixed top-0 left-0 right-0 h-16 bg-card border-b border-border flex items-center px-4 lg:px-6 gap-1 z-[60] transition-colors">
+      <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/25 to-transparent border border-primary/25 flex items-center justify-center flex-shrink-0 mr-2">
+        <img src="/Image1.png" alt="ARS" className="w-5 h-5 object-contain" />
+      </div>
+      <span className="font-display font-semibold text-foreground text-[14px] mr-4 hidden lg:block whitespace-nowrap tracking-wide">
         {t('sidebar.appName')}
       </span>
 
@@ -65,10 +67,10 @@ export default function HorizontalNav({ onOpenAppearance }: Props) {
                   ? { backgroundColor: 'color-mix(in srgb, var(--ars-primary) 10%, transparent)', color: 'var(--ars-primary)' }
                   : undefined}
               >
-                <span className={active ? '' : 'text-gray-600 dark:text-gray-400'}>
+                <span className={active ? '' : 'text-muted-foreground'}>
                   <Icon size={15} />
                 </span>
-                <span className={active ? '' : 'text-gray-700 dark:text-gray-300'}>{label}</span>
+                <span className={active ? '' : 'text-secondary-foreground'}>{label}</span>
               </Link>
             );
           }
@@ -77,20 +79,20 @@ export default function HorizontalNav({ onOpenAppearance }: Props) {
             <div key={item.nameKey} className="relative">
               <button
                 onClick={() => setOpenMenu(isOpen ? null : item.nameKey)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-colors hover:bg-gray-100 dark:hover:bg-[#1e1e2c]"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-[13px] font-medium whitespace-nowrap transition-colors hover:bg-secondary"
                 style={active
                   ? { backgroundColor: 'color-mix(in srgb, var(--ars-primary) 10%, transparent)', color: 'var(--ars-primary)' }
                   : undefined}
               >
-                <span className={active ? '' : 'text-gray-600 dark:text-gray-400'}>
+                <span className={active ? '' : 'text-muted-foreground'}>
                   <Icon size={15} />
                 </span>
-                <span className={active ? '' : 'text-gray-700 dark:text-gray-300'}>{label}</span>
+                <span className={active ? '' : 'text-secondary-foreground'}>{label}</span>
                 <ChevronDown size={13} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isOpen && (
-                <div className="absolute top-full left-0 mt-1 w-56 bg-white dark:bg-[#16161f] border border-gray-200 dark:border-[#262636] rounded-lg shadow-lg py-1 z-50">
+                <div className="absolute top-full left-0 mt-1 w-56 bg-card border border-border rounded-lg shadow-2xl py-1 z-50">
                   {item.subItems!
                     .filter((sub) => canAccessRoute(role, sub.href))
                     .map((sub) => {
@@ -107,10 +109,10 @@ export default function HorizontalNav({ onOpenAppearance }: Props) {
                             : undefined}
                         >
                           <span
-                            className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-gray-400 dark:bg-gray-600"
+                            className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-border"
                             style={subActive ? { backgroundColor: 'var(--ars-primary)' } : undefined}
                           />
-                          <span className={subActive ? '' : 'text-gray-600 dark:text-gray-300'}>{subLabel}</span>
+                          <span className={subActive ? '' : 'text-muted-foreground'}>{subLabel}</span>
                         </Link>
                       );
                     })}
@@ -127,25 +129,25 @@ export default function HorizontalNav({ onOpenAppearance }: Props) {
         <button
           onClick={onOpenAppearance}
           title={t('sidebar.appearanceTooltip')}
-          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-[#1e1e2c] text-gray-500 dark:text-gray-400 transition-colors"
+          className="p-2 rounded-lg hover:bg-secondary text-muted-foreground transition-colors"
         >
           <Settings2 size={17} />
         </button>
 
         <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0 select-none"
-          style={{ backgroundColor: 'var(--ars-primary)' }}
+          className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold flex-shrink-0 select-none"
+          style={{ backgroundColor: 'var(--ars-primary)', color: 'hsl(var(--primary-foreground))' }}
         >
           {initials()}
         </div>
-        <span className="text-[13px] text-gray-700 dark:text-gray-300 hidden md:block whitespace-nowrap">
+        <span className="text-[13px] text-secondary-foreground hidden md:block whitespace-nowrap">
           {displayName()}
         </span>
 
         <button
           onClick={logout}
           title={t('sidebar.logoutTooltip')}
-          className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
+          className="p-2 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
         >
           <LogOut size={16} />
         </button>

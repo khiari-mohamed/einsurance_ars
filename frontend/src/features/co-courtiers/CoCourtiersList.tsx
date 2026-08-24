@@ -161,20 +161,20 @@ export default function CoCourtiersList() {
       />
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
-          <h1 className="text-[24px] font-semibold text-gray-900">Courtiers en réassurance</h1>
-          <p className="text-[13px] text-gray-500 mt-1">Anciennement: Co-Courtiers</p>
+          <h1 className="font-display text-2xl font-semibold text-foreground">Courtiers en réassurance</h1>
+          <p className="text-[13px] text-muted-foreground mt-1">Anciennement: Co-Courtiers</p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-2 bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-lg hover:bg-gray-50 transition-colors text-[13px] font-medium"
+            className="flex items-center gap-2 bg-card border border-border text-secondary-foreground px-4 py-2.5 rounded-xl hover:bg-secondary/60 transition-colors text-[13px] font-medium"
           >
             <Upload size={18} />
             Importer Excel
           </button>
           <button
             onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-[13px] font-medium"
+            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-xl hover:bg-primary/90 transition-colors text-[13px] font-medium"
           >
             <Plus size={18} />
             Nouveau courtier
@@ -182,25 +182,25 @@ export default function CoCourtiersList() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-        <div className="p-4 border-b border-gray-100 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+      <div className="rounded-2xl border border-border bg-card">
+        <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
             <input
               type="text"
               placeholder="Rechercher par raison sociale, code, compte comptable, identifiant unique ou pays..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2.5 border border-border bg-secondary rounded-xl text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition"
             />
           </div>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 self-start sm:self-auto">
+          <div className="flex gap-1 bg-secondary rounded-lg p-1 self-start sm:self-auto">
             {(['ACTIVE', 'INACTIVE', 'ALL'] as Statut[]).map((s) => (
               <button
                 key={s}
                 onClick={() => setStatut(s)}
                 className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors ${
-                  statut === s ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                  statut === s ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {s === 'ACTIVE' ? 'Actifs' : s === 'INACTIVE' ? 'Inactifs' : 'Tous'}
@@ -210,14 +210,14 @@ export default function CoCourtiersList() {
         </div>
 
         {selectedIds.size > 0 && (
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 bg-blue-50 border-b border-blue-100">
-            <p className="text-[13px] font-medium text-blue-900">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 bg-primary/10 border-b border-primary/20">
+            <p className="text-[13px] font-medium text-primary">
               {selectedIds.size} courtier{selectedIds.size !== 1 ? 's' : ''} sélectionné{selectedIds.size !== 1 ? 's' : ''}
             </p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsBulkEditModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium bg-white border border-blue-200 text-blue-700 rounded-lg hover:bg-blue-100 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium bg-card border border-primary/25 text-primary rounded-lg hover:bg-primary/15 transition-colors"
               >
                 <Edit2 size={14} />
                 Modifier en masse
@@ -225,14 +225,14 @@ export default function CoCourtiersList() {
               <button
                 onClick={handleBulkDeactivate}
                 disabled={bulkDeleteMutation.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium bg-white border border-red-200 text-red-700 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium bg-card border border-destructive/25 text-destructive rounded-lg hover:bg-destructive/15 transition-colors disabled:opacity-50"
               >
                 <Trash2 size={14} />
                 {bulkDeleteMutation.isPending ? 'Désactivation...' : 'Désactiver la sélection'}
               </button>
               <button
                 onClick={() => setSelectedIds(new Set())}
-                className="px-3 py-1.5 text-[12px] font-medium text-blue-700 hover:text-blue-900 transition-colors"
+                className="px-3 py-1.5 text-[12px] font-medium text-primary hover:text-primary/80 transition-colors"
               >
                 Annuler
               </button>
@@ -242,18 +242,18 @@ export default function CoCourtiersList() {
 
         {error ? (
           <div className="p-8 text-center">
-            <AlertCircle className="mx-auto text-red-400 mb-2" size={24} />
-            <p className="text-[13px] text-red-600">Erreur lors du chargement des courtiers. Veuillez réessayer.</p>
+            <AlertCircle className="mx-auto text-destructive mb-2" size={24} />
+            <p className="text-[13px] text-destructive">Erreur lors du chargement des courtiers. Veuillez réessayer.</p>
           </div>
         ) : isLoading ? (
-          <div className="p-8 text-center text-gray-500">Chargement...</div>
+          <div className="p-8 text-center text-muted-foreground">Chargement...</div>
         ) : coCourtiers.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">Aucun courtier trouvé</div>
+          <div className="p-8 text-center text-muted-foreground">Aucun courtier trouvé</div>
         ) : (
           <>
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-100">
+                <thead className="bg-secondary/40 border-b border-border">
                   <tr>
                     <th className="px-4 py-3 text-left w-10">
                       <input
@@ -263,51 +263,51 @@ export default function CoCourtiersList() {
                           if (el) el.indeterminate = someSelected && !allSelected;
                         }}
                         onChange={toggleSelectAll}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="rounded border-border text-primary focus:ring-primary"
                       />
                     </th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Code</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Raison Sociale</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Compte</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Identifiant Unique</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Résident</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Pays</th>
-                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Statut</th>
-                    <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Code</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Raison Sociale</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Compte</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Identifiant Unique</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Résident</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Pays</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Statut</th>
+                    <th className="px-4 py-3 text-right text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border/50">
                   {coCourtiers.map((c: CoCourtier) => (
-                    <tr key={c.id} className={`hover:bg-gray-50 transition-colors ${selectedIds.has(c.id) ? 'bg-blue-50/50' : ''}`}>
+                    <tr key={c.id} className={`hover:bg-secondary/40 transition-colors ${selectedIds.has(c.id) ? 'bg-primary/5' : ''}`}>
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
                           checked={selectedIds.has(c.id)}
                           onChange={() => toggleSelectOne(c.id)}
-                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          className="rounded border-border text-primary focus:ring-primary"
                         />
                       </td>
-                      <td className="px-4 py-3 text-[13px] font-medium text-gray-900">{c.code}</td>
-                      <td className="px-4 py-3 text-[13px] text-gray-900">{c.raisonSociale}</td>
-                      <td className="px-4 py-3 text-[13px] text-gray-600 font-mono">{c.compteComptable || '-'}</td>
-                      <td className="px-4 py-3 text-[13px] text-gray-600 font-mono">{c.identifiantUnique || '-'}</td>
-                      <td className="px-4 py-3 text-[13px] text-gray-600">
+                      <td className="px-4 py-3 text-[13px] font-medium text-foreground">{c.code}</td>
+                      <td className="px-4 py-3 text-[13px] text-foreground">{c.raisonSociale}</td>
+                      <td className="px-4 py-3 text-[13px] text-muted-foreground font-mono">{c.compteComptable || '-'}</td>
+                      <td className="px-4 py-3 text-[13px] text-muted-foreground font-mono">{c.identifiantUnique || '-'}</td>
+                      <td className="px-4 py-3 text-[13px] text-muted-foreground">
                         {c.resident ? (
-                          <span className="flex items-center gap-1 text-green-700">
+                          <span className="flex items-center gap-1 text-success">
                             <Shield size={14} />
                             Oui
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-blue-600">
+                          <span className="flex items-center gap-1 text-[hsl(var(--chart-4))]">
                             <Globe size={14} />
                             Non
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-[13px] text-gray-600">{c.pays || '-'}</td>
+                      <td className="px-4 py-3 text-[13px] text-muted-foreground">{c.pays || '-'}</td>
                       <td className="px-4 py-3 text-[13px]">
-                        <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                          c.isActive === false ? 'bg-gray-100 text-gray-500' : 'bg-green-50 text-green-700'
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+                          c.isActive === false ? 'bg-muted text-muted-foreground border-border' : 'bg-success/15 text-success border-success/25'
                         }`}>
                           {c.isActive === false ? 'Inactif' : 'Actif'}
                         </span>
@@ -316,14 +316,14 @@ export default function CoCourtiersList() {
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => navigate(`/co-courtiers/${c.id}`)}
-                            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground transition-colors"
                             title="Voir détails"
                           >
                             <Eye size={16} />
                           </button>
                           <button
                             onClick={() => handleEdit(c)}
-                            className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors"
+                            className="p-1.5 rounded-lg hover:bg-primary/15 text-primary transition-colors"
                             title="Modifier"
                           >
                             <Edit2 size={16} />
@@ -331,7 +331,7 @@ export default function CoCourtiersList() {
                           {c.isActive !== false && (
                             <button
                               onClick={() => handleDeactivate(c.id)}
-                              className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors"
+                              className="p-1.5 rounded-lg hover:bg-destructive/15 text-destructive transition-colors"
                               title="Désactiver"
                             >
                               <Trash2 size={16} />
@@ -345,31 +345,31 @@ export default function CoCourtiersList() {
               </table>
             </div>
 
-            <div className="md:hidden divide-y divide-gray-100">
+            <div className="md:hidden divide-y divide-border/50">
               {coCourtiers.map((c: CoCourtier) => (
-                <div key={c.id} className={`p-4 hover:bg-gray-50 transition-colors ${selectedIds.has(c.id) ? 'bg-blue-50/50' : ''}`}>
+                <div key={c.id} className={`p-4 hover:bg-secondary/40 transition-colors ${selectedIds.has(c.id) ? 'bg-primary/5' : ''}`}>
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex items-start gap-3 flex-1">
                       <input
                         type="checkbox"
                         checked={selectedIds.has(c.id)}
                         onChange={() => toggleSelectOne(c.id)}
-                        className="mt-1 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        className="mt-1 rounded border-border text-primary focus:ring-primary"
                       />
                       <div className="flex-1">
-                        <p className="text-[11px] text-gray-500 uppercase font-medium mb-1">Code</p>
-                        <p className="text-[14px] font-semibold text-gray-900">{c.code}</p>
+                        <p className="text-[11px] text-muted-foreground uppercase font-medium mb-1">Code</p>
+                        <p className="text-[14px] font-semibold text-foreground">{c.code}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => navigate(`/co-courtiers/${c.id}`)} className="p-2 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors">
+                      <button onClick={() => navigate(`/co-courtiers/${c.id}`)} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground transition-colors">
                         <Eye size={18} />
                       </button>
-                      <button onClick={() => handleEdit(c)} className="p-2 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors">
+                      <button onClick={() => handleEdit(c)} className="p-2 rounded-lg hover:bg-primary/15 text-primary transition-colors">
                         <Edit2 size={18} />
                       </button>
                       {c.isActive !== false && (
-                        <button onClick={() => handleDeactivate(c.id)} className="p-2 rounded-lg hover:bg-red-50 text-red-600 transition-colors">
+                        <button onClick={() => handleDeactivate(c.id)} className="p-2 rounded-lg hover:bg-destructive/15 text-destructive transition-colors">
                           <Trash2 size={18} />
                         </button>
                       )}
@@ -377,31 +377,31 @@ export default function CoCourtiersList() {
                   </div>
                   <div className="space-y-2">
                     <div>
-                      <p className="text-[11px] text-gray-500 uppercase font-medium">Raison Sociale</p>
-                      <p className="text-[13px] text-gray-900">{c.raisonSociale}</p>
+                      <p className="text-[11px] text-muted-foreground uppercase font-medium">Raison Sociale</p>
+                      <p className="text-[13px] text-foreground">{c.raisonSociale}</p>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase font-medium">Compte Comptable</p>
-                        <p className="text-[13px] text-gray-600 font-mono">{c.compteComptable || '-'}</p>
+                        <p className="text-[11px] text-muted-foreground uppercase font-medium">Compte Comptable</p>
+                        <p className="text-[13px] text-muted-foreground font-mono">{c.compteComptable || '-'}</p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase font-medium">Identifiant Unique</p>
-                        <p className="text-[13px] text-gray-600 font-mono">{c.identifiantUnique || '-'}</p>
+                        <p className="text-[11px] text-muted-foreground uppercase font-medium">Identifiant Unique</p>
+                        <p className="text-[13px] text-muted-foreground font-mono">{c.identifiantUnique || '-'}</p>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase font-medium">Résident</p>
-                        <p className="text-[13px] text-gray-600">{c.resident ? 'Oui (Tunisien)' : 'Non (Étranger)'}</p>
+                        <p className="text-[11px] text-muted-foreground uppercase font-medium">Résident</p>
+                        <p className="text-[13px] text-muted-foreground">{c.resident ? 'Oui (Tunisien)' : 'Non (Étranger)'}</p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-gray-500 uppercase font-medium">Pays</p>
-                        <p className="text-[13px] text-gray-600">{c.pays || '-'}</p>
+                        <p className="text-[11px] text-muted-foreground uppercase font-medium">Pays</p>
+                        <p className="text-[13px] text-muted-foreground">{c.pays || '-'}</p>
                       </div>
                     </div>
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                      c.isActive === false ? 'bg-gray-100 text-gray-500' : 'bg-green-50 text-green-700'
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium border ${
+                      c.isActive === false ? 'bg-muted text-muted-foreground border-border' : 'bg-success/15 text-success border-success/25'
                     }`}>
                       {c.isActive === false ? 'Inactif' : 'Actif'}
                     </span>
@@ -410,22 +410,22 @@ export default function CoCourtiersList() {
               ))}
             </div>
 
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-              <p className="text-[12px] text-gray-500">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <p className="text-[12px] text-muted-foreground">
                 {total} courtier{total !== 1 ? 's' : ''} — page {page} / {totalPages}
               </p>
               <div className="flex gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={page <= 1}
-                  className="p-1.5 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/60"
                 >
                   <ChevronLeft size={16} />
                 </button>
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
-                  className="p-1.5 rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                  className="p-1.5 rounded-lg border border-border text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed hover:bg-secondary/60"
                 >
                   <ChevronRight size={16} />
                 </button>
@@ -552,28 +552,28 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
   const isAccountLocked = coCourtier?.isAccountLocked || false;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-[18px] font-semibold text-gray-900">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="font-display text-lg font-semibold text-foreground">
             {coCourtier ? 'Modifier le courtier' : 'Nouveau courtier en réassurance'}
           </h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
           {errors.submit && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
+            <div className="mb-4 p-3 bg-destructive/15 border border-destructive/25 rounded-lg text-[13px] text-destructive">
               {errors.submit}
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="md:col-span-2">
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                Raison Sociale <span className="text-red-500">*</span>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">
+                Raison Sociale <span className="text-destructive">*</span>
               </label>
               <input
                 type="text"
@@ -581,13 +581,13 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
                 value={formData.raisonSociale || ''}
                 onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition"
               />
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                Compte Comptable <span className="text-red-500">*</span>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">
+                Compte Comptable <span className="text-destructive">*</span>
               </label>
               <input
                 type="text"
@@ -597,25 +597,25 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
                 required
                 disabled={isEdit && isAccountLocked}
                 placeholder="401xxxxx"
-                className={`w-full px-3 py-2 border ${errors.compteComptable ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${isEdit && isAccountLocked ? 'bg-gray-100 text-gray-500' : ''}`}
+                className={`w-full px-3 py-2 border ${errors.compteComptable ? 'border-destructive' : 'border-border'} bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition ${isEdit && isAccountLocked ? 'opacity-60 text-muted-foreground' : ''}`}
               />
-              {errors.compteComptable && <p className="mt-1 text-[11px] text-red-500">{errors.compteComptable}</p>}
-              {isEdit && isAccountLocked && <p className="mt-1 text-[11px] text-gray-400">Verrouillé après création</p>}
+              {errors.compteComptable && <p className="mt-1 text-[11px] text-destructive">{errors.compteComptable}</p>}
+              {isEdit && isAccountLocked && <p className="mt-1 text-[11px] text-muted-foreground/70">Verrouillé après création</p>}
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Forme Juridique</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Forme Juridique</label>
               <input
                 type="text"
                 name="formeJuridique"
                 value={formData.formeJuridique || ''}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition"
               />
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Résident Tunisien</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Résident Tunisien</label>
               <div className="flex items-center gap-4 mt-1.5">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
@@ -623,18 +623,18 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
                     name="resident"
                     checked={formData.resident === true}
                     onChange={handleChange}
-                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                    className="w-4 h-4 text-primary rounded border-border focus:ring-primary"
                   />
-                  <span className="text-[13px] text-gray-700">Oui</span>
+                  <span className="text-[13px] text-foreground">Oui</span>
                 </label>
-                {formData.resident && <span className="text-[11px] text-gray-400">(Identifiant Unique requis)</span>}
+                {formData.resident && <span className="text-[11px] text-muted-foreground/70">(Identifiant Unique requis)</span>}
               </div>
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">
                 Identifiant Unique
-                {formData.resident && <span className="text-red-500 ml-1">*</span>}
+                {formData.resident && <span className="text-destructive ml-1">*</span>}
               </label>
               <input
                 type="text"
@@ -642,33 +642,33 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
                 value={formData.identifiantUnique || ''}
                 onChange={handleChange}
                 placeholder="1234567A"
-                className={`w-full px-3 py-2 border ${errors.identifiantUnique ? 'border-red-500' : 'border-gray-200'} rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                className={`w-full px-3 py-2 border ${errors.identifiantUnique ? 'border-destructive' : 'border-border'} bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition`}
               />
-              {errors.identifiantUnique && <p className="mt-1 text-[11px] text-red-500">{errors.identifiantUnique}</p>}
+              {errors.identifiantUnique && <p className="mt-1 text-[11px] text-destructive">{errors.identifiantUnique}</p>}
               {formData.resident && !errors.identifiantUnique && (
-                <p className="mt-1 text-[11px] text-gray-400">7 chiffres + 1 lettre (ex: 1234567A)</p>
+                <p className="mt-1 text-[11px] text-muted-foreground/70">7 chiffres + 1 lettre (ex: 1234567A)</p>
               )}
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">RNE</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">RNE</label>
               <input
                 type="text"
                 name="rne"
                 value={formData.rne || ''}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition"
               />
             </div>
 
             <div>
               {/* FIX (new): devise par défaut field — was entirely missing. */}
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise par défaut</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Devise par défaut</label>
               <select
                 name="deviseParDefaut"
                 value={formData.deviseParDefaut || 'TND'}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition"
               >
                 {CURRENCIES.map((c) => (
                   <option key={c} value={c}>{c}</option>
@@ -677,54 +677,54 @@ function CoCourtierModal({ coCourtier, onClose }: CoCourtierModalProps) {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Adresse</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Adresse</label>
               <input
                 type="text"
                 name="adresse"
                 value={formData.adresse || ''}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition"
               />
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Pays</label>
               <input
                 type="text"
                 name="pays"
                 value={formData.pays || ''}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition"
               />
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Capital (TND)</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Capital (TND)</label>
               <input
                 type="number"
                 name="capital"
                 value={formData.capital || ''}
                 onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition"
               />
             </div>
           </div>
 
           {!isEdit && (
-            <p className="mt-4 text-[11px] text-gray-400">
+            <p className="mt-4 text-[11px] text-muted-foreground/70">
               Les contacts, coordonnées bancaires et conventions (GED) se gèrent depuis la fiche
               détaillée, juste après la création.
             </p>
           )}
 
-          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-border">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-secondary rounded-lg transition-colors">
               Annuler
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-[13px] font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
             </button>
@@ -917,31 +917,31 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-[18px] font-semibold text-gray-900">Importer des courtiers (Excel)</h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="font-display text-lg font-semibold text-foreground">Importer des courtiers (Excel)</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <div className="p-6 overflow-y-auto flex-1">
           {parseError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
+            <div className="mb-4 p-3 bg-destructive/15 border border-destructive/25 rounded-lg text-[13px] text-destructive">
               {parseError}
             </div>
           )}
 
           {step === 'upload' && (
             <div>
-              <div className="border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
-                <Upload className="mx-auto text-gray-400 mb-3" size={32} />
-                <p className="text-[13px] text-gray-600 mb-1">Sélectionnez un fichier Excel ou CSV</p>
-                <p className="text-[11px] text-gray-400 mb-4">
+              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                <Upload className="mx-auto text-muted-foreground mb-3" size={32} />
+                <p className="text-[13px] text-muted-foreground mb-1">Sélectionnez un fichier Excel ou CSV</p>
+                <p className="text-[11px] text-muted-foreground/70 mb-4">
                   Colonnes attendues : Raison Sociale (obligatoire), Compte Comptable (obligatoire), Identifiant Unique, Résident, RNE, Forme Juridique, Adresse, Pays, Capital, Devise
                 </p>
-                <label className="inline-flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer hover:bg-blue-700 transition-colors">
+                <label className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-[13px] font-medium cursor-pointer hover:bg-primary/90 transition-colors">
                   <Upload size={16} />
                   Choisir un fichier
                   <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="hidden" />
@@ -949,7 +949,7 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
               </div>
               <button
                 onClick={handleDownloadTemplate}
-                className="mt-4 flex items-center gap-2 text-[12px] text-blue-600 hover:text-blue-700 font-medium"
+                className="mt-4 flex items-center gap-2 text-[12px] text-primary hover:text-primary/80 font-medium"
               >
                 <Download size={14} />
                 Télécharger un modèle vide
@@ -960,51 +960,51 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
           {step === 'preview' && (
             <div>
               <div className="flex items-center justify-between mb-3">
-                <p className="text-[13px] text-gray-600">
-                  <span className="font-medium text-gray-900">{fileName}</span> — {rows.length} ligne(s) détectée(s)
+                <p className="text-[13px] text-muted-foreground">
+                  <span className="font-medium text-foreground">{fileName}</span> — {rows.length} ligne(s) détectée(s)
                 </p>
-                <button onClick={() => setStep('upload')} className="text-[12px] text-blue-600 hover:text-blue-700 font-medium">
+                <button onClick={() => setStep('upload')} className="text-[12px] text-primary hover:text-primary/80 font-medium">
                   Changer de fichier
                 </button>
               </div>
 
               <div className="flex gap-3 mb-3">
-                <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-green-50 text-green-700">
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-success/15 text-success border border-success/25">
                   {validRows.length} valide(s)
                 </span>
                 {invalidRows.length > 0 && (
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-red-50 text-red-700">
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-destructive/15 text-destructive border border-destructive/25">
                     {invalidRows.length} invalide(s)
                   </span>
                 )}
               </div>
 
-              <div className="border border-gray-100 rounded-lg overflow-hidden">
+              <div className="border border-border rounded-lg overflow-hidden">
                 <div className="max-h-80 overflow-y-auto">
                   <table className="w-full">
-                    <thead className="bg-gray-50 border-b border-gray-100 sticky top-0">
+                    <thead className="bg-secondary/40 border-b border-border sticky top-0">
                       <tr>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Ligne</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Raison Sociale</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Compte</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Résident</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Devise</th>
-                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-gray-600 uppercase">Statut</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase">Ligne</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase">Raison Sociale</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase">Compte</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase">Résident</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase">Devise</th>
+                        <th className="px-3 py-2 text-left text-[11px] font-semibold text-muted-foreground uppercase">Statut</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-border/50">
                       {rows.map((r) => (
-                        <tr key={r.rowNumber} className={r.isValid ? '' : 'bg-red-50/50'}>
-                          <td className="px-3 py-2 text-[12px] text-gray-500">{r.rowNumber}</td>
-                          <td className="px-3 py-2 text-[12px] text-gray-900">{r.raisonSociale || '-'}</td>
-                          <td className="px-3 py-2 text-[12px] text-gray-600 font-mono">{r.compteComptable || '-'}</td>
-                          <td className="px-3 py-2 text-[12px] text-gray-600">{r.resident || '-'}</td>
-                          <td className="px-3 py-2 text-[12px] text-gray-600">{r.deviseParDefaut || '-'}</td>
+                        <tr key={r.rowNumber} className={r.isValid ? '' : 'bg-destructive/5'}>
+                          <td className="px-3 py-2 text-[12px] text-muted-foreground">{r.rowNumber}</td>
+                          <td className="px-3 py-2 text-[12px] text-foreground">{r.raisonSociale || '-'}</td>
+                          <td className="px-3 py-2 text-[12px] text-muted-foreground font-mono">{r.compteComptable || '-'}</td>
+                          <td className="px-3 py-2 text-[12px] text-muted-foreground">{r.resident || '-'}</td>
+                          <td className="px-3 py-2 text-[12px] text-muted-foreground">{r.deviseParDefaut || '-'}</td>
                           <td className="px-3 py-2 text-[12px]">
                             {r.isValid ? (
-                              <span className="text-green-700">OK</span>
+                              <span className="text-success">OK</span>
                             ) : (
-                              <span className="text-red-600">{r.errorMsg}</span>
+                              <span className="text-destructive">{r.errorMsg}</span>
                             )}
                           </td>
                         </tr>
@@ -1019,24 +1019,24 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
           {step === 'result' && result && (
             <div>
               <div className="flex items-center gap-3 mb-4">
-                <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-green-50 text-green-700">
+                <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-success/15 text-success border border-success/25">
                   {result.created} créé(s)
                 </span>
                 {result.failed > 0 && (
-                  <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-red-50 text-red-700">
+                  <span className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-destructive/15 text-destructive border border-destructive/25">
                     {result.failed} échec(s)
                   </span>
                 )}
               </div>
               {result.failed > 0 && (
-                <div className="border border-gray-100 rounded-lg overflow-hidden">
-                  <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <div className="max-h-64 overflow-y-auto divide-y divide-border/50">
                     {result.results
                       .filter((r: any) => !r.success)
                       .map((r: any, idx: number) => (
                         <div key={idx} className="px-3 py-2 text-[12px]">
-                          <span className="font-medium text-gray-900">{r.raisonSociale || `Ligne ${r.row}`}</span>
-                          <span className="text-red-600"> — {r.error}</span>
+                          <span className="font-medium text-foreground">{r.raisonSociale || `Ligne ${r.row}`}</span>
+                          <span className="text-destructive"> — {r.error}</span>
                         </div>
                       ))}
                   </div>
@@ -1046,21 +1046,21 @@ function CoCourtierImportModal({ onClose }: ImportModalProps) {
           )}
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-border">
           {step === 'result' ? (
-            <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <button onClick={onClose} className="px-4 py-2 text-[13px] font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
               Fermer
             </button>
           ) : (
             <>
-              <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+              <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-secondary rounded-lg transition-colors">
                 Annuler
               </button>
               {step === 'preview' && (
                 <button
                   onClick={handleConfirmImport}
                   disabled={validRows.length === 0 || importMutation.isPending}
-                  className="px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 text-[13px] font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {importMutation.isPending ? 'Import en cours...' : `Importer ${validRows.length} courtier(s)`}
                 </button>
@@ -1121,26 +1121,26 @@ function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-lg overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <div>
-            <h2 className="text-[18px] font-semibold text-gray-900">Modification en masse</h2>
-            <p className="text-[12px] text-gray-500 mt-0.5">{ids.length} courtier(s) sélectionné(s)</p>
+            <h2 className="font-display text-lg font-semibold text-foreground">Modification en masse</h2>
+            <p className="text-[12px] text-muted-foreground mt-0.5">{ids.length} courtier(s) sélectionné(s)</p>
           </div>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
+            <div className="mb-4 p-3 bg-destructive/15 border border-destructive/25 rounded-lg text-[13px] text-destructive">
               {error}
             </div>
           )}
 
-          <p className="text-[12px] text-gray-500 mb-4">
+          <p className="text-[12px] text-muted-foreground mb-4">
             Cochez les champs à modifier. Les champs non cochés resteront inchangés.
           </p>
 
@@ -1150,16 +1150,16 @@ function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
                 type="checkbox"
                 checked={applyPays}
                 onChange={(e) => setApplyPays(e.target.checked)}
-                className="mt-2.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="mt-2.5 rounded border-border text-primary focus:ring-primary"
               />
               <div className="flex-1">
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Pays</label>
+                <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Pays</label>
                 <input
                   type="text"
                   value={pays}
                   onChange={(e) => setPays(e.target.value)}
                   disabled={!applyPays}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                  className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition disabled:opacity-50"
                 />
               </div>
             </div>
@@ -1169,16 +1169,16 @@ function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
                 type="checkbox"
                 checked={applyForme}
                 onChange={(e) => setApplyForme(e.target.checked)}
-                className="mt-2.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="mt-2.5 rounded border-border text-primary focus:ring-primary"
               />
               <div className="flex-1">
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Forme Juridique</label>
+                <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Forme Juridique</label>
                 <input
                   type="text"
                   value={formeJuridique}
                   onChange={(e) => setFormeJuridique(e.target.value)}
                   disabled={!applyForme}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                  className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition disabled:opacity-50"
                 />
               </div>
             </div>
@@ -1188,15 +1188,15 @@ function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
                 type="checkbox"
                 checked={applyDevise}
                 onChange={(e) => setApplyDevise(e.target.checked)}
-                className="mt-2.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                className="mt-2.5 rounded border-border text-primary focus:ring-primary"
               />
               <div className="flex-1">
-                <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise par défaut</label>
+                <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Devise par défaut</label>
                 <select
                   value={deviseParDefaut}
                   onChange={(e) => setDeviseParDefaut(e.target.value)}
                   disabled={!applyDevise}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                  className="w-full px-3 py-2 border border-border bg-secondary rounded-lg text-[13px] text-foreground outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background focus:border-primary transition disabled:opacity-50"
                 >
                   {CURRENCIES.map((c) => (
                     <option key={c} value={c}>{c}</option>
@@ -1206,8 +1206,8 @@ function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
             </div>
 
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Statut</label>
-              <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Statut</label>
+              <div className="flex gap-1 bg-secondary rounded-lg p-1">
                 {(
                   [
                     { key: 'NONE', label: 'Ne pas changer' },
@@ -1220,7 +1220,7 @@ function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
                     type="button"
                     onClick={() => setStatutAction(opt.key)}
                     className={`flex-1 px-3 py-1.5 text-[12px] font-medium rounded-md transition-colors ${
-                      statutAction === opt.key ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                      statutAction === opt.key ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                     }`}
                   >
                     {opt.label}
@@ -1230,14 +1230,14 @@ function CoCourtierBulkEditModal({ ids, onClose, onDone }: BulkEditModalProps) {
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-border">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-secondary rounded-lg transition-colors">
               Annuler
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-[13px] font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {mutation.isPending ? 'Application...' : `Appliquer à ${ids.length} courtier(s)`}
             </button>

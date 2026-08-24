@@ -22,13 +22,13 @@ export default function SinistreCommunication({ sinistre }: Props) {
       <div>
         <h3 className="text-lg font-semibold mb-4">Notifications par Réassureur</h3>
         {participations.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+          <div className="text-center py-8 text-muted-foreground bg-muted rounded-lg">
             Aucun réassureur notifié — le sinistre doit être validé puis déclaré aux réassureurs.
           </div>
         ) : (
           <div className="space-y-2">
             {participations.map((p) => (
-              <div key={p.id} className="flex items-center justify-between p-4 bg-white border rounded-lg">
+              <div key={p.id} className="flex items-center justify-between p-4 bg-card border border-border rounded-lg">
                 <div className="flex items-center gap-3">
                   <Mail className={p.isNotified ? 'text-green-600' : 'text-gray-400'} size={20} />
                   <div>

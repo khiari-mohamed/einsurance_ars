@@ -38,8 +38,8 @@ export default function SettlementDetails({ settlementId }: Props) {
         <CardHeader><CardTitle>Règlement {settlement.reference}</CardTitle></CardHeader>
         <CardContent>
           <div className="grid grid-cols-3 gap-4">
-            <div><p className="text-sm text-gray-600">Mode</p><p className="font-semibold">{settlement.mode}</p></div>
-            <div><p className="text-sm text-gray-600">Affaire</p><p className="font-semibold">{settlement.affaire?.numero || '-'}</p></div>
+            <div><p className="text-sm text-muted-foreground">Mode</p><p className="font-semibold text-foreground">{settlement.mode}</p></div>
+            <div><p className="text-sm text-muted-foreground">Affaire</p><p className="font-semibold text-foreground">{settlement.affaire?.numero || '-'}</p></div>
             <div><p className="text-sm text-gray-600">Date</p><p className="font-semibold">{formatDate(settlement.dateSettlement)}</p></div>
           </div>
         </CardContent>

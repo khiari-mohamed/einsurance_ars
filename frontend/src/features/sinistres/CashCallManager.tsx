@@ -14,11 +14,11 @@ interface Props {
 }
 
 const STATUT_CONFIG: Record<CashCallStatut, { label: string; color: string; icon: any }> = {
-  DECLENCHE: { label: 'Déclenché', color: 'bg-blue-100 text-blue-800', icon: Clock },
+  DECLENCHE: { label: 'Déclenché', color: 'bg-primary/15 text-primary border border-primary/30', icon: Clock },
   REINSUREUR_CONTACTE: { label: 'Réassureur Contacté', color: 'bg-purple-100 text-purple-800', icon: Send },
   EN_ATTENTE_PAIEMENT: { label: 'En Attente Paiement', color: 'bg-yellow-100 text-yellow-800', icon: PhoneCall },
   PAIEMENT_RECU: { label: 'Paiement Reçu', color: 'bg-green-100 text-green-800', icon: CheckCircle },
-  LETTRE: { label: 'Lettré', color: 'bg-gray-100 text-gray-800', icon: FileCheck },
+  LETTRE: { label: 'Lettré', color: 'bg-muted text-foreground border border-border', icon: FileCheck },
 };
 
 // Mirrors CashCallService.advanceStatut()'s real transition map exactly —

@@ -92,12 +92,12 @@ export default function ReportGenerator({ affaireId, type }: ReportGeneratorProp
   const currentReport = reportTypes[type];
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
+    <div className="bg-card rounded-[var(--radius)] border border-border p-6">
       <div className="flex items-center gap-3 mb-6">
-        <FileText className="text-blue-600" size={32} />
+        <FileText className="text-primary" size={32} />
         <div>
           <h2 className="text-xl font-bold">{currentReport.title}</h2>
-          <p className="text-sm text-gray-600">{currentReport.description}</p>
+          <p className="text-sm text-muted-foreground">{currentReport.description}</p>
         </div>
       </div>
 
@@ -110,7 +110,7 @@ export default function ReportGenerator({ affaireId, type }: ReportGeneratorProp
               <select
                 value={formData.cedanteId}
                 onChange={(e) => setFormData({ ...formData, cedanteId: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border border-border bg-background rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
               >
                 <option value="">Sélectionner...</option>
                 {/* Options will be populated dynamically */}
@@ -122,7 +122,7 @@ export default function ReportGenerator({ affaireId, type }: ReportGeneratorProp
                 <select
                   value={formData.reassureurId}
                   onChange={(e) => setFormData({ ...formData, reassureurId: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                 >
                   <option value="">Sélectionner...</option>
                   {/* Options will be populated dynamically */}
@@ -141,7 +141,7 @@ export default function ReportGenerator({ affaireId, type }: ReportGeneratorProp
                   type="date"
                   value={formData.dateDebut}
                   onChange={(e) => setFormData({ ...formData, dateDebut: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                 />
               </div>
               <div>
@@ -159,7 +159,7 @@ export default function ReportGenerator({ affaireId, type }: ReportGeneratorProp
               <select
                 value={formData.periode}
                 onChange={(e) => setFormData({ ...formData, periode: e.target.value })}
-                className="w-full px-3 py-2 border rounded-lg"
+                className="w-full px-3 py-2 border border-border bg-background rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
               >
                 <option value="Q1-2024">Q1 2024</option>
                 <option value="Q2-2024">Q2 2024</option>
@@ -190,7 +190,7 @@ export default function ReportGenerator({ affaireId, type }: ReportGeneratorProp
       <button
         onClick={generateReport}
         disabled={loading}
-        className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50"
       >
         <FileText size={18} />
         {loading ? 'Génération en cours...' : 'Générer le Rapport'}
@@ -204,14 +204,14 @@ export default function ReportGenerator({ affaireId, type }: ReportGeneratorProp
             <div className="flex gap-2">
               <button
                 onClick={printReport}
-                className="flex items-center gap-2 px-3 py-2 border rounded-lg hover:bg-gray-50"
+                className="flex items-center gap-2 px-3 py-2 border border-border bg-card rounded-lg hover:bg-muted"
               >
                 <Printer size={16} />
                 Imprimer
               </button>
               <button
                 onClick={downloadReport}
-                className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                className="flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
               >
                 <Download size={16} />
                 Télécharger
@@ -223,9 +223,9 @@ export default function ReportGenerator({ affaireId, type }: ReportGeneratorProp
       )}
 
       {/* Template Info */}
-      <div className="mt-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded">
+      <div className="mt-6 p-4 bg-primary/10 border-l-4 border-primary rounded">
         <h4 className="font-semibold mb-2">Informations du Template</h4>
-        <ul className="text-sm text-gray-700 space-y-1">
+        <ul className="text-sm text-foreground space-y-1">
           {type === 'note_debit' && (
             <>
               <li>• Logo ARS en en-tête</li>

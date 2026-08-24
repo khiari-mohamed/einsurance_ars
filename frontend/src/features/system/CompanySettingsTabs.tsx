@@ -162,7 +162,7 @@ export default function CompanySettingsTabs() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <div className="bg-white rounded-lg shadow-lg">
+      <div className="bg-card rounded-[var(--radius)] border border-border">
         {/* Tabs Header */}
         <div className="border-b">
           <div className="flex overflow-x-auto">
@@ -174,7 +174,7 @@ export default function CompanySettingsTabs() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-6 py-4 border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === tab.id
-                      ? 'border-blue-600 text-blue-600 bg-blue-50'
+                      ? 'border-primary text-primary bg-primary/10'
                       : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                   }`}
                 >

@@ -36,23 +36,30 @@ export default function DashboardPanels() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement des données...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Chargement des données...</p>
         </div>
       </div>
     );
   }
 
+  const VIEW_MODES: { key: typeof viewMode; label: string }[] = [
+    { key: 'affaire', label: 'Par Affaire' },
+    { key: 'cedante', label: 'Par Cédante' },
+    { key: 'reassureur', label: 'Par Réassureur' },
+    { key: 'combined', label: 'Combiné' },
+  ];
+
   return (
     <div className="space-y-6 p-6">
       {/* Header Controls */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Tableau de Bord</h1>
+        <h1 className="font-display text-2xl font-semibold text-foreground">Tableau de Bord</h1>
         <div className="flex gap-3">
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className="px-4 py-2 border rounded-lg"
+            className="px-4 py-2 border border-input bg-background text-foreground rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="2024">2024</option>
             <option value="2023">2023</option>
@@ -61,7 +68,7 @@ export default function DashboardPanels() {
             <option value="Q3-2024">Q3 2024</option>
             <option value="Q4-2024">Q4 2024</option>
           </select>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
             <Download size={16} />
             Exporter
           </button>
@@ -69,81 +76,89 @@ export default function DashboardPanels() {
       </div>
 
       {/* Panel 1: Chiffre d'Affaires */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <TrendingUp className="text-blue-600" size={24} />
-            <h2 className="text-xl font-bold">Chiffre d'Affaires</h2>
+            <TrendingUp className="text-primary" size={24} />
+            <h2 className="font-display text-xl font-semibold text-foreground">Chiffre d'Affaires</h2>
           </div>
-          <div className="flex gap-2">
-            {['affaire', 'cedante', 'reassureur', 'combined'].map((mode) => (
+          {/* Segmented pill control — same pattern as the exchange-rate widget tabs */}
+          <div className="inline-flex items-center gap-0.5 rounded-lg bg-secondary p-0.5">
+            {VIEW_MODES.map(({ key, label }) => (
               <button
-                key={mode}
-                onClick={() => setViewMode(mode as any)}
-                className={`px-3 py-1 rounded-lg text-sm ${
-                  viewMode === mode
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                key={key}
+                onClick={() => setViewMode(key)}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                  viewMode === key
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
-                {mode === 'affaire' ? 'Par Affaire' : mode === 'cedante' ? 'Par Cédante' : mode === 'reassureur' ? 'Par Réassureur' : 'Combiné'}
+                {label}
               </button>
             ))}
           </div>
         </div>
 
         <div className="grid grid-cols-4 gap-4 mb-6">
-          <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg">
-            <p className="text-sm text-gray-600 mb-1">CA Total</p>
-            <p className="text-2xl font-bold text-blue-600">{caData?.total?.toLocaleString() || '0'} TND</p>
-            <p className="text-xs text-green-600 mt-1">+12.5% vs année précédente</p>
+          <div className="bg-primary/10 border border-primary/20 p-4 rounded-lg">
+            <p className="text-sm text-muted-foreground mb-1">CA Total</p>
+            <p className="font-display text-2xl font-semibold text-primary">{caData?.total?.toLocaleString() || '0'} TND</p>
+            <p className="text-xs text-success mt-1">+12.5% vs année précédente</p>
           </div>
-          <div className="bg-gradient-to-br from-green-50 to-green-100 p-4 rounded-lg">
-            <p className="text-sm text-gray-600 mb-1">Facultatives</p>
-            <p className="text-2xl font-bold text-green-600">{caData?.facultatives?.toLocaleString() || '0'} TND</p>
-            <p className="text-xs text-gray-600 mt-1">{caData?.facultativesPercent || 0}% du total</p>
+          <div className="bg-success/10 border border-success/20 p-4 rounded-lg">
+            <p className="text-sm text-muted-foreground mb-1">Facultatives</p>
+            <p className="font-display text-2xl font-semibold text-success">{caData?.facultatives?.toLocaleString() || '0'} TND</p>
+            <p className="text-xs text-muted-foreground mt-1">{caData?.facultativesPercent || 0}% du total</p>
           </div>
-          <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-4 rounded-lg">
-            <p className="text-sm text-gray-600 mb-1">Traités</p>
-            <p className="text-2xl font-bold text-purple-600">{caData?.traites?.toLocaleString() || '0'} TND</p>
-            <p className="text-xs text-gray-600 mt-1">{caData?.traitesPercent || 0}% du total</p>
+          <div className="bg-[hsl(var(--chart-5)/0.10)] border border-[hsl(var(--chart-5)/0.20)] p-4 rounded-lg">
+            <p className="text-sm text-muted-foreground mb-1">Traités</p>
+            <p className="font-display text-2xl font-semibold text-[hsl(var(--chart-5))]">{caData?.traites?.toLocaleString() || '0'} TND</p>
+            <p className="text-xs text-muted-foreground mt-1">{caData?.traitesPercent || 0}% du total</p>
           </div>
-          <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-4 rounded-lg">
-            <p className="text-sm text-gray-600 mb-1">Commissions ARS</p>
-            <p className="text-2xl font-bold text-orange-600">{caData?.commissions?.toLocaleString() || '0'} TND</p>
-            <p className="text-xs text-gray-600 mt-1">Marge moyenne: {caData?.marginPercent || 0}%</p>
+          <div className="bg-warning/10 border border-warning/20 p-4 rounded-lg">
+            <p className="text-sm text-muted-foreground mb-1">Commissions ARS</p>
+            <p className="font-display text-2xl font-semibold text-warning">{caData?.commissions?.toLocaleString() || '0'} TND</p>
+            <p className="text-xs text-muted-foreground mt-1">Marge moyenne: {caData?.marginPercent || 0}%</p>
           </div>
         </div>
 
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={caData?.chartData || []}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Bar dataKey="montant" fill="#3b82f6" name="Montant (TND)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+            <XAxis dataKey="name" stroke="hsl(var(--muted-foreground))" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <Tooltip
+              contentStyle={{
+                background: 'hsl(var(--popover))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: 'calc(var(--radius) - 2px)',
+                color: 'hsl(var(--popover-foreground))',
+              }}
+            />
+            <Legend wrapperStyle={{ color: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <Bar dataKey="montant" fill="hsl(var(--primary))" name="Montant (TND)" radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       {/* Panel 2: Primes Encaissées vs Non Encaissées */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-6">
-          <DollarSign className="text-green-600" size={24} />
-          <h2 className="text-xl font-bold">État des Primes</h2>
+          <DollarSign className="text-success" size={24} />
+          <h2 className="font-display text-xl font-semibold text-foreground">État des Primes</h2>
         </div>
 
         <div className="grid grid-cols-2 gap-6">
           <div>
             <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="bg-green-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">Encaissées</p>
-                <p className="text-2xl font-bold text-green-600">{primesData?.encaissees?.toLocaleString() || '0'} TND</p>
+              <div className="bg-success/10 border border-success/20 p-4 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Encaissées</p>
+                <p className="font-display text-2xl font-semibold text-success">{primesData?.encaissees?.toLocaleString() || '0'} TND</p>
               </div>
-              <div className="bg-red-50 p-4 rounded-lg">
-                <p className="text-sm text-gray-600 mb-1">Non Encaissées</p>
-                <p className="text-2xl font-bold text-red-600">{primesData?.nonEncaissees?.toLocaleString() || '0'} TND</p>
+              <div className="bg-destructive/10 border border-destructive/20 p-4 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-1">Non Encaissées</p>
+                <p className="font-display text-2xl font-semibold text-destructive">{primesData?.nonEncaissees?.toLocaleString() || '0'} TND</p>
               </div>
             </div>
             <ResponsiveContainer width="100%" height={200}>
@@ -158,35 +173,42 @@ export default function DashboardPanels() {
                   labelLine={false}
                   label={(entry) => `${entry.name}: ${((entry.value / (primesData?.encaissees + primesData?.nonEncaissees)) * 100).toFixed(1)}%`}
                   outerRadius={80}
-                  fill="#8884d8"
+                  fill="hsl(var(--muted))"
                   dataKey="value"
                 >
-                  <Cell fill="#10b981" />
-                  <Cell fill="#ef4444" />
+                  <Cell fill="hsl(var(--success))" />
+                  <Cell fill="hsl(var(--destructive))" />
                 </Pie>
-                <Tooltip />
+                <Tooltip
+                  contentStyle={{
+                    background: 'hsl(var(--popover))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: 'calc(var(--radius) - 2px)',
+                    color: 'hsl(var(--popover-foreground))',
+                  }}
+                />
               </PieChart>
             </ResponsiveContainer>
           </div>
 
           <div>
-            <h3 className="font-semibold mb-3 flex items-center gap-2">
-              <AlertTriangle className="text-orange-600" size={18} />
+            <h3 className="font-semibold mb-3 flex items-center gap-2 text-foreground">
+              <AlertTriangle className="text-warning" size={18} />
               Aging des Créances
             </h3>
             <div className="space-y-3">
               {[
-                { label: '0-30 jours', value: primesData?.aging?.['0-30'] || 0, color: 'bg-green-500' },
-                { label: '31-60 jours', value: primesData?.aging?.['31-60'] || 0, color: 'bg-yellow-500' },
-                { label: '61-90 jours', value: primesData?.aging?.['61-90'] || 0, color: 'bg-orange-500' },
-                { label: '90+ jours', value: primesData?.aging?.['90+'] || 0, color: 'bg-red-500' },
+                { label: '0-30 jours', value: primesData?.aging?.['0-30'] || 0, color: 'bg-success' },
+                { label: '31-60 jours', value: primesData?.aging?.['31-60'] || 0, color: 'bg-warning' },
+                { label: '61-90 jours', value: primesData?.aging?.['61-90'] || 0, color: 'bg-[hsl(var(--chart-2))]' },
+                { label: '90+ jours', value: primesData?.aging?.['90+'] || 0, color: 'bg-destructive' },
               ].map((item) => (
                 <div key={item.label}>
                   <div className="flex justify-between text-sm mb-1">
-                    <span>{item.label}</span>
-                    <span className="font-semibold">{item.value.toLocaleString()} TND</span>
+                    <span className="text-foreground">{item.label}</span>
+                    <span className="font-semibold text-foreground">{item.value.toLocaleString()} TND</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div className="w-full bg-secondary rounded-full h-2">
                     <div
                       className={`${item.color} h-2 rounded-full`}
                       style={{ width: `${(item.value / (primesData?.nonEncaissees || 1)) * 100}%` }}
@@ -200,24 +222,24 @@ export default function DashboardPanels() {
       </div>
 
       {/* Panel 3: Budget vs Actuel */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center gap-3 mb-6">
-          <Target className="text-purple-600" size={24} />
-          <h2 className="text-xl font-bold">Budget vs Réalisé</h2>
+          <Target className="text-[hsl(var(--chart-5))]" size={24} />
+          <h2 className="font-display text-xl font-semibold text-foreground">Budget vs Réalisé</h2>
         </div>
 
         <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-purple-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600 mb-1">Budget Annuel</p>
-            <p className="text-2xl font-bold text-purple-600">{budgetData?.budget?.toLocaleString() || '0'} TND</p>
+          <div className="bg-[hsl(var(--chart-5)/0.10)] border border-[hsl(var(--chart-5)/0.20)] p-4 rounded-lg">
+            <p className="text-sm text-muted-foreground mb-1">Budget Annuel</p>
+            <p className="font-display text-2xl font-semibold text-[hsl(var(--chart-5))]">{budgetData?.budget?.toLocaleString() || '0'} TND</p>
           </div>
-          <div className="bg-blue-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600 mb-1">Réalisé</p>
-            <p className="text-2xl font-bold text-blue-600">{budgetData?.actual?.toLocaleString() || '0'} TND</p>
+          <div className="bg-primary/10 border border-primary/20 p-4 rounded-lg">
+            <p className="text-sm text-muted-foreground mb-1">Réalisé</p>
+            <p className="font-display text-2xl font-semibold text-primary">{budgetData?.actual?.toLocaleString() || '0'} TND</p>
           </div>
-          <div className={`p-4 rounded-lg ${(budgetData?.variance || 0) >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-            <p className="text-sm text-gray-600 mb-1">Écart</p>
-            <p className={`text-2xl font-bold ${(budgetData?.variance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <div className={`p-4 rounded-lg border ${(budgetData?.variance || 0) >= 0 ? 'bg-success/10 border-success/20' : 'bg-destructive/10 border-destructive/20'}`}>
+            <p className="text-sm text-muted-foreground mb-1">Écart</p>
+            <p className={`font-display text-2xl font-semibold ${(budgetData?.variance || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
               {(budgetData?.variance || 0) >= 0 ? '+' : ''}{budgetData?.variance?.toFixed(1) || '0'}%
             </p>
           </div>
@@ -225,25 +247,32 @@ export default function DashboardPanels() {
 
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={budgetData?.monthlyData || []}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="budget" stroke="#8b5cf6" name="Budget" strokeWidth={2} />
-            <Line type="monotone" dataKey="actual" stroke="#3b82f6" name="Réalisé" strokeWidth={2} />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+            <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <YAxis stroke="hsl(var(--muted-foreground))" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <Tooltip
+              contentStyle={{
+                background: 'hsl(var(--popover))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: 'calc(var(--radius) - 2px)',
+                color: 'hsl(var(--popover-foreground))',
+              }}
+            />
+            <Legend wrapperStyle={{ color: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+            <Line type="monotone" dataKey="budget" stroke="hsl(var(--chart-5))" name="Budget" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="actual" stroke="hsl(var(--primary))" name="Réalisé" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>
 
       {/* Panel 4: Rapport Trimestriel */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="bg-card border border-border rounded-2xl p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Calendar className="text-blue-600" size={24} />
-            <h2 className="text-xl font-bold">Rapport Trimestriel CA</h2>
+            <Calendar className="text-primary" size={24} />
+            <h2 className="font-display text-xl font-semibold text-foreground">Rapport Trimestriel CA</h2>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+          <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
             <Download size={16} />
             Télécharger PDF
           </button>
@@ -251,23 +280,23 @@ export default function DashboardPanels() {
 
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-secondary/40">
               <tr>
-                <th className="px-4 py-3 text-left text-sm font-semibold">Trimestre</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">Facultatives</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">Traités</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">Total CA</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">Évolution</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-muted-foreground">Trimestre</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-muted-foreground">Facultatives</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-muted-foreground">Traités</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-muted-foreground">Total CA</th>
+                <th className="px-4 py-3 text-right text-sm font-semibold text-muted-foreground">Évolution</th>
               </tr>
             </thead>
-            <tbody className="divide-y">
+            <tbody className="divide-y divide-border">
               {(budgetData?.quarterlyReport || []).map((q: any) => (
-                <tr key={q.quarter} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium">{q.quarter}</td>
-                  <td className="px-4 py-3 text-right">{q.facultatives?.toLocaleString()} TND</td>
-                  <td className="px-4 py-3 text-right">{q.traites?.toLocaleString()} TND</td>
-                  <td className="px-4 py-3 text-right font-semibold">{q.total?.toLocaleString()} TND</td>
-                  <td className={`px-4 py-3 text-right font-semibold ${q.evolution >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                <tr key={q.quarter} className="hover:bg-secondary/40 transition-colors">
+                  <td className="px-4 py-3 font-medium text-foreground">{q.quarter}</td>
+                  <td className="px-4 py-3 text-right text-foreground">{q.facultatives?.toLocaleString()} TND</td>
+                  <td className="px-4 py-3 text-right text-foreground">{q.traites?.toLocaleString()} TND</td>
+                  <td className="px-4 py-3 text-right font-semibold text-foreground">{q.total?.toLocaleString()} TND</td>
+                  <td className={`px-4 py-3 text-right font-semibold ${q.evolution >= 0 ? 'text-success' : 'text-destructive'}`}>
                     {q.evolution >= 0 ? '+' : ''}{q.evolution}%
                   </td>
                 </tr>

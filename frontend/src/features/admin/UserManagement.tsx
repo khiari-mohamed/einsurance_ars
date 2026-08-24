@@ -14,8 +14,8 @@ export default function UserManagement() {
   return (
     <div className="p-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-800">Gestion des Utilisateurs</h1>
-        <button className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+        <h1 className="font-display text-3xl font-semibold text-foreground">Gestion des Utilisateurs</h1>
+        <button className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90">
           <Plus size={20} />
           Nouvel Utilisateur
         </button>
@@ -23,7 +23,7 @@ export default function UserManagement() {
       {isLoading ? (
         <p>Loading...</p>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-card rounded-[var(--radius)] border border-border overflow-hidden">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>

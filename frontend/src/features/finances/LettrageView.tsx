@@ -119,7 +119,7 @@ export default function LettrageView() {
           )}
 
           {selectedEncaissement && (
-            <div className={`p-3 rounded-lg text-sm flex items-center justify-between ${totalAllocated > selectedEncaissement.montant ? 'bg-red-50' : 'bg-blue-50'}`}>
+            <div className={`p-3 rounded-lg text-sm flex items-center justify-between ${totalAllocated > selectedEncaissement.montant ? 'bg-destructive/10' : 'bg-primary/10'}`}>
               <span>Montant encaissé: <strong>{formatCurrency(selectedEncaissement.montant, selectedEncaissement.currency)}</strong> — Alloué: <strong>{formatCurrency(totalAllocated, selectedEncaissement.currency)}</strong></span>
               <Button size="sm" onClick={() => lettrageMutation.mutate()} disabled={totalAllocated <= 0 || totalAllocated > selectedEncaissement.montant || lettrageMutation.isPending}>
                 {lettrageMutation.isPending ? 'Lettrage...' : 'Confirmer le Lettrage'}

@@ -17,12 +17,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { useAuthStore } from '../../lib/store';
 
 const STATUS_CONFIG: Record<BordereauStatus, { label: string; color: string; icon: any }> = {
-  BROUILLON: { label: 'Brouillon', color: 'bg-gray-100 text-gray-800', icon: FileText },
-  EN_VALIDATION: { label: 'En Validation', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
-  VALIDE: { label: 'Validé', color: 'bg-green-100 text-green-800', icon: CheckCircle },
-  EMIS: { label: 'Émis', color: 'bg-blue-100 text-blue-800', icon: Send },
-  ACQUITTE: { label: 'Acquitté', color: 'bg-purple-100 text-purple-800', icon: DollarSign },
-  ARCHIVE: { label: 'Archivé', color: 'bg-gray-100 text-gray-600', icon: Archive },
+  BROUILLON: { label: 'Brouillon', color: 'bg-muted text-foreground border border-border', icon: FileText },
+  EN_VALIDATION: { label: 'En Validation', color: 'bg-warning/15 text-warning border border-warning/30', icon: Clock },
+  VALIDE: { label: 'Validé', color: 'bg-success/15 text-success border border-success/30', icon: CheckCircle },
+  EMIS: { label: 'Émis', color: 'bg-primary/15 text-primary border border-primary/30', icon: Send },
+  ACQUITTE: { label: 'Acquitté', color: 'bg-accent text-accent-foreground border border-border', icon: DollarSign },
+  ARCHIVE: { label: 'Archivé', color: 'bg-muted text-muted-foreground border border-border', icon: Archive },
 };
 
 const TYPE_LABELS: Record<BordereauType, string> = {
@@ -112,7 +112,7 @@ export default function BordereauDetail() {
   });
 
   if (isLoading) {
-    return <div className="p-8 flex items-center justify-center min-h-screen"><div className="text-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div><p className="mt-4 text-gray-600">Chargement...</p></div></div>;
+    return <div className="p-8 flex items-center justify-center min-h-screen"><div className="text-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div><p className="mt-4 text-muted-foreground">Chargement...</p></div></div>;
   }
 
   if (!data?.data) {
@@ -136,8 +136,8 @@ export default function BordereauDetail() {
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={() => navigate('/bordereaux')} className="gap-2"><ArrowLeft size={20} /> Retour</Button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{bordereau.numero}</h1>
-            <p className="text-gray-600 mt-1">{TYPE_LABELS[bordereau.type]}</p>
+            <h1 className="text-3xl font-bold text-foreground">{bordereau.numero}</h1>
+            <p className="text-muted-foreground mt-1">{TYPE_LABELS[bordereau.type]}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -147,7 +147,7 @@ export default function BordereauDetail() {
       </div>
 
       {bordereau.rejectionReason && bordereau.statut === 'BROUILLON' && (
-        <Card className="p-4 bg-red-50 border-red-200">
+          <Card className="p-4 bg-destructive/10 border-destructive/30">
           <div className="flex items-center gap-3">
             <XCircle className="text-red-600" size={24} />
             <div><p className="font-semibold text-red-900">Rejeté précédemment</p><p className="text-sm text-red-700">{bordereau.rejectionReason}</p></div>
@@ -156,7 +156,7 @@ export default function BordereauDetail() {
       )}
 
       {bordereau.isOverdue && (
-        <Card className="p-4 bg-red-50 border-red-200">
+          <Card className="p-4 bg-destructive/10 border-destructive/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <AlertCircle className="text-red-600" size={24} />

@@ -18,10 +18,10 @@ export default function ProfitLoss() {
       </div>
 
       {isLoading || !data ? (
-        <p className="text-gray-500">Chargement...</p>
+        <p className="text-muted-foreground">Chargement...</p>
       ) : (
         <div className="grid grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg shadow p-4">
+          <div className="bg-card rounded-[var(--radius)] border border-border p-4">
             <h2 className="font-semibold mb-3 text-red-700">Charges (classe 6)</h2>
             {data.charges.map((c) => (
               <div key={c.compte} className="flex justify-between py-1.5 border-b text-sm">
@@ -30,8 +30,8 @@ export default function ProfitLoss() {
             ))}
             <div className="flex justify-between pt-3 font-bold"><span>Total charges</span><span>{formatCurrency(data.totalCharges)}</span></div>
           </div>
-          <div className="bg-white rounded-lg shadow p-4">
-            <h2 className="font-semibold mb-3 text-green-700">Produits (classe 7)</h2>
+          <div className="bg-card rounded-[var(--radius)] border border-border p-4">
+            <h2 className="font-semibold mb-3 text-success">Produits (classe 7)</h2>
             {data.produits.map((p) => (
               <div key={p.compte} className="flex justify-between py-1.5 border-b text-sm">
                 <span>{p.compte} — {p.libelle}</span><span className="font-medium">{formatCurrency(p.credit - p.debit)}</span>
@@ -39,7 +39,7 @@ export default function ProfitLoss() {
             ))}
             <div className="flex justify-between pt-3 font-bold"><span>Total produits</span><span>{formatCurrency(data.totalProduits)}</span></div>
           </div>
-          <div className={`col-span-2 rounded-lg p-4 text-center font-bold text-lg ${data.resultatNet >= 0 ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+          <div className={`col-span-2 rounded-lg p-4 text-center font-bold text-lg ${data.resultatNet >= 0 ? 'bg-success/10 text-success border border-success/25' : 'bg-destructive/10 text-destructive border border-destructive/25'}`}>
             Résultat Net {year}: {formatCurrency(data.resultatNet)}
           </div>
         </div>

@@ -130,13 +130,13 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
   const needsReassureur = bordereau.type === 'CESSION_REASSUREUR' || bordereau.type === 'ETAT_DE_TRANSFERT';
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <Card className="max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h2 className="text-2xl font-bold">Modifier le Bordereau</h2>
-              <p className="text-gray-600 text-sm mt-1">{bordereau.numero} — {bordereau.type}</p>
+              <p className="text-muted-foreground text-sm mt-1">{bordereau.numero} — {bordereau.type}</p>
             </div>
             <Button variant="ghost" size="sm" onClick={onClose}><X size={20} /></Button>
           </div>
@@ -149,7 +149,7 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
                   <select
                     value={formData.cedanteId || ''}
                     onChange={(e) => setFormData({ ...formData, cedanteId: e.target.value || undefined })}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                   >
                     <option value="">— Aucune —</option>
                     {cedantes?.data?.map((c: any) => <option key={c.id} value={c.id}>{c.raisonSociale}</option>)}
@@ -162,7 +162,7 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
                 <select
                   value={formData.affaireId || ''}
                   onChange={(e) => setFormData({ ...formData, affaireId: e.target.value || undefined })}
-                  className="w-full border rounded-lg px-3 py-2"
+                  className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                 >
                   <option value="">— Aucune —</option>
                   {affaires?.data?.data?.map((a: any) => (
@@ -177,7 +177,7 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
                   <select
                     value={formData.reassureurCode || ''}
                     onChange={(e) => setFormData({ ...formData, reassureurCode: e.target.value || undefined })}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
                   >
                     <option value="">Sélectionner un réassureur</option>
                     {reassureurs?.data?.map((r: any) => (
@@ -196,15 +196,15 @@ export default function BordereauEditModal({ isOpen, onClose, bordereau }: Props
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">Période Début</label>
-                <input type="date" value={formData.datePeriodeDebut || ''} onChange={(e) => setFormData({ ...formData, datePeriodeDebut: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                <input type="date" value={formData.datePeriodeDebut || ''} onChange={(e) => setFormData({ ...formData, datePeriodeDebut: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Période Fin</label>
-                <input type="date" value={formData.datePeriodeFin || ''} onChange={(e) => setFormData({ ...formData, datePeriodeFin: e.target.value })} className="w-full border rounded-lg px-3 py-2" min={formData.datePeriodeDebut} />
+                <input type="date" value={formData.datePeriodeFin || ''} onChange={(e) => setFormData({ ...formData, datePeriodeFin: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" min={formData.datePeriodeDebut} />
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Date Limite Paiement</label>
-                <input type="date" value={formData.dateLimitePaiement || ''} onChange={(e) => setFormData({ ...formData, dateLimitePaiement: e.target.value })} className="w-full border rounded-lg px-3 py-2" />
+                <input type="date" value={formData.dateLimitePaiement || ''} onChange={(e) => setFormData({ ...formData, dateLimitePaiement: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
               </div>
             </div>
 

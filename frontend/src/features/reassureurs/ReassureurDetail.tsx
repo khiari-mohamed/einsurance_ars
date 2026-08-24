@@ -225,14 +225,14 @@ export default function ReassureurDetail() {
   if (isLoading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[400px]">
-        <div className="text-gray-500">Chargement...</div>
+        <div className="text-muted-foreground">Chargement...</div>
       </div>
     );
   }
 
   if (!reassureur) {
     return (
-      <div className="p-6 text-center text-gray-500">
+      <div className="p-6 text-center text-muted-foreground">
         Réassureur non trouvé
       </div>
     );
@@ -247,19 +247,19 @@ export default function ReassureurDetail() {
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate('/reassureurs')}
-            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            className="p-2 rounded-xl hover:bg-secondary/60 text-muted-foreground transition-colors"
           >
             <ArrowLeft size={20} />
           </button>
           <div>
-            <h1 className="text-[24px] font-semibold text-gray-900">{reassureur.raisonSociale}</h1>
+            <h1 className="font-display text-2xl font-semibold text-foreground">{reassureur.raisonSociale}</h1>
             <div className="flex items-center gap-3 mt-1">
-              <p className="text-[13px] text-gray-500">Code: {reassureur.code}</p>
+              <p className="text-[13px] text-muted-foreground">Code: {reassureur.code}</p>
               {reassureur.oldCode && (
-                <p className="text-[11px] text-gray-400">Ancien code: {reassureur.oldCode}</p>
+                <p className="text-[11px] text-muted-foreground/70">Ancien code: {reassureur.oldCode}</p>
               )}
               {reassureur.codeModifiedAt && (
-                <p className="text-[11px] text-gray-400">
+                <p className="text-[11px] text-muted-foreground/70">
                   Modifié le {new Date(reassureur.codeModifiedAt).toLocaleDateString()}
                 </p>
               )}
@@ -270,7 +270,7 @@ export default function ReassureurDetail() {
           {isAdmin && (
             <button
               onClick={() => setIsOverrideModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-warning hover:bg-warning/10 rounded-xl transition-colors"
             >
               <Edit2 size={16} />
               Modifier le code
@@ -279,7 +279,7 @@ export default function ReassureurDetail() {
           {reassureur.isActive !== false && (
             <button
               onClick={handleDeactivate}
-              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-[13px] font-medium text-destructive hover:bg-destructive/10 rounded-xl transition-colors"
             >
               <Trash2 size={16} />
               Désactiver
@@ -292,9 +292,9 @@ export default function ReassureurDetail() {
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
           {/* Informations Générales */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Building2 size={18} />
+          <div className="rounded-2xl border border-border bg-card shadow-sm p-6">
+            <h2 className="font-display text-base font-semibold text-foreground mb-4 flex items-center gap-2">
+              <Building2 size={18} className="text-muted-foreground" />
               Informations générales
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -314,8 +314,8 @@ export default function ReassureurDetail() {
               <InfoField label="Capital" value={reassureur.capital ? `${reassureur.capital} TND` : '-'} />
             </div>
             {reassureur.freeFields && Object.keys(reassureur.freeFields).length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-100">
-                <h3 className="text-[12px] font-medium text-gray-500 mb-2">Champs libres</h3>
+              <div className="mt-4 pt-4 border-t border-border">
+                <h3 className="text-[12px] font-medium text-muted-foreground mb-2">Champs libres</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                   {Object.entries(reassureur.freeFields).map(([key, value]) => (
                     <InfoField key={key} label={key} value={String(value)} />
@@ -326,10 +326,10 @@ export default function ReassureurDetail() {
           </div>
 
           {/* Contacts */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+          <div className="rounded-2xl border border-border bg-card shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
-                <Phone size={18} />
+              <h2 className="font-display text-base font-semibold text-foreground flex items-center gap-2">
+                <Phone size={18} className="text-muted-foreground" />
                 Contacts
               </h2>
               <button
@@ -337,7 +337,7 @@ export default function ReassureurDetail() {
                   setEditingContact(null);
                   setIsContactModalOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-primary hover:bg-primary/10 rounded-xl transition-colors"
               >
                 <Plus size={16} />
                 Ajouter
@@ -346,17 +346,17 @@ export default function ReassureurDetail() {
             {reassureur.contacts && reassureur.contacts.length > 0 ? (
               <div className="space-y-3">
                 {reassureur.contacts.map((contact: ReassureurContact) => (
-                  <div key={contact.id} className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div key={contact.id} className="p-3 border border-border/50 rounded-xl hover:bg-secondary/40 transition-colors">
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         {/* FIX: `contact.isDefault` badge removed — the shared Contact
                             Prisma model has no isDefault field (unlike BankAccount).
                             The type was corrected to match; this render must match too. */}
-                        <p className="text-[13px] font-medium text-gray-900">
+                        <p className="text-[13px] font-medium text-foreground">
                           {contact.prenom} {contact.nom}
                         </p>
                         {contact.poste && (
-                          <p className="text-[11px] text-gray-500">{contact.poste}</p>
+                          <p className="text-[11px] text-muted-foreground">{contact.poste}</p>
                         )}
                       </div>
                       <div className="flex items-center gap-1">
@@ -365,49 +365,49 @@ export default function ReassureurDetail() {
                             setEditingContact(contact);
                             setIsContactModalOpen(true);
                           }}
-                          className="p-1 rounded hover:bg-blue-50 text-blue-600"
+                          className="p-1 rounded hover:bg-primary/10 text-primary"
                         >
                           <Edit2 size={14} />
                         </button>
                         <button
                           onClick={() => handleDeleteContact(contact.id)}
-                          className="p-1 rounded hover:bg-red-50 text-red-600"
+                          className="p-1 rounded hover:bg-destructive/10 text-destructive"
                         >
                           <Trash2 size={14} />
                         </button>
                       </div>
                     </div>
                     {contact.email && (
-                      <p className="text-[12px] text-gray-600 flex items-center gap-1 mb-1">
+                      <p className="text-[12px] text-muted-foreground flex items-center gap-1 mb-1">
                         <Mail size={12} />
                         {contact.email}
                       </p>
                     )}
                     {contact.telephoneFixe && (
-                      <p className="text-[12px] text-gray-600 flex items-center gap-1">
+                      <p className="text-[12px] text-muted-foreground flex items-center gap-1">
                         <Phone size={12} />
-                        {contact.telephoneFixe} <span className="text-gray-400">(fixe)</span>
+                        {contact.telephoneFixe} <span className="text-muted-foreground/70">(fixe)</span>
                       </p>
                     )}
                     {contact.telephoneMobile && (
-                      <p className="text-[12px] text-gray-600 flex items-center gap-1">
+                      <p className="text-[12px] text-muted-foreground flex items-center gap-1">
                         <Phone size={12} />
-                        {contact.telephoneMobile} <span className="text-gray-400">(mobile)</span>
+                        {contact.telephoneMobile} <span className="text-muted-foreground/70">(mobile)</span>
                       </p>
                     )}
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-[13px] text-gray-500 text-center py-4">Aucun contact</p>
+              <p className="text-[13px] text-muted-foreground text-center py-4">Aucun contact</p>
             )}
           </div>
 
           {/* Bank Accounts */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+          <div className="rounded-2xl border border-border bg-card shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
-                <CreditCard size={18} />
+              <h2 className="font-display text-base font-semibold text-foreground flex items-center gap-2">
+                <CreditCard size={18} className="text-muted-foreground" />
                 Coordonnées bancaires
               </h2>
               {/* FIX (missing feature): there was no way to add/edit/delete a bank
@@ -419,7 +419,7 @@ export default function ReassureurDetail() {
                   setEditingBankAccount(null);
                   setIsBankModalOpen(true);
                 }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-primary hover:bg-primary/10 rounded-xl transition-colors"
               >
                 <Plus size={16} />
                 Ajouter
@@ -430,32 +430,32 @@ export default function ReassureurDetail() {
                 {reassureur.bankAccounts.map((bank: ReassureurBankAccount) => {
                   const swiftWarning = getSwiftWarning(bank.swift, reassureur.resident);
                   return (
-                    <div key={bank.id} className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
+                    <div key={bank.id} className="p-3 border border-border/50 rounded-xl hover:bg-secondary/40 transition-colors">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <p className="text-[13px] font-medium text-gray-900">
+                          <p className="text-[13px] font-medium text-foreground">
                             {bank.banque}
                             {bank.isDefault && (
-                              <span className="ml-2 text-[10px] px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
+                              <span className="ml-2 inline-block rounded-full bg-success/15 text-success border border-success/25 text-[10px] px-2 py-0.5">
                                 Principal
                               </span>
                             )}
                           </p>
                           <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-1">
-                            <p className="text-[12px] text-gray-600">RIB: {bank.rib}</p>
-                            <p className="text-[12px] text-gray-600">Devise: {bank.currency}</p>
+                            <p className="text-[12px] text-muted-foreground">RIB: {bank.rib}</p>
+                            <p className="text-[12px] text-muted-foreground">Devise: {bank.currency}</p>
                             {bank.swift && (
-                              <p className="text-[12px] text-gray-600">SWIFT: {bank.swift}</p>
+                              <p className="text-[12px] text-muted-foreground">SWIFT: {bank.swift}</p>
                             )}
                             {bank.iban && (
-                              <p className="text-[12px] text-gray-600">IBAN: {bank.iban}</p>
+                              <p className="text-[12px] text-muted-foreground">IBAN: {bank.iban}</p>
                             )}
                           </div>
                           {/* NEW: surfaces the same non-blocking data-quality flag the
                               backend already logs (MISSING_SWIFT_NON_RESIDENT) — was
                               previously invisible to the user, per the old TODO comment. */}
                           {swiftWarning && (
-                            <p className="mt-1.5 text-[11px] text-amber-600">{swiftWarning}</p>
+                            <p className="mt-1.5 text-[11px] text-warning">{swiftWarning}</p>
                           )}
                         </div>
                         <div className="flex items-center gap-1">
@@ -464,13 +464,13 @@ export default function ReassureurDetail() {
                               setEditingBankAccount(bank);
                               setIsBankModalOpen(true);
                             }}
-                            className="p-1 rounded hover:bg-blue-50 text-blue-600"
+                            className="p-1 rounded hover:bg-primary/10 text-primary"
                           >
                             <Edit2 size={14} />
                           </button>
                           <button
                             onClick={() => handleDeleteBankAccount(bank.id)}
-                            className="p-1 rounded hover:bg-red-50 text-red-600"
+                            className="p-1 rounded hover:bg-destructive/10 text-destructive"
                           >
                             <Trash2 size={14} />
                           </button>
@@ -481,19 +481,19 @@ export default function ReassureurDetail() {
                 })}
               </div>
             ) : (
-              <p className="text-[13px] text-gray-500 text-center py-4">Aucun compte bancaire</p>
+              <p className="text-[13px] text-muted-foreground text-center py-4">Aucun compte bancaire</p>
             )}
           </div>
 
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+          <div className="rounded-2xl border border-border bg-card shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
-                <FileText size={18} />
+              <h2 className="font-display text-base font-semibold text-foreground flex items-center gap-2">
+                <FileText size={18} className="text-muted-foreground" />
                 Conventions
               </h2>
               <button
                 onClick={() => setIsConventionModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-primary hover:bg-primary/10 rounded-xl transition-colors"
               >
                 <Plus size={16} />
                 Ajouter
@@ -502,22 +502,22 @@ export default function ReassureurDetail() {
             {conventions.length > 0 ? (
               <div className="space-y-3">
                 {conventions.map((convention) => (
-                  <div key={convention.id} className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
+                  <div key={convention.id} className="p-3 border border-border/50 rounded-xl hover:bg-secondary/40 transition-colors">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-[13px] font-medium text-gray-900 truncate">{convention.document.originalName || convention.document.nom || 'Convention'}</p>
-                        <div className="mt-1 text-[11px] text-gray-500 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                        <p className="text-[13px] font-medium text-foreground truncate">{convention.document.originalName || convention.document.nom || 'Convention'}</p>
+                        <div className="mt-1 text-[11px] text-muted-foreground grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <span>Date signature: {convention.dateSignature ? new Date(convention.dateSignature).toLocaleDateString('fr-FR') : '-'}</span>
                           <span>Date d'effet: {convention.dateEffet ? new Date(convention.dateEffet).toLocaleDateString('fr-FR') : '-'}</span>
                           <span>Ajouté le {new Date(convention.createdAt).toLocaleDateString('fr-FR')}</span>
                         </div>
                         {convention.notes && (
-                          <p className="text-[12px] text-gray-600 mt-2 whitespace-pre-wrap">{convention.notes}</p>
+                          <p className="text-[12px] text-muted-foreground mt-2 whitespace-pre-wrap">{convention.notes}</p>
                         )}
                       </div>
                       <button
                         onClick={() => handleDeactivateConvention(convention.id)}
-                        className="p-1.5 rounded hover:bg-red-50 text-red-600 shrink-0 ml-2"
+                        className="p-1.5 rounded hover:bg-destructive/10 text-destructive shrink-0 ml-2"
                         title="Désactiver cette convention"
                       >
                         <Trash2 size={14} />
@@ -527,7 +527,7 @@ export default function ReassureurDetail() {
                 ))}
               </div>
             ) : (
-              <p className="text-[13px] text-gray-500 text-center py-4">Aucune convention</p>
+              <p className="text-[13px] text-muted-foreground text-center py-4">Aucune convention</p>
             )}
           </div>
 
@@ -536,15 +536,15 @@ export default function ReassureurDetail() {
             onView={(doc) => setViewerDoc(doc)}
           />
 
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
+          <div className="rounded-2xl border border-border bg-card shadow-sm p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-[16px] font-semibold text-gray-900 flex items-center gap-2">
-                <Sliders size={18} />
+              <h2 className="font-display text-base font-semibold text-foreground flex items-center gap-2">
+                <Sliders size={18} className="text-muted-foreground" />
                 Champs libres
               </h2>
               <button
                 onClick={() => setIsFreeFieldsModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium text-primary hover:bg-primary/10 rounded-xl transition-colors"
               >
                 <Edit2 size={14} />
                 Modifier
@@ -557,7 +557,7 @@ export default function ReassureurDetail() {
                 ))}
               </div>
             ) : (
-              <p className="text-[13px] text-gray-500 text-center py-4">Aucun champ libre défini</p>
+              <p className="text-[13px] text-muted-foreground text-center py-4">Aucun champ libre défini</p>
             )}
           </div>
         </div>
@@ -565,34 +565,34 @@ export default function ReassureurDetail() {
         {/* Right Column */}
         <div className="space-y-6">
           {/* Status Card */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <h2 className="text-[16px] font-semibold text-gray-900 mb-4">Statut</h2>
+          <div className="rounded-2xl border border-border bg-card shadow-sm p-6">
+            <h2 className="font-display text-base font-semibold text-foreground mb-4">Statut</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-[13px] text-gray-600">Actif</span>
-                <span className={`px-2.5 py-1 text-[11px] font-medium rounded-full ${reassureur.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <span className="text-[13px] text-muted-foreground">Actif</span>
+                <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium border ${reassureur.isActive ? 'bg-success/15 text-success border-success/25' : 'bg-destructive/15 text-destructive border-destructive/25'}`}>
                   {reassureur.isActive ? 'Oui' : 'Non'}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-[13px] text-gray-600">Compte verrouillé</span>
-                <span className={`px-2.5 py-1 text-[11px] font-medium rounded-full ${reassureur.isAccountLocked ? 'bg-gray-100 text-gray-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                <span className="text-[13px] text-muted-foreground">Compte verrouillé</span>
+                <span className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-medium border ${reassureur.isAccountLocked ? 'bg-muted text-muted-foreground border-border' : 'bg-warning/15 text-warning border-warning/25'}`}>
                   {reassureur.isAccountLocked ? 'Verrouillé' : 'Déverrouillé'}
                 </span>
               </div>
               {reassureur.codeModifiedBy && (
                 <div className="flex items-center justify-between">
-                  <span className="text-[13px] text-gray-600">Code modifié par</span>
-                  <span className="text-[13px] text-gray-900">{reassureur.codeModifiedBy}</span>
+                  <span className="text-[13px] text-muted-foreground">Code modifié par</span>
+                  <span className="text-[13px] text-foreground">{reassureur.codeModifiedBy}</span>
                 </div>
               )}
             </div>
           </div>
 
           {/* Participations (Contrats) */}
-          <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-            <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <FileCheck size={18} />
+          <div className="rounded-2xl border border-border bg-card shadow-sm p-6">
+            <h2 className="font-display text-base font-semibold text-foreground mb-4 flex items-center gap-2">
+              <FileCheck size={18} className="text-muted-foreground" />
               Participations
             </h2>
             {contracts.length > 0 ? (
@@ -611,21 +611,21 @@ export default function ReassureurDetail() {
                     <div
                       key={participation.id}
                       onClick={() => affaire?.id && navigate(`/affaires/${affaire.id}`)}
-                      className="p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+                      className="p-3 border border-border/50 rounded-xl hover:bg-secondary/40 transition-colors cursor-pointer"
                     >
-                      <p className="text-[13px] font-medium text-gray-900">
+                      <p className="text-[13px] font-medium text-foreground">
                         {affaire?.numero || 'Affaire'}
                         {participation.isLeader && (
-                          <span className="ml-2 text-[10px] px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">
+                          <span className="ml-2 inline-block rounded-full bg-warning/15 text-warning border border-warning/25 text-[10px] px-2 py-0.5">
                             Leader
                           </span>
                         )}
                       </p>
                       <div className="flex items-center justify-between mt-1">
-                        <p className="text-[11px] text-gray-500">
+                        <p className="text-[11px] text-muted-foreground">
                           {tiersLabel} · {affaire?.type === 'TRAITE' ? 'Traité' : 'Facultative'}
                         </p>
-                        <span className="text-[11px] font-semibold text-blue-600">
+                        <span className="text-[11px] font-semibold text-primary">
                           {participation.partPct != null ? `${participation.partPct}%` : ''}
                         </span>
                       </div>
@@ -634,7 +634,7 @@ export default function ReassureurDetail() {
                 })}
               </div>
             ) : (
-              <p className="text-[13px] text-gray-500 text-center py-4">Aucune participation</p>
+              <p className="text-[13px] text-muted-foreground text-center py-4">Aucune participation</p>
             )}
           </div>
         </div>
@@ -716,39 +716,39 @@ export default function ReassureurDetail() {
 
       {/* Override Code Modal */}
       {isOverrideModalOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="p-6 border-b border-gray-100">
-              <h2 className="text-[18px] font-semibold text-gray-900">Modifier le code</h2>
-              <p className="text-[13px] text-gray-500 mt-1">Format: REA-XXXX (ex: REA-0042)</p>
+        <div className="fixed inset-0 bg-background/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="rounded-2xl border border-border bg-card shadow-xl w-full max-w-md">
+            <div className="p-6 border-b border-border">
+              <h2 className="font-display text-lg font-semibold text-foreground">Modifier le code</h2>
+              <p className="text-[13px] text-muted-foreground mt-1">Format: REA-XXXX (ex: REA-0042)</p>
             </div>
             <div className="p-6">
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Nouveau code</label>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Nouveau code</label>
               <input
                 type="text"
                 value={newCode}
                 onChange={(e) => setNewCode(e.target.value.toUpperCase())}
                 placeholder="REA-0001"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 rounded-xl border border-border bg-secondary text-foreground text-[13px] outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
-              <p className="text-[11px] text-amber-600 mt-2">
+              <p className="text-[11px] text-warning mt-2">
                 ⚠️ Cette action est irréversible et sera enregistrée dans l'historique d'audit.
               </p>
             </div>
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-100">
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-border">
               <button
                 onClick={() => {
                   setIsOverrideModalOpen(false);
                   setNewCode('');
                 }}
-                className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                className="px-4 py-2 text-[13px] font-medium text-muted-foreground hover:bg-secondary/60 rounded-xl transition-colors"
               >
                 Annuler
               </button>
               <button
                 onClick={handleOverrideCode}
                 disabled={overrideCodeMutation.isPending}
-                className="px-4 py-2 text-[13px] font-medium bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+                className="px-4 py-2 text-[13px] font-medium bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors disabled:opacity-50"
               >
                 {overrideCodeMutation.isPending ? 'Modification...' : 'Confirmer'}
               </button>
@@ -770,8 +770,8 @@ interface InfoFieldProps {
 function InfoField({ label, value, icon, className = '' }: InfoFieldProps) {
   return (
     <div className={className}>
-      <p className="text-[11px] text-gray-500 uppercase font-medium mb-1">{label}</p>
-      <p className="text-[13px] text-gray-900 flex items-center gap-1.5">
+      <p className="text-[11px] text-muted-foreground uppercase font-medium mb-1">{label}</p>
+      <p className="text-[13px] text-foreground flex items-center gap-1.5">
         {icon}
         {value || '-'}
       </p>
@@ -810,18 +810,18 @@ function GedDocumentsSection({ documents, onView }: GedDocumentsSectionProps) {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      alert('Erreur lors du t�l�chargement');
+      alert('Erreur lors du t l chargement');
     }
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)] p-6">
-      <h2 className="text-[16px] font-semibold text-gray-900 mb-4 flex items-center gap-2">
-        <Folder size={18} />
+    <div className="rounded-2xl border border-border bg-card shadow-sm p-6">
+      <h2 className="font-display text-base font-semibold text-foreground mb-4 flex items-center gap-2">
+        <Folder size={18} className="text-muted-foreground" />
         Documents (GED)
       </h2>
       {documents.length === 0 ? (
-        <p className="text-[13px] text-gray-500 text-center py-4">Aucun document</p>
+        <p className="text-[13px] text-muted-foreground text-center py-4">Aucun document</p>
       ) : (
         <>
           <div className="space-y-2">
@@ -830,33 +830,33 @@ function GedDocumentsSection({ documents, onView }: GedDocumentsSectionProps) {
               const name = doc?.originalName || doc?.nom || 'document';
               const docId = doc?.id;
               return (
-                <div key={link.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors">
+                <div key={link.id} className="flex items-center justify-between p-3 border border-border/50 rounded-xl hover:bg-secondary/40 transition-colors">
                   <div className="flex items-center gap-2 min-w-0">
-                    <FileIcon size={14} className="text-gray-400 shrink-0" />
+                    <FileIcon size={14} className="text-muted-foreground/70 shrink-0" />
                     <div className="min-w-0">
-                      <p className="text-[13px] text-gray-900 truncate">{name}</p>
+                      <p className="text-[13px] text-foreground truncate">{name}</p>
                       {doc?.documentType && (
-                        <p className="text-[10px] text-gray-400 uppercase">{doc.documentType}</p>
+                        <p className="text-[10px] text-muted-foreground/70 uppercase">{doc.documentType}</p>
                       )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 shrink-0 ml-2">
-                    <span className="text-[11px] text-gray-400 mr-2">
+                    <span className="text-[11px] text-muted-foreground/70 mr-2">
                       {new Date(link.createdAt).toLocaleDateString('fr-FR')}
                     </span>
                     {docId && (
                       <>
                         <button
                           onClick={() => onView({ id: docId, name, mimeType: doc?.mimeType ?? undefined })}
-                          className="p-1.5 rounded hover:bg-blue-50 text-blue-600"
+                          className="p-1.5 rounded hover:bg-primary/10 text-primary"
                           title="Voir"
                         >
                           <Eye size={14} />
                         </button>
                         <button
                           onClick={() => handleDownload(docId, name)}
-                          className="p-1.5 rounded hover:bg-gray-100 text-gray-500"
-                          title="T�l�charger"
+                          className="p-1.5 rounded hover:bg-secondary/60 text-muted-foreground"
+                          title="T l charger"
                         >
                           <Download size={14} />
                         </button>
@@ -868,20 +868,20 @@ function GedDocumentsSection({ documents, onView }: GedDocumentsSectionProps) {
             })}
           </div>
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-              <p className="text-[11px] text-gray-400">Page {safePage} / {totalPages}</p>
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+              <p className="text-[11px] text-muted-foreground/70">Page {safePage} / {totalPages}</p>
               <div className="flex gap-1">
                 <button
                   onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                   disabled={safePage === 1}
-                  className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+                  className="p-1 rounded-lg border border-border hover:bg-secondary/40 disabled:opacity-40"
                 >
                   <ChevronLeft size={13} />
                 </button>
                 <button
                   onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
                   disabled={safePage === totalPages}
-                  className="p-1 rounded border border-gray-200 hover:bg-gray-50 disabled:opacity-40"
+                  className="p-1 rounded-lg border border-border hover:bg-secondary/40 disabled:opacity-40"
                 >
                   <ChevronRight size={13} />
                 </button>
@@ -975,32 +975,32 @@ function GedDocumentViewer({ docId, docName, mimeType, onClose }: GedDocumentVie
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
-        <div className="flex items-center justify-between p-4 border-b border-gray-100 shrink-0">
-          <p className="text-[14px] font-semibold text-gray-900 truncate">{docName}</p>
+    <div className="fixed inset-0 bg-background/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="rounded-2xl border border-border bg-card shadow-xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-border shrink-0">
+          <p className="text-[14px] font-semibold text-foreground truncate">{docName}</p>
           <div className="flex items-center gap-2 shrink-0 ml-4">
             <button
               onClick={handleDownload}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-medium text-muted-foreground hover:bg-secondary/60 rounded-xl transition-colors"
             >
               <Download size={14} />
-              T�l�charger
+              T l charger
             </button>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+            <button onClick={onClose} className="p-1.5 rounded-xl hover:bg-secondary/60 text-muted-foreground">
               <X size={18} />
             </button>
           </div>
         </div>
 
         {excelSheets && excelSheets.length > 1 && (
-          <div className="flex gap-1 px-4 pt-2 border-b border-gray-100 shrink-0 overflow-x-auto">
+          <div className="flex gap-1 px-4 pt-2 border-b border-border shrink-0 overflow-x-auto">
             {excelSheets.map((sheet, index) => (
               <button
                 key={sheet.name}
                 onClick={() => setActiveSheet(index)}
                 className={`px-3 py-1.5 text-[12px] font-medium rounded-t-lg whitespace-nowrap transition-colors ${
-                  activeSheet === index ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+                  activeSheet === index ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-secondary/60'
                 }`}
               >
                 {sheet.name}
@@ -1009,52 +1009,52 @@ function GedDocumentViewer({ docId, docName, mimeType, onClose }: GedDocumentVie
           </div>
         )}
 
-        <div className="flex-1 overflow-auto bg-gray-50 flex items-center justify-center p-4">
+        <div className="flex-1 overflow-auto bg-secondary/30 flex items-center justify-center p-4">
           {loading && (
-            <div className="flex flex-col items-center gap-3 text-gray-400">
-              <div className="w-8 h-8 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
+            <div className="flex flex-col items-center gap-3 text-muted-foreground">
+              <div className="w-8 h-8 border-2 border-border border-t-primary rounded-full animate-spin" />
               <p className="text-[13px]">Chargement...</p>
             </div>
           )}
           {error && (
             <div className="flex flex-col items-center gap-3">
-              <FileIcon size={48} className="text-gray-300" />
-              <p className="text-[13px] text-red-500">Impossible de charger le document.</p>
-              <button onClick={handleDownload} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">
-                <Download size={14} /> T�l�charger � la place
+              <FileIcon size={48} className="text-muted-foreground/40" />
+              <p className="text-[13px] text-destructive">Impossible de charger le document.</p>
+              <button onClick={handleDownload} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-xl">
+                <Download size={14} /> T l charger   la place
               </button>
             </div>
           )}
           {!loading && !error && (
             <>
               {isPdf && blobUrl && (
-                <iframe src={blobUrl} title={docName} className="w-full h-full rounded-lg border border-gray-200 bg-white" />
+                <iframe src={blobUrl} title={docName} className="w-full h-full rounded-xl border border-border bg-card" />
               )}
               {isImage && blobUrl && (
-                <img src={blobUrl} alt={docName} className="max-w-full max-h-full object-contain rounded-lg" />
+                <img src={blobUrl} alt={docName} className="max-w-full max-h-full object-contain rounded-xl" />
               )}
               {isWord && wordHtml && (
-                <div className="w-full h-full overflow-auto bg-white rounded-lg border border-gray-200 p-8">
+                <div className="w-full h-full overflow-auto bg-card rounded-xl border border-border p-8">
                   <div
-                    className="prose prose-sm max-w-none"
+                    className="prose prose-sm max-w-none prose-invert:dark"
                     dangerouslySetInnerHTML={{ __html: wordHtml }}
                   />
                 </div>
               )}
               {isExcel && excelSheets && (
-                <div className="w-full h-full overflow-auto bg-white rounded-lg border border-gray-200">
+                <div className="w-full h-full overflow-auto bg-card rounded-xl border border-border">
                   <div
-                    className="p-4 text-[12px] [&_table]:border-collapse [&_table]:w-full [&_td]:border [&_td]:border-gray-200 [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_th]:font-medium"
+                    className="p-4 text-[12px] text-foreground [&_table]:border-collapse [&_table]:w-full [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1 [&_th]:bg-secondary [&_th]:font-medium"
                     dangerouslySetInnerHTML={{ __html: excelSheets[activeSheet]?.html ?? '' }}
                   />
                 </div>
               )}
               {!isPdf && !isImage && !isWord && !isExcel && (
                 <div className="flex flex-col items-center gap-3">
-                  <FileIcon size={48} className="text-gray-300" />
-                  <p className="text-[13px] text-gray-500">Aper�u non disponible pour ce type de fichier.</p>
-                  <button onClick={handleDownload} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg">
-                    <Download size={14} /> T�l�charger le fichier
+                  <FileIcon size={48} className="text-muted-foreground/40" />
+                  <p className="text-[13px] text-muted-foreground">Aper u non disponible pour ce type de fichier.</p>
+                  <button onClick={handleDownload} className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium text-primary-foreground bg-primary hover:bg-primary/90 rounded-xl">
+                    <Download size={14} /> T l charger le fichier
                   </button>
                 </div>
               )}

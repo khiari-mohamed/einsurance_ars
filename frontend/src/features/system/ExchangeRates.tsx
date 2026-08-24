@@ -99,7 +99,7 @@ export default function ExchangeRates() {
             <Button onClick={() => convertAmount()}>Convertir</Button>
           </div>
           {conversion && (
-            <div className="mt-4 p-4 bg-blue-50 rounded">
+            <div className="mt-4 p-4 bg-primary/10 border border-primary/30 rounded">
               <p className="text-lg font-semibold">
                 {convertData.montant} {convertData.from} = {(conversion as any).data?.montantConverti} {convertData.to}
               </p>

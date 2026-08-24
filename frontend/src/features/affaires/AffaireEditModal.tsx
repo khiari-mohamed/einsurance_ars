@@ -160,11 +160,11 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
   const removeGuaranteeLine = (idx: number) => setGuaranteeLines((prev) => prev.filter((_, i) => i !== idx));
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-[18px] font-semibold text-gray-900">Modifier l'Affaire {affaire.numero}</h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card rounded-[var(--radius)] border border-border w-full max-w-4xl max-h-[90vh] overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-[18px] font-semibold text-foreground">Modifier l'Affaire {affaire.numero}</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
             <X size={20} />
           </button>
         </div>
@@ -172,15 +172,15 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-180px)] space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de paiement</label>
-              <select value={modePaiement} onChange={(e) => setModePaiement(e.target.value as any)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Mode de paiement</label>
+              <select value={modePaiement} onChange={(e) => setModePaiement(e.target.value as any)} className="w-full px-3 py-2 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
                 <option value="PAR_AFFAIRE">Par Affaire</option>
                 <option value="PAR_SITUATION">Par Situation</option>
               </select>
             </div>
             <div>
-              <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Devise</label>
-              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Devise</label>
+              <select value={currency} onChange={(e) => setCurrency(e.target.value)} className="w-full px-3 py-2 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
                 {['TND', 'EUR', 'USD', 'GBP'].map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -188,18 +188,18 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
 
           {affaire.type === AffaireType.FACULTATIVE && fac && (
             <div className="space-y-4">
-              <h3 className="text-[14px] font-semibold text-gray-900">Données Facultative</h3>
+              <h3 className="text-[14px] font-semibold text-foreground">Données Facultative</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Assuré</label>
-                  <select value={fac.assureId || ''} onChange={(e) => setFac({ ...fac, assureId: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Assuré</label>
+                  <select value={fac.assureId || ''} onChange={(e) => setFac({ ...fac, assureId: e.target.value })} className="w-full px-3 py-2 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
                     <option value="">Sélectionner</option>
                     {assuresOptions.map((a: any) => <option key={a.id} value={a.id}>{a.raisonSociale} ({a.code})</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Type de réassurance</label>
-                  <select value={fac.reassuranceType || ''} onChange={(e) => setFac({ ...fac, reassuranceType: e.target.value as ReassuranceType })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                  <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Type de réassurance</label>
+                  <select value={fac.reassuranceType || ''} onChange={(e) => setFac({ ...fac, reassuranceType: e.target.value as ReassuranceType })} className="w-full px-3 py-2 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
                     {Object.entries(reassuranceTypeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>

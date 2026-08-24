@@ -158,10 +158,10 @@ export default function ExchangeRatesManager() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="bg-white rounded-lg shadow-lg p-6">
+      <div className="bg-card rounded-[var(--radius)] border border-border p-6">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <TrendingUp className="text-blue-600" size={32} />
+            <TrendingUp className="text-primary" size={32} />
             <div>
               <h1 className="text-2xl font-bold">Cours de Change</h1>
               <p className="text-sm text-gray-600">Gestion des taux de change (BCT)</p>
@@ -187,7 +187,7 @@ export default function ExchangeRatesManager() {
                 resetForm();
                 setShowModal(true);
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
             >
               <Plus size={16} />
               Nouveau Taux

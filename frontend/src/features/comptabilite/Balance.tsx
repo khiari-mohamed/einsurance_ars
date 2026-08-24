@@ -22,29 +22,29 @@ export default function Balance() {
       <h1 className="text-2xl font-bold mb-6">Balance Générale</h1>
 
       <div className="flex gap-3 mb-4">
-        <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="px-3 py-2 border rounded-lg text-sm w-28" />
-        <select value={mois} onChange={(e) => setMois(e.target.value ? Number(e.target.value) : '')} className="px-3 py-2 border rounded-lg text-sm">
+        <input type="number" value={year} onChange={(e) => setYear(Number(e.target.value))} className="px-3 py-2 border border-border bg-background rounded-lg text-sm w-28 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
+        <select value={mois} onChange={(e) => setMois(e.target.value ? Number(e.target.value) : '')} className="px-3 py-2 border border-border bg-background rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
           <option value="">Année entière</option>
           {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}</option>)}
         </select>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-card rounded-[var(--radius)] border border-border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Compte</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libellé</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Débit</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Crédit</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Solde</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Compte</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Libellé</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Débit</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Crédit</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Solde</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {isLoading ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Chargement...</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">Chargement...</td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">Aucune écriture validée pour cette période</td></tr>
+              <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">Aucune écriture validée pour cette période</td></tr>
             ) : (
               data.map((l) => (
                 <tr key={l.compte} className="hover:bg-gray-50">
@@ -52,14 +52,14 @@ export default function Balance() {
                   <td className="px-4 py-3 text-sm">{l.libelle}</td>
                   <td className="px-4 py-3 text-sm text-right">{formatCurrency(l.debit)}</td>
                   <td className="px-4 py-3 text-sm text-right">{formatCurrency(l.credit)}</td>
-                  <td className={`px-4 py-3 text-sm text-right font-semibold ${l.solde >= 0 ? 'text-green-700' : 'text-red-700'}`}>{formatCurrency(l.solde)}</td>
+                  <td className={`px-4 py-3 text-sm text-right font-semibold ${l.solde >= 0 ? 'text-success' : 'text-destructive'}`}>{formatCurrency(l.solde)}</td>
                 </tr>
               ))
             )}
           </tbody>
           {data.length > 0 && (
             <tfoot className="bg-gray-50 font-bold">
-              <tr><td colSpan={2} className="px-4 py-3 text-right">Total:</td><td className="px-4 py-3 text-right">{formatCurrency(totalDebit)}</td><td className="px-4 py-3 text-right">{formatCurrency(totalCredit)}</td><td className={`px-4 py-3 text-right ${Math.abs(totalDebit - totalCredit) < 0.01 ? 'text-green-700' : 'text-red-700'}`}>{formatCurrency(totalDebit - totalCredit)}</td></tr>
+              <tr><td colSpan={2} className="px-4 py-3 text-right">Total:</td><td className="px-4 py-3 text-right">{formatCurrency(totalDebit)}</td><td className="px-4 py-3 text-right">{formatCurrency(totalCredit)}</td><td className={`px-4 py-3 text-right ${Math.abs(totalDebit - totalCredit) < 0.01 ? 'text-success' : 'text-destructive'}`}>{formatCurrency(totalDebit - totalCredit)}</td></tr>
             </tfoot>
           )}
         </table>

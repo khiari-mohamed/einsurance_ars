@@ -56,7 +56,7 @@ export default function SinistreDetail() {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -85,8 +85,8 @@ export default function SinistreDetail() {
             <ArrowLeft size={24} />
           </button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-800">{sinistre.numero}</h1>
-            <p className="text-gray-600">{sinistre.affaire?.numero} — {sinistre.affaire?.cedante?.raisonSociale}</p>
+            <h1 className="font-display text-3xl font-semibold text-foreground">{sinistre.numero}</h1>
+            <p className="text-muted-foreground">{sinistre.affaire?.numero} — {sinistre.affaire?.cedante?.raisonSociale}</p>
           </div>
         </div>
         <span className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium ${STATUT_COLORS[sinistre.statut]}`}>
@@ -97,19 +97,19 @@ export default function SinistreDetail() {
 
       {/* KPI strip */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-card p-4 rounded-[var(--radius)] border border-border">
           <div className="text-sm text-gray-600">Réserves</div>
           <div className="text-2xl font-bold">{formatCurrency(sinistre.reserves ?? 0)}</div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-card p-4 rounded-[var(--radius)] border border-border">
           <div className="text-sm text-gray-600">Part Réassureurs</div>
           <div className="text-2xl font-bold text-blue-600">{formatCurrency(sinistre.partReassureurs ?? 0)}</div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-card p-4 rounded-[var(--radius)] border border-border">
           <div className="text-sm text-gray-600">Règlement Exercice N</div>
           <div className="text-2xl font-bold text-green-600">{formatCurrency(sinistre.reglementExerciceN ?? 0)}</div>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow">
+        <div className="bg-card p-4 rounded-[var(--radius)] border border-border">
           <div className="text-sm text-gray-600">SAP Actuel</div>
           <div className="text-2xl font-bold text-orange-600">{formatCurrency(sinistre.sap ?? 0)}</div>
         </div>

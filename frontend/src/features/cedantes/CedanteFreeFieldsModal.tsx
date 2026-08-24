@@ -69,22 +69,22 @@ export default function CedanteFreeFieldsModal({ cedanteId, freeFields, onClose 
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-[18px] font-semibold text-gray-900">Champs libres</h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+      <div className="bg-card rounded-2xl shadow-sm w-full max-w-lg max-h-[90vh] overflow-hidden border border-border">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="font-display text-[18px] font-semibold text-foreground">Champs libres</h2>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary/60 text-muted-foreground/70 hover:text-muted-foreground transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto max-h-[calc(90vh-140px)]">
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-[13px] text-red-700">
+            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/25 rounded-lg text-[13px] text-destructive">
               {error}
             </div>
           )}
 
-          <p className="text-[12px] text-gray-500 mb-4">
+          <p className="text-[12px] text-muted-foreground mb-4">
             Champs configurables librement (CDC §5.7, onglet 5). Une clé vide sera ignorée à l'enregistrement.
           </p>
 
@@ -96,19 +96,19 @@ export default function CedanteFreeFieldsModal({ cedanteId, freeFields, onClose 
                   placeholder="Nom du champ"
                   value={row.key}
                   onChange={(e) => updateRow(index, 'key', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 border border-border bg-secondary text-foreground rounded-lg text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
                 <input
                   type="text"
                   placeholder="Valeur"
                   value={row.value}
                   onChange={(e) => updateRow(index, 'value', e.target.value)}
-                  className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="flex-1 px-3 py-2 border border-border bg-secondary text-foreground rounded-lg text-[13px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
                 <button
                   type="button"
                   onClick={() => removeRow(index)}
-                  className="p-2 rounded-lg hover:bg-red-50 text-red-500 shrink-0"
+                  className="p-2 rounded-lg hover:bg-destructive/10 text-destructive shrink-0"
                   title="Supprimer ce champ"
                 >
                   <Trash2 size={16} />
@@ -120,20 +120,20 @@ export default function CedanteFreeFieldsModal({ cedanteId, freeFields, onClose 
           <button
             type="button"
             onClick={addRow}
-            className="mt-3 flex items-center gap-1.5 text-[12px] font-medium text-blue-600 hover:text-blue-700"
+            className="mt-3 flex items-center gap-1.5 text-[12px] font-medium text-primary hover:text-primary/80"
           >
             <Plus size={14} />
             Ajouter un champ
           </button>
 
-          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-100">
-            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+          <div className="flex items-center justify-end gap-3 mt-6 pt-6 border-t border-border">
+            <button type="button" onClick={onClose} className="px-4 py-2 text-[13px] font-medium text-secondary-foreground hover:bg-secondary/60 rounded-lg transition-colors">
               Annuler
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="px-4 py-2 text-[13px] font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              className="px-4 py-2 text-[13px] font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
             >
               {mutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
             </button>

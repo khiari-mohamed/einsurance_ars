@@ -65,15 +65,15 @@ export default function TraitesList() {
     <div className="p-4 lg:p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
         <div>
-          <h1 className="text-[24px] font-semibold text-gray-900">Traités</h1>
-          <p className="text-[13px] text-gray-500 mt-1">
+          <h1 className="font-display text-[24px] font-semibold text-foreground">Traités</h1>
+          <p className="text-[13px] text-muted-foreground mt-1">
             {total} traité{total !== 1 ? 's' : ''}
             {stats && <> • {stats.totalTraitesActifs} actif{stats.totalTraitesActifs !== 1 ? 's' : ''} (placés)</>}
           </p>
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2.5 rounded-lg hover:bg-purple-700 transition-colors text-[13px] font-medium"
+          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg hover:bg-primary/90 transition-colors text-[13px] font-medium"
         >
           <Plus size={18} />
           Nouveau Traité
@@ -104,34 +104,34 @@ export default function TraitesList() {
       {stats && stats.byType.length > 0 && !showRenewals && (
         <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
           {stats.byType.map((b) => (
-            <div key={b.type} className="shrink-0 px-3 py-2 bg-white border border-gray-100 rounded-lg shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
-              <p className="text-[11px] text-gray-500">{reassuranceTypeLabels[b.type]}</p>
-              <p className="text-[13px] font-semibold text-gray-900">
-                {formatCurrency(b.totalPrimePrevisionnelle, 'TND')} <span className="text-[11px] font-normal text-gray-400">({b.count})</span>
+            <div key={b.type} className="shrink-0 px-3 py-2 bg-card border border-border rounded-lg">
+              <p className="text-[11px] text-muted-foreground">{reassuranceTypeLabels[b.type]}</p>
+              <p className="text-[13px] font-semibold text-foreground">
+                {formatCurrency(b.totalPrimePrevisionnelle, 'TND')} <span className="text-[11px] font-normal text-muted-foreground">({b.count})</span>
               </p>
             </div>
           ))}
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+      <div className="bg-card rounded-[var(--radius)] border border-border">
         {!showRenewals && (
-          <div className="p-4 border-b border-gray-100 space-y-3">
+          <div className="p-4 border-b border-border space-y-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
               <input
                 type="text"
                 placeholder="Rechercher par numéro, référence, branche, cédante..."
                 value={searchTerm}
                 onChange={(e) => updateFilter('search', e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2.5 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
               />
             </div>
             <div className="flex gap-3">
               <select
                 value={statutFilter}
                 onChange={(e) => updateFilter('statut', e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
               >
                 <option value="">Tous les statuts</option>
                 {Object.entries(statutLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -139,7 +139,7 @@ export default function TraitesList() {
               <select
                 value={periodiciteFilter}
                 onChange={(e) => updateFilter('periodicite', e.target.value)}
-                className="px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-3 py-2 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
               >
                 <option value="">Toutes périodicités</option>
                 {Object.entries(periodiciteLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}

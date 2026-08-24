@@ -43,40 +43,40 @@ export default function PlanComptable() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Plan Comptable</h1>
         <div className="flex gap-2">
-          <button onClick={() => seedMutation.mutate()} className="flex items-center gap-2 px-4 py-2 border rounded-lg hover:bg-gray-50 text-sm">
+          <button onClick={() => seedMutation.mutate()} className="flex items-center gap-2 px-4 py-2 border border-border bg-card rounded-lg hover:bg-muted text-sm">
             <RefreshCw size={16} /> Initialiser les comptes de base
           </button>
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm">
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 text-sm">
             <Plus size={16} /> Nouveau Compte
           </button>
         </div>
       </div>
 
       <div className="flex gap-3 mb-4">
-        <input placeholder="Rechercher compte ou libellé..." value={search} onChange={(e) => setSearch(e.target.value)} className="px-3 py-2 border rounded-lg text-sm flex-1" />
-        <select value={classe} onChange={(e) => setClasse(e.target.value)} className="px-3 py-2 border rounded-lg text-sm">
+        <input placeholder="Rechercher compte ou libellé..." value={search} onChange={(e) => setSearch(e.target.value)} className="px-3 py-2 border border-border bg-background rounded-lg text-sm flex-1 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" />
+        <select value={classe} onChange={(e) => setClasse(e.target.value)} className="px-3 py-2 border border-border bg-background rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
           <option value="">Toutes classes</option>
           {['1', '2', '3', '4', '5', '6', '7'].map((c) => <option key={c} value={c}>Classe {c}</option>)}
         </select>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-card rounded-[var(--radius)] border border-border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Compte</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libellé</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Classe</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Auxiliaire</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Compte</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Libellé</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Classe</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Type</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Auxiliaire</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {isLoading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Chargement...</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Chargement...</td></tr>
             ) : accounts.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Aucun compte — cliquez "Initialiser les comptes de base" pour démarrer</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Aucun compte — cliquez "Initialiser les comptes de base" pour démarrer</td></tr>
             ) : (
               accounts.map((a) => (
                 <tr key={a.id} className="hover:bg-gray-50">
@@ -97,7 +97,7 @@ export default function PlanComptable() {
 
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md space-y-4">
+          <div className="bg-card border border-border rounded-[var(--radius)] p-6 w-full max-w-md space-y-4">
             <h2 className="text-lg font-semibold">Nouveau Compte</h2>
             <div>
               <label className="text-sm font-medium">Numéro de compte</label>
@@ -124,8 +124,8 @@ export default function PlanComptable() {
             </div>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isAuxiliary} onChange={(e) => setForm({ ...form, isAuxiliary: e.target.checked })} /> Compte auxiliaire (par tiers)</label>
             <div className="flex justify-end gap-2 pt-2">
-              <button onClick={() => setShowForm(false)} className="px-4 py-2 border rounded-lg text-sm">Annuler</button>
-              <button onClick={() => createMutation.mutate()} disabled={createMutation.isPending} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50">Créer</button>
+              <button onClick={() => setShowForm(false)} className="px-4 py-2 border border-border bg-card rounded-lg text-sm hover:bg-muted">Annuler</button>
+              <button onClick={() => createMutation.mutate()} disabled={createMutation.isPending} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50">Créer</button>
             </div>
           </div>
         </div>

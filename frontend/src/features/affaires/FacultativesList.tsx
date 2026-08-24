@@ -69,12 +69,12 @@ export default function FacultativesList() {
     <div className="p-4 lg:p-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
         <div>
-          <h1 className="text-[24px] font-semibold text-gray-900">Facultatives</h1>
-          <p className="text-[13px] text-gray-500 mt-1">{total} affaire{total !== 1 ? 's' : ''} facultative{total !== 1 ? 's' : ''}</p>
+          <h1 className="font-display text-[24px] font-semibold text-foreground">Facultatives</h1>
+          <p className="text-[13px] text-muted-foreground mt-1">{total} affaire{total !== 1 ? 's' : ''} facultative{total !== 1 ? 's' : ''}</p>
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-[13px] font-medium"
+          className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg hover:bg-primary/90 transition-colors text-[13px] font-medium"
         >
           <Plus size={18} />
           Nouvelle Facultative
@@ -113,7 +113,7 @@ export default function FacultativesList() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
+      <div className="bg-card rounded-[var(--radius)] border border-border">
         {!showRenewals && (
           <div className="p-4 border-b border-gray-100 space-y-3">
             <div className="relative">

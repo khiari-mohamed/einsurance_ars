@@ -1,5 +1,5 @@
 import { cn } from '../../lib/utils';
-import { CheckCircle, XCircle, Clock, AlertCircle, Archive } from 'lucide-react';
+import { CheckCircle2, XCircle, Clock, AlertCircle, Archive } from 'lucide-react';
 
 export type StatusType = 'ACTIF' | 'INACTIF' | 'EN_INSTANCE' | 'ARCHIVE' | 'SUCCESS' | 'WARNING' | 'ERROR' | 'INFO';
 
@@ -13,58 +13,58 @@ interface StatusBadgeProps {
 
 const STATUS_CONFIG: Record<StatusType, { bg: string; text: string; border: string; icon: React.ElementType; defaultLabel: string }> = {
   ACTIF: {
-    bg: 'bg-green-50',
-    text: 'text-green-700',
-    border: 'border-green-200',
-    icon: CheckCircle,
+    bg: 'bg-success/15',
+    text: 'text-success',
+    border: 'border-success/25',
+    icon: CheckCircle2,
     defaultLabel: 'Actif',
   },
   INACTIF: {
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-200',
+    bg: 'bg-destructive/15',
+    text: 'text-destructive',
+    border: 'border-destructive/25',
     icon: XCircle,
     defaultLabel: 'Inactif',
   },
   EN_INSTANCE: {
-    bg: 'bg-amber-50',
-    text: 'text-amber-700',
-    border: 'border-amber-200',
+    bg: 'bg-warning/15',
+    text: 'text-warning',
+    border: 'border-warning/25',
     icon: Clock,
     defaultLabel: 'En instance',
   },
   ARCHIVE: {
-    bg: 'bg-gray-100',
-    text: 'text-gray-600',
-    border: 'border-gray-200',
+    bg: 'bg-muted',
+    text: 'text-muted-foreground',
+    border: 'border-border',
     icon: Archive,
     defaultLabel: 'Archivé',
   },
   SUCCESS: {
-    bg: 'bg-green-50',
-    text: 'text-green-700',
-    border: 'border-green-200',
-    icon: CheckCircle,
+    bg: 'bg-success/15',
+    text: 'text-success',
+    border: 'border-success/25',
+    icon: CheckCircle2,
     defaultLabel: 'Succès',
   },
   WARNING: {
-    bg: 'bg-amber-50',
-    text: 'text-amber-700',
-    border: 'border-amber-200',
+    bg: 'bg-warning/15',
+    text: 'text-warning',
+    border: 'border-warning/25',
     icon: AlertCircle,
     defaultLabel: 'Alerte',
   },
   ERROR: {
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-200',
+    bg: 'bg-destructive/15',
+    text: 'text-destructive',
+    border: 'border-destructive/25',
     icon: XCircle,
     defaultLabel: 'Erreur',
   },
   INFO: {
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    border: 'border-blue-200',
+    bg: 'bg-[hsl(var(--chart-4)/0.15)]',
+    text: 'text-[hsl(var(--chart-4))]',
+    border: 'border-[hsl(var(--chart-4)/0.3)]',
     icon: AlertCircle,
     defaultLabel: 'Info',
   },
@@ -96,7 +96,7 @@ export function StatusBadge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full border font-medium',
+        'inline-flex items-center rounded-md border font-medium',
         config.bg,
         config.text,
         config.border,

@@ -10,11 +10,11 @@ interface Props {
 }
 
 const COLORS = [
-  { name: 'Bleu', hex: '#3B82F6' },
-  { name: 'Émeraude', hex: '#10B981' },
-  { name: 'Violet', hex: '#8B5CF6' },
-  { name: 'Rose', hex: '#EC4899' },
-  { name: 'Rouge', hex: '#d52b36' },
+  { name: 'Or', hex: '#c5a15d' },
+  { name: 'Rose', hex: '#b9837f' },
+  { name: 'Sauge', hex: '#7c8b7a' },
+  { name: 'Bleu', hex: '#7fa8c2' },
+  { name: 'Violet', hex: '#9c88b3' },
 ];
 
 const SidebarSVG = () => (
@@ -72,13 +72,13 @@ export default function AppearanceDialog({ open, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop */}
-      <div onClick={onClose} className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div onClick={onClose} className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
 
       {/* Dialog */}
-      <div className="relative z-10 w-full max-w-[440px] mx-4 bg-ars-dialog border border-ars-border rounded-[18px] shadow-2xl">
+      <div className="relative z-10 w-full max-w-[440px] mx-4 bg-ars-dialog border border-ars-border rounded-[14px] shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between p-6 pb-0">
-          <h2 className="text-base font-semibold text-ars-text m-0">{t('appearance.title')}</h2>
+          <h2 className="font-display text-base font-semibold text-ars-text m-0">{t('appearance.title')}</h2>
           <button onClick={onClose} className="appearance-btn w-8 h-8 p-0 flex items-center justify-center">
             <X size={14} />
           </button>
@@ -88,7 +88,7 @@ export default function AppearanceDialog({ open, onClose }: Props) {
         <div className="px-6 pt-4 pb-6 max-h-[65vh] overflow-y-auto space-y-6">
           {/* THEME */}
           <div>
-            <p className="text-sm font-medium text-ars-text mb-3">{t('appearance.theme')}</p>
+            <p className="font-mono-label text-[10px] text-ars-text-sec mb-3">{t('appearance.theme')}</p>
             <div className="grid grid-cols-3 gap-3">
               {([
                 { value: 'light', label: t('appearance.themeLight'), Icon: Sun },
@@ -109,7 +109,7 @@ export default function AppearanceDialog({ open, onClose }: Props) {
 
           {/* PRIMARY COLOR */}
           <div>
-            <p className="text-sm font-medium text-ars-text mb-3">{t('appearance.primaryColor')}</p>
+            <p className="font-mono-label text-[10px] text-ars-text-sec mb-3">{t('appearance.primaryColor')}</p>
             <div className="flex items-center gap-3">
               {COLORS.map((c) => (
                 <button
@@ -130,7 +130,7 @@ export default function AppearanceDialog({ open, onClose }: Props) {
 
           {/* LAYOUT */}
           <div>
-            <p className="text-sm font-medium text-ars-text mb-3">{t('appearance.layout')}</p>
+            <p className="font-mono-label text-[10px] text-ars-text-sec mb-3">{t('appearance.layout')}</p>
             <div className="grid grid-cols-2 gap-3">
               {([
                 { value: 'sidebar', label: t('appearance.layoutSidebar'), Icon: SidebarSVG },
@@ -150,7 +150,7 @@ export default function AppearanceDialog({ open, onClose }: Props) {
 
           {/* DIRECTION */}
           <div>
-            <p className="text-sm font-medium text-ars-text mb-3">{t('appearance.direction')}</p>
+            <p className="font-mono-label text-[10px] text-ars-text-sec mb-3">{t('appearance.direction')}</p>
             <div className="grid grid-cols-2 gap-3">
               {([
                 { value: 'ltr', label: 'LTR', Icon: ArrowRight },
@@ -170,7 +170,7 @@ export default function AppearanceDialog({ open, onClose }: Props) {
 
           {/* LANGUAGE */}
           <div>
-            <p className="text-sm font-medium text-ars-text mb-3">{t('appearance.language')}</p>
+            <p className="font-mono-label text-[10px] text-ars-text-sec mb-3">{t('appearance.language')}</p>
             <div className="grid grid-cols-2 gap-3">
               {SUPPORTED_LANGUAGES.map((lang) => (
                 <button

@@ -1,7 +1,10 @@
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/inter/700.css';
+/* ─────────────────────────────────────────
+   FONTS — same family as Maison Lumière admin
+   Fraunces = display/headings, Manrope = body,
+   Space Mono = tracked uppercase labels,
+   Cormorant Garamond = optional editorial accent
+───────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,500&family=Manrope:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -14,19 +17,163 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-/* Reserve scrollbar gutter to avoid layout shifts when scrollbars appear/disappear */
+
 html {
   scrollbar-gutter: stable;
+  scroll-behavior: smooth;
 }
+
 /* ─────────────────────────────────────────
-   APPEARANCE SYSTEM (added)
+   APPEARANCE SYSTEM (Maison Lumière — ink & gold)
+   Single source of truth: full HSL token set,
+   identical key names in :root (light / bright
+   variant) and .dark (deep variant). Gold
+   (--primary / --ars-primary) is IDENTICAL in
+   both — it's the one saturated accent, never
+   reused for anything else.
+
+   These are also mapped 1:1 into tailwind.config.js
+   under the same key names shadcn/ui uses, so future
+   component passes can switch to bg-background,
+   text-foreground, bg-primary, bg-card, border-border,
+   etc. with zero extra work.
 ───────────────────────────────────────── */
+
 :root {
-  --ars-primary: #d52b36;
+  --radius: 0.85rem;
+
+  /* ── LIGHT (bright variant) — pale sage, never white/cream ── */
+  --background: 150 30% 95%;
+  --foreground: 150 35% 11%;
+
+  --card: 150 24% 97%;
+  --card-foreground: 150 35% 11%;
+
+  --popover: 150 26% 96%;
+  --popover-foreground: 150 35% 11%;
+
+  --primary: 39 47% 50%;
+  --primary-foreground: 150 30% 7%;
+  --primary-border: 39 47% 38%;
+
+  --secondary: 150 20% 90%;
+  --secondary-foreground: 150 30% 16%;
+  --secondary-border: 150 18% 82%;
+
+  --muted: 150 18% 88%;
+  --muted-foreground: 150 14% 38%;
+
+  --accent: 150 20% 89%;
+  --accent-foreground: 39 55% 32%;
+
+  --destructive: 6 62% 46%;
+  --destructive-foreground: 42 30% 98%;
+  --destructive-border: 6 55% 55%;
+
+  --success: 142 35% 34%;
+  --success-foreground: 142 40% 97%;
+
+  --warning: 35 82% 40%;
+  --warning-foreground: 35 80% 97%;
+
+  --border: 150 18% 82%;
+  --input: 150 18% 85%;
+  --ring: 39 47% 46%;
+
+  --sidebar-background: 150 32% 93%;
+  --sidebar-foreground: 150 30% 16%;
+  --sidebar-primary: 39 47% 48%;
+  --sidebar-accent: 150 20% 88%;
+  --sidebar-accent-foreground: 39 55% 32%;
+  --sidebar-border: 150 18% 80%;
+
+  --chart-1: 39 47% 50%;
+  --chart-2: 6 55% 55%;
+  --chart-3: 142 30% 40%;
+  --chart-4: 200 35% 45%;
+  --chart-5: 280 25% 50%;
+
+  /* Compatibility layer — used inline via var(--ars-primary)
+     in SidebarNav / HorizontalNav / AppearanceDialog.
+     Default = gold; AppearanceDialog's setPrimaryColor()
+     overrides --ars-primary directly (5-color picker),
+     independent of theme mode. */
+  --ars-primary: #c5a15d;
+  --ars-bg: hsl(var(--background));
+  --ars-surface: hsl(var(--sidebar-background));
+  --ars-dialog: hsl(var(--card));
+  --ars-border: hsl(var(--border));
+  --ars-border-dim: hsl(var(--secondary-border));
+  --ars-text: hsl(var(--foreground));
+  --ars-text-sec: hsl(var(--muted-foreground));
+  --ars-text-muted: hsl(150 12% 55%);
+}
+
+.dark {
+  /* ── DARK (deep variant) — matches Maison Lumière admin exactly ── */
+  --background: 150 22% 5%;
+  --foreground: 42 28% 92%;
+
+  --card: 150 20% 6.5%;
+  --card-foreground: 42 28% 92%;
+
+  --popover: 150 22% 6%;
+  --popover-foreground: 42 28% 92%;
+
+  --primary: 39 47% 57%;
+  --primary-foreground: 150 30% 7%;
+  --primary-border: 39 47% 40%;
+
+  --secondary: 150 16% 11%;
+  --secondary-foreground: 42 22% 88%;
+  --secondary-border: 150 16% 17%;
+
+  --muted: 150 14% 13%;
+  --muted-foreground: 42 12% 63%;
+
+  --accent: 150 16% 13%;
+  --accent-foreground: 39 47% 72%;
+
+  --destructive: 6 62% 54%;
+  --destructive-foreground: 42 30% 96%;
+  --destructive-border: 6 55% 38%;
+
+  --success: 142 35% 44%;
+  --success-foreground: 142 40% 94%;
+
+  --warning: 35 82% 56%;
+  --warning-foreground: 35 80% 10%;
+
+  --border: 150 15% 17%;
+  --input: 150 15% 16%;
+  --ring: 39 47% 57%;
+
+  --sidebar-background: 150 26% 4%;
+  --sidebar-foreground: 42 22% 85%;
+  --sidebar-primary: 39 47% 57%;
+  --sidebar-accent: 150 16% 10%;
+  --sidebar-accent-foreground: 39 47% 72%;
+  --sidebar-border: 150 15% 13%;
+
+  --chart-1: 39 47% 57%;
+  --chart-2: 6 55% 62%;
+  --chart-3: 142 30% 48%;
+  --chart-4: 200 35% 55%;
+  --chart-5: 280 25% 60%;
+
+  --ars-primary: #c5a15d;
+  --ars-bg: hsl(var(--background));
+  --ars-surface: hsl(var(--sidebar-background));
+  --ars-dialog: hsl(var(--card));
+  --ars-border: hsl(var(--border));
+  --ars-border-dim: hsl(150 15% 11%);
+  --ars-text: hsl(var(--foreground));
+  --ars-text-sec: hsl(var(--muted-foreground));
+  --ars-text-muted: hsl(42 12% 38%);
 }
 
 /* ── Primary color retrofit ──────────────────────────────
@@ -40,75 +187,138 @@ html {
 .hover\:text-\[\#d52b36\]:hover { color: var(--ars-primary) !important; }
 .focus\:ring-\[\#d52b36\]:focus { --tw-ring-color: var(--ars-primary) !important; }
 
-/* ── Dark mode retrofit ──────────────────────────────────
-   Remaps the standard Tailwind neutral palette + the app's
-   hardcoded shell hex (#f1f1f1) under .dark, globally. */
-.dark .bg-\[\#f1f1f1\] { background-color: #0a0a0f !important; }
+/* ── Shell background retrofit (both modes) ──────────────
+   The literal bg-[#f7f4ee] dark:bg-[#09110d] hardcoded in
+   DashboardLayout/HorizontalNav now pulls from the token
+   system instead of a disconnected hex, so it always tracks
+   the palette above. */
+.bg-\[\#f7f4ee\] { background-color: hsl(var(--sidebar-background)) !important; }
+.dark .bg-\[\#f7f4ee\] { background-color: hsl(var(--background)) !important; }
 
-.dark .bg-white       { background-color: #16161f !important; }
-.dark .bg-gray-50      { background-color: #1a1a24 !important; }
-.dark .bg-gray-100      { background-color: #1e1e2c !important; }
-.dark .bg-gray-200      { background-color: #262636 !important; }
+/* ── LIGHT MODE retrofit (raw Tailwind gray/white classes) ── */
+.light .bg-white        { background-color: hsl(var(--card)) !important; }
+.light .bg-gray-50       { background-color: hsl(var(--secondary)) !important; }
+.light .bg-gray-100      { background-color: hsl(var(--muted)) !important; }
+.light .bg-gray-200      { background-color: hsl(var(--accent)) !important; }
 
-.dark .text-gray-900   { color: #f8fafc !important; }
-.dark .text-gray-800   { color: #e2e8f0 !important; }
-.dark .text-gray-700   { color: #cbd5e1 !important; }
-.dark .text-gray-600   { color: #94a3b8 !important; }
-.dark .text-gray-500   { color: #64748b !important; }
-.dark .text-gray-400   { color: #475569 !important; }
+.light .text-gray-900    { color: hsl(var(--foreground)) !important; }
+.light .text-gray-800    { color: hsl(150 30% 16%) !important; }
+.light .text-gray-700    { color: hsl(150 22% 26%) !important; }
+.light .text-gray-600    { color: hsl(var(--muted-foreground)) !important; }
+.light .text-gray-500    { color: hsl(150 12% 48%) !important; }
+.light .text-gray-400    { color: hsl(150 10% 60%) !important; }
+.light .text-gray-300    { color: hsl(150 22% 26%) !important; }
 
-.dark .border-gray-100 { border-color: #1e1e2c !important; }
-.dark .border-gray-200 { border-color: #262636 !important; }
-.dark .border-gray-300 { border-color: #2e2e42 !important; }
+.light .border-gray-100  { border-color: hsl(150 20% 90%) !important; }
+.light .border-gray-200  { border-color: hsl(var(--border)) !important; }
+.light .border-gray-300  { border-color: hsl(var(--secondary-border)) !important; }
 
-.dark .hover\:bg-gray-50:hover  { background-color: #1e1e2c !important; }
-.dark .hover\:bg-gray-100:hover { background-color: #262636 !important; }
-.dark .hover\:bg-white:hover    { background-color: #1e1e2c !important; }
+.light .hover\:bg-gray-50:hover  { background-color: hsl(var(--secondary)) !important; }
+.light .hover\:bg-gray-100:hover { background-color: hsl(var(--muted)) !important; }
+.light .hover\:bg-white:hover    { background-color: hsl(var(--secondary)) !important; }
 
-/* Tinted status backgrounds (alerts, badges) — kept colored,
-   just darkened so they don't stay paper-white in dark mode */
-.dark .bg-red-50    { background-color: rgba(239, 68, 68, 0.12) !important; }
-.dark .bg-blue-50    { background-color: rgba(59, 130, 246, 0.12) !important; }
-.dark .bg-green-50    { background-color: rgba(34, 197, 94, 0.12) !important; }
-.dark .bg-amber-50    { background-color: rgba(245, 158, 11, 0.12) !important; }
-.dark .bg-emerald-50    { background-color: rgba(16, 185, 129, 0.12) !important; }
-.dark .bg-purple-50    { background-color: rgba(139, 92, 246, 0.12) !important; }
+.light .bg-red-50     { background-color: hsl(var(--destructive) / 0.10) !important; }
+.light .bg-blue-50     { background-color: hsl(200 35% 55% / 0.10) !important; }
+.light .bg-green-50     { background-color: hsl(var(--success) / 0.10) !important; }
+.light .bg-amber-50     { background-color: hsl(var(--warning) / 0.10) !important; }
+.light .bg-emerald-50     { background-color: hsl(var(--success) / 0.10) !important; }
+.light .bg-purple-50     { background-color: hsl(280 25% 50% / 0.10) !important; }
 
-/* Inputs / selects (jj/mm/aaaa fields, dropdowns) */
+.light input, .light select, .light textarea {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+}
+.light input::placeholder, .light textarea::placeholder { color: hsl(150 12% 55%) !important; }
+
+/* ── DARK MODE retrofit (raw Tailwind gray/white classes) ── */
+.dark .bg-white        { background-color: hsl(var(--card)) !important; }
+.dark .bg-gray-50       { background-color: hsl(var(--secondary)) !important; }
+.dark .bg-gray-100      { background-color: hsl(var(--muted)) !important; }
+.dark .bg-gray-200      { background-color: hsl(var(--accent)) !important; }
+
+.dark .text-gray-900    { color: hsl(var(--foreground)) !important; }
+.dark .text-gray-800    { color: hsl(42 22% 86%) !important; }
+.dark .text-gray-700    { color: hsl(42 14% 76%) !important; }
+.dark .text-gray-600    { color: hsl(var(--muted-foreground)) !important; }
+.dark .text-gray-500    { color: hsl(42 8% 48%) !important; }
+.dark .text-gray-400    { color: hsl(42 8% 36%) !important; }
+.dark .text-gray-300    { color: hsl(42 14% 76%) !important; }
+
+.dark .border-gray-100  { border-color: hsl(150 16% 10%) !important; }
+.dark .border-gray-200  { border-color: hsl(var(--border)) !important; }
+.dark .border-gray-300  { border-color: hsl(150 15% 22%) !important; }
+
+.dark .hover\:bg-gray-50:hover  { background-color: hsl(var(--secondary)) !important; }
+.dark .hover\:bg-gray-100:hover { background-color: hsl(var(--muted)) !important; }
+.dark .hover\:bg-white:hover    { background-color: hsl(var(--secondary)) !important; }
+
+.dark .bg-red-50     { background-color: hsl(var(--destructive) / 0.12) !important; }
+.dark .bg-blue-50     { background-color: hsl(200 35% 55% / 0.12) !important; }
+.dark .bg-green-50     { background-color: hsl(var(--success) / 0.12) !important; }
+.dark .bg-amber-50     { background-color: hsl(var(--warning) / 0.12) !important; }
+.dark .bg-emerald-50     { background-color: hsl(var(--success) / 0.12) !important; }
+.dark .bg-purple-50     { background-color: hsl(280 25% 50% / 0.12) !important; }
+
 .dark input, .dark select, .dark textarea {
-  background-color: #1a1a24 !important;
-  color: #f8fafc !important;
-  border-color: #262636 !important;
+  background-color: hsl(var(--secondary)) !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
 }
-.dark input::placeholder, .dark textarea::placeholder { color: #64748b !important; }
+.dark input::placeholder, .dark textarea::placeholder { color: hsl(42 8% 36%) !important; }
 
-/* ── Appearance dialog own styling (unaffected by above) ── */
-:root {
-  --ars-primary: #d52b36;
-  --ars-bg: #ffffff;
-  --ars-surface: #f8fafc;
-  --ars-dialog: #ffffff;
-  --ars-border: #e2e8f0;
-  --ars-border-dim: #f1f5f9;
-  --ars-text: #0f172a;
-  --ars-text-sec: #475569;
-  --ars-text-muted: #94a3b8;
-}
-.dark {
-  --ars-bg: #0a0a0f;
-  --ars-surface: #13131a;
-  --ars-dialog: #16161f;
-  --ars-border: #262636;
-  --ars-border-dim: #1e1e2c;
-  --ars-text: #f8fafc;
-  --ars-text-sec: #94a3b8;
-  --ars-text-muted: #475569;
-}
+/* ── Appearance dialog own styling ────────────────────── */
 .bg-ars-dialog { background: var(--ars-dialog); }
 .border-ars-border { border-color: var(--ars-border); }
 .text-ars-text { color: var(--ars-text); }
 
-.appearance-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px; border-radius: 12px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; background: rgba(0,0,0,0.03); border: 1px solid var(--ars-border-dim); color: var(--ars-text-sec); }
+.appearance-btn { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 12px; border-radius: calc(var(--radius) - 2px); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s ease; background: hsl(var(--muted) / 0.5); border: 1px solid var(--ars-border-dim); color: var(--ars-text-sec); }
 .dark .appearance-btn { background: rgba(255,255,255,0.04); }
 .appearance-btn:hover { border-color: var(--ars-border); color: var(--ars-text); }
-.appearance-btn-active { background: rgba(213,43,54,0.08); border-color: var(--ars-primary); color: var(--ars-text); }
+.appearance-btn-active { background: color-mix(in srgb, var(--ars-primary) 10%, transparent); border-color: var(--ars-primary); color: var(--ars-text); }
+
+/* ─────────────────────────────────────────
+   PREMIUM UTILITIES — ported from Maison
+   Lumière admin, ready for the component pass.
+   Purely additive: nothing uses these yet,
+   so nothing existing changes.
+───────────────────────────────────────── */
+.font-display    { font-family: 'Fraunces', Georgia, serif; }
+.font-garamond    { font-family: 'Cormorant Garamond', serif; }
+.font-mono-label  { font-family: 'Space Mono', monospace; letter-spacing: .16em; text-transform: uppercase; }
+
+.glass-panel {
+  background: linear-gradient(180deg, hsl(var(--foreground) / 0.05), hsl(var(--foreground) / 0.015));
+  border: 1px solid hsl(var(--border));
+  backdrop-filter: blur(18px);
+}
+.gold-text {
+  background: linear-gradient(90deg, #e3c888, #c5a15d 55%, #8f7038);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.grain-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 60; opacity: .035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+}
+.stat-card-glow {
+  position: absolute; inset: -1px; border-radius: inherit; opacity: 0; transition: opacity .35s ease;
+  background: radial-gradient(120px 80px at 20% 0%, rgba(197,161,93,0.22), transparent 70%);
+}
+.group:hover .stat-card-glow { opacity: 1; }
+
+.hover-elevate { position: relative; }
+.hover-elevate::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: hsl(var(--foreground) / 0.045); opacity: 0; transition: opacity .15s ease; pointer-events: none;
+}
+.hover-elevate:hover::after { opacity: 1; }
+.active-elevate-2:active::after { background: hsl(var(--foreground) / 0.09); opacity: 1; }
+
+::selection { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--primary) / 0.5); }

@@ -180,7 +180,7 @@ export default function DecaissementForm({ decaissementId, affaireId, onSuccess,
             </div>
 
             <div>
-              <Label>Taux de règlement {currency !== 'TND' && <span className="text-gray-400 text-xs">(optionnel — auto BCT si vide)</span>}</Label>
+              <Label>Taux de règlement {currency !== 'TND' && <span className="text-muted-foreground text-xs">(optionnel — auto BCT si vide)</span>}</Label>
               <Input type="number" step="0.000001" {...register('tauxReglement', { valueAsNumber: true })} disabled={currency === 'TND'} placeholder={currency === 'TND' ? '1' : 'Auto'} />
             </div>
 

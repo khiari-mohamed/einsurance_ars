@@ -63,7 +63,7 @@ export default function SWIFTUpload({ ordrePaiementId, reference, montant, curre
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <FileText className="text-blue-600" size={24} />
+        <FileText className="text-primary" size={24} />
         <div>
           <h3 className="font-semibold">Ordre {reference}</h3>
           <p className="text-sm text-gray-600">{beneficiaire} — {formatCurrency(montant, currency)}</p>
@@ -72,7 +72,7 @@ export default function SWIFTUpload({ ordrePaiementId, reference, montant, curre
 
       {!file ? (
         <label className="block">
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors">
+          <div className="border-2 border-dashed border-border rounded-lg p-6 text-center cursor-pointer hover:border-primary hover:bg-primary/10 transition-colors">
             <Upload className="mx-auto mb-2 text-gray-400" size={32} />
             <p className="text-sm font-medium text-gray-700">Cliquez pour sélectionner le fichier SWIFT</p>
             <p className="text-xs text-gray-500 mt-1">PDF, JPG ou PNG (max 5MB)</p>

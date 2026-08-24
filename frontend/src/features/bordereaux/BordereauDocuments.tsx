@@ -89,7 +89,7 @@ export default function BordereauDocuments({ bordereauId }: Props) {
   const rows = documents?.data ?? [];
 
   if (isLoading) {
-    return <Card className="p-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div><p className="mt-4 text-gray-600">Chargement...</p></Card>;
+    return <Card className="p-8 text-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div><p className="mt-4 text-muted-foreground">Chargement...</p></Card>;
   }
 
   return (
@@ -105,11 +105,11 @@ export default function BordereauDocuments({ bordereauId }: Props) {
             <Card key={link.id} className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 flex-1">
-                  <div className="p-2 bg-blue-100 rounded-lg"><FileText className="text-blue-600" size={24} /></div>
+                  <div className="p-2 bg-primary/15 rounded-lg"><FileText className="text-primary" size={24} /></div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{link.document.originalName ?? link.document.nom}</p>
-                    <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
-                      {link.document.documentType && <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs">{link.document.documentType}</span>}
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground mt-1">
+                      {link.document.documentType && <span className="px-2 py-1 bg-muted text-foreground rounded text-xs">{link.document.documentType}</span>}
                       <span>•</span><span>{formatFileSize(link.document.sizeBytes)}</span>
                       <span>•</span><span>{new Date(link.document.createdAt).toLocaleDateString('fr-FR')}</span>
                     </div>
@@ -117,7 +117,7 @@ export default function BordereauDocuments({ bordereauId }: Props) {
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" variant="ghost" title="Télécharger" onClick={() => downloadDocument(link.document.id, link.document.originalName ?? link.document.nom)}>
-                    <Download size={16} className="text-blue-500" />
+                    <Download size={16} className="text-primary" />
                   </Button>
                   <Button size="sm" variant="ghost" title="Supprimer" onClick={() => { if (confirm('Retirer ce document ?')) deleteMutation.mutate(link.id); }}>
                     <Trash2 size={16} className="text-red-500" />
@@ -130,7 +130,7 @@ export default function BordereauDocuments({ bordereauId }: Props) {
       ) : (
         <Card className="p-12 text-center">
           <FileText className="mx-auto text-gray-400 mb-4" size={48} />
-          <p className="text-gray-600">Aucun document attaché</p>
+          <p className="text-muted-foreground">Aucun document attaché</p>
           <Button onClick={() => setUploadModal(true)} variant="outline" className="mt-4 gap-2"><Upload size={18} /> Ajouter le premier document</Button>
         </Card>
       )}
@@ -142,20 +142,20 @@ export default function BordereauDocuments({ bordereauId }: Props) {
               <h3 className="text-xl font-semibold mb-4">Ajouter un Document</h3>
               <form onSubmit={handleUpload} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Fichier <span className="text-red-500">*</span></label>
-                  <input type="file" onChange={handleFileSelect} className="w-full border rounded-lg px-3 py-2" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls" required />
-                  <p className="text-xs text-gray-500 mt-1">Formats acceptés: PDF, JPEG, PNG, Excel (max 10 MB)</p>
-                  {uploadData.file && <p className="text-sm text-green-600 mt-2">✓ {uploadData.file.name} ({formatFileSize(uploadData.file.size)})</p>}
+                  <label className="block text-sm font-medium mb-2">Fichier <span className="text-destructive">*</span></label>
+                  <input type="file" onChange={handleFileSelect} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" accept=".pdf,.jpg,.jpeg,.png,.xlsx,.xls" required />
+                  <p className="text-xs text-muted-foreground mt-1">Formats acceptés: PDF, JPEG, PNG, Excel (max 10 MB)</p>
+                  {uploadData.file && <p className="text-sm text-success mt-2">✓ {uploadData.file.name} ({formatFileSize(uploadData.file.size)})</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2">Type de Document <span className="text-red-500">*</span></label>
-                  <select value={uploadData.type} onChange={(e) => setUploadData({ ...uploadData, type: e.target.value as BordereauDocumentType })} className="w-full border rounded-lg px-3 py-2" required>
+                  <label className="block text-sm font-medium mb-2">Type de Document <span className="text-destructive">*</span></label>
+                  <select value={uploadData.type} onChange={(e) => setUploadData({ ...uploadData, type: e.target.value as BordereauDocumentType })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" required>
                     {DOCUMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-2">Description</label>
-                  <textarea value={uploadData.description} onChange={(e) => setUploadData({ ...uploadData, description: e.target.value })} className="w-full border rounded-lg px-3 py-2" rows={3} />
+                  <textarea value={uploadData.description} onChange={(e) => setUploadData({ ...uploadData, description: e.target.value })} className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2" rows={3} />
                 </div>
                 <div className="flex gap-3 pt-4 border-t">
                   <Button type="submit" className="flex-1" disabled={uploadMutation.isPending || !uploadData.file}>

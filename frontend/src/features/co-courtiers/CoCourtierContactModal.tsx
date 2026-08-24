@@ -46,12 +46,12 @@ export default function CoCourtierContactModal({ contact, onSave, onClose, isSav
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-[16px] font-semibold text-gray-900">
+      <div className="bg-card rounded-[var(--radius)] border border-border w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border">
+          <h2 className="text-[16px] font-semibold text-foreground">
             {contact ? 'Modifier le contact' : 'Nouveau contact'}
           </h2>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
             <X size={18} />
           </button>
         </div>

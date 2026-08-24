@@ -17,10 +17,10 @@ export default function BalanceSheet() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Bilan</h1>
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 space-y-4">
+      <div className="bg-primary/10 border border-primary/30 rounded-lg p-6 space-y-4">
         <div className="flex items-start gap-3">
-          <Info className="text-blue-600 shrink-0 mt-0.5" size={22} />
-          <div className="text-sm text-blue-900">
+          <Info className="text-primary shrink-0 mt-0.5" size={22} />
+          <div className="text-sm text-foreground">
             <p className="font-semibold mb-1">Le bilan (actif/passif) n'est pas produit par ce module.</p>
             <p>
               Selon le cahier des charges, ARS Réassurance gère les écritures techniques (génération, validation) et
@@ -30,10 +30,10 @@ export default function BalanceSheet() {
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
-          <button onClick={() => navigate('/comptabilite/profit-loss')} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-white border border-blue-300 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-100">
+          <button onClick={() => navigate('/comptabilite/profit-loss')} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-card border border-border rounded-lg text-sm font-medium text-primary hover:bg-muted">
             Voir le Compte de Résultat <ArrowRight size={16} />
           </button>
-          <button onClick={() => navigate('/comptabilite/export')} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+          <button onClick={() => navigate('/comptabilite/export')} className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90">
             <Download size={16} /> Fichier d'intégration
           </button>
         </div>

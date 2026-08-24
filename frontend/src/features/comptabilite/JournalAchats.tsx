@@ -17,25 +17,25 @@ export default function JournalAchats() {
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-1">Journal Achats</h1>
-      <p className="text-sm text-gray-500 mb-6">Réassureurs (comptes 401xxxxx)</p>
+      <p className="text-sm text-muted-foreground mb-6">Réassureurs (comptes 401xxxxx)</p>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-card rounded-[var(--radius)] border border-border overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Écriture</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Réassureur</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Libellé</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Débit</th>
-              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Crédit</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Date</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Écriture</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Réassureur</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">Libellé</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Débit</th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase">Crédit</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {isLoading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Chargement...</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Chargement...</td></tr>
             ) : lines.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-500">Aucune écriture</td></tr>
+              <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Aucune écriture</td></tr>
             ) : (
               lines.map((l) => (
                 <tr key={l.id} className="hover:bg-gray-50">

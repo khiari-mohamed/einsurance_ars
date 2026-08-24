@@ -33,7 +33,7 @@ export default function FourStepPaymentWizard({ affaireId, onComplete }: Props) 
     onError: (e: any) => toast.error(e.response?.data?.message || 'Erreur lors de l\'exécution'),
   });
 
-  if (!affaire) return <div className="p-6 text-gray-500">Chargement...</div>;
+  if (!affaire) return <div className="p-6 text-muted-foreground">Chargement...</div>;
 
   const totalArsCommission = affaire.reassureurs.reduce((s: number, r: any) => s + (r.commissionArs ?? 0), 0);
 
@@ -41,7 +41,7 @@ export default function FourStepPaymentWizard({ affaireId, onComplete }: Props) 
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <div>
         <h2 className="text-xl font-bold">Flux de Paiement 4 Étapes</h2>
-        <p className="text-gray-600">Affaire {affaire.numero} — {affaire.cedante?.raisonSociale}</p>
+        <p className="text-muted-foreground">Affaire {affaire.numero} — {affaire.cedante?.raisonSociale}</p>
       </div>
 
       {affaire.modePaiement !== 'PAR_AFFAIRE' && (

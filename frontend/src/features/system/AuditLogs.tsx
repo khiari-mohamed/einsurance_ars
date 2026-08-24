@@ -12,7 +12,7 @@ export default function AuditLogs() {
 
   return (
     <div className="p-8">
-      <h1 className="text-3xl font-bold text-gray-800 mb-6">Journal d'Audit</h1>
+      <h1 className="font-display text-3xl font-semibold text-foreground mb-6">Journal d'Audit</h1>
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full">
           <thead className="bg-gray-50">

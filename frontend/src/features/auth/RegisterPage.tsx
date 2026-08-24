@@ -67,14 +67,14 @@ export default function RegisterPage() {
       <div className="space-y-5">
         <Link
           to="/login"
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-red-600"
+          className="inline-flex items-center gap-2 text-sm font-medium text-[#5b6358] transition hover:text-[#8f7038]"
         >
           <ArrowLeft className="h-4 w-4" />
           Retour à la connexion
         </Link>
 
         {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-2xl border border-[#d1503a]/25 bg-[#d1503a]/10 px-4 py-3 text-sm text-[#c23f2b]">
             {error}
           </div>
         )}
@@ -83,14 +83,14 @@ export default function RegisterPage() {
           {/* Prénom / Nom */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Prénom</label>
+              <label className="mb-2 block text-sm font-medium text-[#171f1a]">Prénom</label>
               <div className="relative">
-                <UserIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <UserIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93917f]" />
                 <input
                   type="text"
                   value={formData.prenom}
                   onChange={set('prenom')}
-                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                  className="h-12 w-full rounded-2xl border border-[#e8e2d2] bg-white pl-11 pr-4 text-sm text-[#171f1a] outline-none transition placeholder:text-[#93917f] focus:border-[#c5a15d] focus:ring-4 focus:ring-[#c5a15d]/20"
                   placeholder="Prénom"
                   autoComplete="given-name"
                   required
@@ -98,14 +98,14 @@ export default function RegisterPage() {
               </div>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Nom</label>
+              <label className="mb-2 block text-sm font-medium text-[#171f1a]">Nom</label>
               <div className="relative">
-                <UserIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <UserIcon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93917f]" />
                 <input
                   type="text"
                   value={formData.nom}
                   onChange={set('nom')}
-                  className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                  className="h-12 w-full rounded-2xl border border-[#e8e2d2] bg-white pl-11 pr-4 text-sm text-[#171f1a] outline-none transition placeholder:text-[#93917f] focus:border-[#c5a15d] focus:ring-4 focus:ring-[#c5a15d]/20"
                   placeholder="Nom"
                   autoComplete="family-name"
                   required
@@ -116,14 +116,14 @@ export default function RegisterPage() {
 
           {/* Email */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Adresse e-mail</label>
+            <label className="mb-2 block text-sm font-medium text-[#171f1a]">Adresse e-mail</label>
             <div className="relative">
-              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93917f]" />
               <input
                 type="email"
                 value={formData.email}
                 onChange={set('email')}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                className="h-12 w-full rounded-2xl border border-[#e8e2d2] bg-white pl-11 pr-4 text-sm text-[#171f1a] outline-none transition placeholder:text-[#93917f] focus:border-[#c5a15d] focus:ring-4 focus:ring-[#c5a15d]/20"
                 placeholder="prenom.nom@arstunisie.com"
                 autoComplete="email"
                 required
@@ -133,14 +133,14 @@ export default function RegisterPage() {
 
           {/* Password */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Mot de passe</label>
+            <label className="mb-2 block text-sm font-medium text-[#171f1a]">Mot de passe</label>
             <div className="relative">
-              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93917f]" />
               <input
                 type={showPwd ? 'text' : 'password'}
                 value={formData.password}
                 onChange={set('password')}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                className="h-12 w-full rounded-2xl border border-[#e8e2d2] bg-white pl-11 pr-12 text-sm text-[#171f1a] outline-none transition placeholder:text-[#93917f] focus:border-[#c5a15d] focus:ring-4 focus:ring-[#c5a15d]/20"
                 placeholder={`Minimum ${MIN_PASSWORD_LENGTH} caractères`}
                 autoComplete="new-password"
                 required
@@ -151,7 +151,7 @@ export default function RegisterPage() {
                 onClick={() => setShowPwd((v) => !v)}
                 tabIndex={-1}
                 aria-label={showPwd ? 'Masquer' : 'Afficher'}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#93917f] transition hover:text-[#5b6358]"
               >
                 {showPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -160,16 +160,16 @@ export default function RegisterPage() {
 
           {/* Confirm password */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label className="mb-2 block text-sm font-medium text-[#171f1a]">
               Confirmer le mot de passe
             </label>
             <div className="relative">
-              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Lock className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93917f]" />
               <input
                 type={showConfirm ? 'text' : 'password'}
                 value={formData.confirmPassword}
                 onChange={set('confirmPassword')}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-12 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                className="h-12 w-full rounded-2xl border border-[#e8e2d2] bg-white pl-11 pr-12 text-sm text-[#171f1a] outline-none transition placeholder:text-[#93917f] focus:border-[#c5a15d] focus:ring-4 focus:ring-[#c5a15d]/20"
                 placeholder="Répétez votre mot de passe"
                 autoComplete="new-password"
                 required
@@ -180,7 +180,7 @@ export default function RegisterPage() {
                 onClick={() => setShowConfirm((v) => !v)}
                 tabIndex={-1}
                 aria-label={showConfirm ? 'Masquer' : 'Afficher'}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-slate-600"
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#93917f] transition hover:text-[#5b6358]"
               >
                 {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -189,11 +189,11 @@ export default function RegisterPage() {
 
           {/* Role */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Rôle</label>
+            <label className="mb-2 block text-sm font-medium text-[#171f1a]">Rôle</label>
             <select
               value={formData.role}
               onChange={set('role')}
-              className="h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-red-500 focus:ring-4 focus:ring-red-100"
+              className="h-12 w-full rounded-2xl border border-[#e8e2d2] bg-white px-4 text-sm text-[#171f1a] outline-none transition focus:border-[#c5a15d] focus:ring-4 focus:ring-[#c5a15d]/20"
             >
               {ROLES.map((r) => (
                 <option key={r.value} value={r.value}>
@@ -206,11 +206,11 @@ export default function RegisterPage() {
           <button
             type="submit"
             disabled={loading}
-            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-red-600 to-red-500 text-sm font-semibold text-white transition hover:from-red-700 hover:to-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#c5a15d] to-[#b8914e] text-sm font-semibold text-[#0e1712] transition hover:from-[#b8914e] hover:to-[#a8813f] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? (
               <>
-                <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                <div className="h-4 w-4 rounded-full border-2 border-[#0e1712]/30 border-t-[#0e1712] animate-spin" />
                 <span>Création en cours…</span>
               </>
             ) : (
@@ -222,9 +222,9 @@ export default function RegisterPage() {
           </button>
         </form>
 
-        <div className="rounded-2xl border border-red-100 bg-red-50/50 px-4 py-3 text-sm text-slate-600">
+        <div className="rounded-2xl border border-[#c5a15d]/20 bg-[#c5a15d]/5 px-4 py-3 text-sm text-[#5b6358]">
           Vous avez déjà un compte ?{' '}
-          <Link to="/login" className="font-semibold text-red-600 transition hover:text-red-700">
+          <Link to="/login" className="font-semibold text-[#8f7038] transition hover:text-[#6b5529]">
             Se connecter
           </Link>
         </div>

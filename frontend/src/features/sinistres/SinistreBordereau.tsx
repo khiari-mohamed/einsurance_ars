@@ -21,7 +21,7 @@ export default function SinistreBordereau() {
 
   return (
     <div className="p-8">
-      <div className="max-w-lg mx-auto text-center bg-white rounded-lg shadow p-8">
+      <div className="max-w-lg mx-auto text-center bg-card rounded-[var(--radius)] border border-border p-8">
         <FileText className="mx-auto text-blue-500 mb-4" size={40} />
         <h2 className="text-xl font-semibold text-gray-800 mb-2">
           Génération de bordereau sinistre

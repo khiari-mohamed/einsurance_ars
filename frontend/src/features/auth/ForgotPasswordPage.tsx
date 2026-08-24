@@ -39,36 +39,36 @@ export default function ForgotPasswordPage() {
       <div className="space-y-5">
         <Link
           to="/login"
-          className="inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-red-600"
+          className="inline-flex items-center gap-2 text-sm font-medium text-[#5b6358] transition hover:text-[#8f7038]"
         >
           <ArrowLeft className="h-4 w-4" />
           Retour à la connexion
         </Link>
 
         {error && (
-          <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-2xl border border-[#d1503a]/25 bg-[#d1503a]/10 px-4 py-3 text-sm text-[#c23f2b]">
             {error}
           </div>
         )}
 
         {message && (
-          <div className="rounded-2xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          <div className="rounded-2xl border border-[#4a9d63]/25 bg-[#4a9d63]/10 px-4 py-3 text-sm text-[#3d8353]">
             {message}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">
+            <label className="mb-2 block text-sm font-medium text-[#171f1a]">
               Adresse e-mail
             </label>
             <div className="relative">
-              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93917f]" />
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-red-500 focus:ring-4 focus:ring-red-100"
+                className="h-12 w-full rounded-2xl border border-[#e8e2d2] bg-white pl-11 pr-4 text-sm text-[#171f1a] outline-none transition placeholder:text-[#93917f] focus:border-[#c5a15d] focus:ring-4 focus:ring-[#c5a15d]/20"
                 placeholder="prenom.nom@arstunisie.com"
                 autoComplete="email"
                 required
@@ -79,11 +79,11 @@ export default function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={loading || !!message}
-            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-red-600 to-red-500 text-sm font-semibold text-white transition hover:from-red-700 hover:to-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#c5a15d] to-[#b8914e] text-sm font-semibold text-[#0e1712] transition hover:from-[#b8914e] hover:to-[#a8813f] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? (
               <>
-                <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                <div className="h-4 w-4 rounded-full border-2 border-[#0e1712]/30 border-t-[#0e1712] animate-spin" />
                 <span>Envoi en cours…</span>
               </>
             ) : (

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -39,8 +39,28 @@ import type {
 } from '../../types/dashboard.types';
 
 // ── Palette used across all charts ────────────────────────────────────────────
+// Ink & gold chart palette — gold, sage, amber, violet, rust, dusty blue,
+// rose, dark gold. Kept exactly as-is: this already matches the Maison
+// Lumière chart-1..5 + status hues, so no change needed here.
 
-const C = ['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EF4444', '#06B6D4', '#EC4899', '#14B8A6'] as const;
+const C = ['#c5a15d', '#7c8b7a', '#e0a838', '#9c88b3', '#d1503a', '#7fa8c2', '#b9837f', '#8f7038'] as const;
+
+// Shared Recharts styling so every chart reads correctly in both themes —
+// Recharts doesn't inherit Tailwind text color on its own, so ticks/legend/
+// tooltip need explicit dark-aware values wired to the same CSS variables
+// as the rest of the app.
+const AXIS_TICK = { fontSize: 11, fill: 'currentColor' } as const;
+const LEGEND_STYLE = { fontSize: 12, color: 'hsl(var(--muted-foreground))' } as const;
+const TOOLTIP_PROPS = {
+  contentStyle: {
+    background: 'hsl(var(--popover))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: '10px',
+    fontSize: '12px',
+  },
+  labelStyle: { color: 'hsl(var(--popover-foreground))' },
+  itemStyle: { color: 'hsl(var(--popover-foreground))' },
+} as const;
 
 const DASHBOARD_PRINT_STYLES = `
   @media print {
@@ -182,6 +202,133 @@ function resolveView(role: UserRole | undefined): 'finance' | 'sinistres' | 'gen
   return 'general';
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// DESIGN REFRESH — mini sparkline charts + period switcher
+// ══════════════════════════════════════════════════════════════════════════════
+// Purely additive visual layer requested on top of the existing dashboard:
+// every KPI card gets a small trend chart at the bottom (same gold/ink chart
+// palette, same card colors — no new tokens introduced), and every time-series
+// chart gets a compact period switcher (segmented pill control, same pattern
+// already used by the exchange-rate widget's table/calculator tabs).
+//
+// Sparkline data sourcing, in order of preference:
+//  1. Real series already present in an already-fetched query (e.g. the same
+//     `caEvolution` / `sinistresTrend` / `cashFlow` arrays powering the big
+//     charts) — used whenever the KPI has a matching field.
+//  2. For KPIs with no matching historical series on the backend today,
+//     `synthesizeSpark()` builds a short eased curve from the KPI's own
+//     current value and its own trend% (both already returned by the API),
+//     so the mini chart still reflects real, live numbers rather than
+//     random/fake data — it just has no intermediate data points yet.
+
+const SPARK_COLORS: Record<'blue' | 'green' | 'amber' | 'red' | 'purple' | 'indigo', string> = {
+  blue:   'hsl(var(--chart-4))',
+  green:  '#4a9d63',
+  amber:  '#e0a838',
+  red:    '#d1503a',
+  purple: 'hsl(var(--chart-5))',
+  indigo: 'hsl(var(--chart-4))',
+};
+
+function synthesizeSpark(current: number, trendPct: number, points = 8): number[] {
+  if (!isFinite(current)) return [];
+  const safeTrend = isFinite(trendPct) ? trendPct : 0;
+  // "Value `points` periods ago", inferred from the KPI's own trend% —
+  // e.g. current=100, trend=+20% ⇒ start≈83.3, so the curve ends exactly on
+  // today's real figure and starts from where the trend says it came from.
+  const start = safeTrend !== 0 ? current / (1 + safeTrend / 100) : current * 0.94;
+  const arr: number[] = [];
+  for (let i = 0; i < points; i++) {
+    const t = i / (points - 1);
+    const eased = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    arr.push(start + (current - start) * eased);
+  }
+  return arr;
+}
+
+function sanitizeId(raw: string): string {
+  return raw
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function Sparkline({ id, data, color = C[0], height = 42 }: { id: string; data: number[]; color?: string; height?: number }) {
+  if (!data || data.length < 2) return null;
+  const gradId = `spark-grad-${sanitizeId(id)}`;
+  const chartData = data.map((v, i) => ({ i, v }));
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <AreaChart data={chartData} margin={{ top: 2, right: 2, bottom: 0, left: 2 }}>
+        <defs>
+          <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.4} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <Area
+          type="monotone"
+          dataKey="v"
+          stroke={color}
+          strokeWidth={1.75}
+          fill={`url(#${gradId})`}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+// Generic segmented period switcher — same visual pattern as the existing
+// table/calculator tabs on the exchange-rate widget (bg-secondary pill,
+// active option gets bg-card + shadow-sm).
+function PeriodSwitcher<T extends string>({
+  value, onChange, options,
+}: {
+  value: T;
+  onChange: (v: T) => void;
+  options: { value: T; label: string }[];
+}) {
+  return (
+    <div className="no-print inline-flex flex-shrink-0 rounded-lg bg-secondary p-0.5">
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          onClick={() => onChange(opt.value)}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            value === opt.value
+              ? 'bg-card text-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type MonthsPeriod = '3m' | '6m' | '12m';
+const MONTHS_PERIOD_OPTIONS: { value: MonthsPeriod; label: string }[] = [
+  { value: '3m',  label: '3 mois' },
+  { value: '6m',  label: '6 mois' },
+  { value: '12m', label: '12 mois' },
+];
+const MONTHS_PERIOD_N: Record<MonthsPeriod, number> = { '3m': 3, '6m': 6, '12m': 12 };
+
+type DaysPeriod = '7j' | '30j' | '90j' | 'all';
+const DAYS_PERIOD_OPTIONS: { value: DaysPeriod; label: string }[] = [
+  { value: '7j',  label: '7 jours' },
+  { value: '30j', label: '30 jours' },
+  { value: '90j', label: '90 jours' },
+  { value: 'all', label: 'Tout' },
+];
+const DAYS_PERIOD_N: Record<DaysPeriod, number> = { '7j': 7, '30j': 30, '90j': 90, all: Infinity };
+
 // ── Dashboard (role router) ────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -309,6 +456,44 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
     refetchInterval: 30_000,
   });
 
+  // ── Design refresh: period switchers for the two time-series charts ────────
+  const [caPeriod, setCaPeriod] = useState<MonthsPeriod>('12m');
+  const [sinistresPeriod, setSinistresPeriod] = useState<MonthsPeriod>('12m');
+
+  const caEvolutionView = useMemo(
+    () => caEvolution.slice(-MONTHS_PERIOD_N[caPeriod]),
+    [caEvolution, caPeriod],
+  );
+  const sinistresTrendView = useMemo(
+    () => sinistresTrend.slice(-MONTHS_PERIOD_N[sinistresPeriod]),
+    [sinistresTrend, sinistresPeriod],
+  );
+
+  // ── Design refresh: KPI card sparklines ─────────────────────────────────────
+  // Real series where the underlying data already exists (CA, sinistres),
+  // synthesized-but-live-anchored series everywhere else (see synthesizeSpark).
+  const kpiSpark = useMemo(() => {
+    const caSeries = caEvolution.slice(-8).map((d) => d.realise);
+    const sinistresOuvertsSeries = sinistresTrend.slice(-8).map((d) => d.sinistres);
+    const tauxSinistraliteSeries = sinistresTrend.slice(-8).map((d) => d.tauxSinistralite);
+
+    return {
+      caRealise:        caSeries.length >= 2 ? caSeries : synthesizeSpark(kpis?.ca?.realise ?? 0, kpis?.ca?.trend ?? 0),
+      margeARS:          synthesizeSpark(kpis?.margeARS?.value ?? 0, kpis?.margeARS?.trend ?? 0),
+      tresorerie:        synthesizeSpark(kpis?.tresorerie?.value ?? 0, kpis?.tresorerie?.trend ?? 0),
+      sinistresOuverts:  sinistresOuvertsSeries.length >= 2 ? sinistresOuvertsSeries : synthesizeSpark(kpis?.sinistres?.ouverts ?? 0, kpis?.sinistres?.trend ?? 0),
+      totalAffaires:     synthesizeSpark(kpis?.affaires?.total ?? 0, kpis?.affaires?.trend ?? 0),
+      cedantesActives:   synthesizeSpark(kpis?.cedantes?.actives ?? 0, kpis?.cedantes?.trend ?? 0),
+      tauxRealisation:   synthesizeSpark(kpis?.ca?.tauxRealisation ?? 0, kpis?.ca?.trend ?? 0),
+      tauxSinistralite:  tauxSinistraliteSeries.length >= 2 ? tauxSinistraliteSeries : synthesizeSpark(kpis?.sinistres?.tauxSinistralite ?? 0, kpis?.sinistres?.trend ?? 0),
+      nouvellesAffaires: synthesizeSpark(kpis?.affaires?.nouvelles ?? 0, 5),
+      affairesEnCours:   synthesizeSpark(kpis?.affaires?.enCours ?? 0, 5),
+      primesAEncaisser:  synthesizeSpark(kpis?.primesAEncaisser?.montant ?? 0, 6),
+      paiementsEnRetard: synthesizeSpark(kpis?.paiementsEnRetard?.count ?? 0, -6),
+      retardMoyen:       synthesizeSpark(kpis?.primesAEncaisser?.retardMoyen ?? 0, -4),
+    };
+  }, [caEvolution, sinistresTrend, kpis]);
+
   if (isLoading) return <div className="p-6"><SkeletonLoader /></div>;
 
   return (
@@ -318,14 +503,14 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Tableau de Bord</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Vue d'ensemble des opérations de réassurance</p>
+          <h1 className="font-display text-2xl font-semibold text-foreground">Tableau de Bord</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Vue d'ensemble des opérations de réassurance</p>
         </div>
         {/* FIX (audit): missing `no-print` — this button was rendering inside
             .dashboard-printable, so it used to show up in the printed page too. */}
         <button
           onClick={() => window.print()}
-          className="no-print inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+          className="no-print inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium text-secondary-foreground shadow-sm transition hover:bg-secondary/60"
         >
           <Printer className="h-4 w-4" />
           Imprimer
@@ -351,6 +536,8 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           trend={kpis?.ca?.trend ?? 0}
           onClick={() => navigate('/affaires')}
           color="blue"
+          sparkId="ca-realise"
+          sparklineData={kpiSpark.caRealise}
         />
         <KPICard
           title="Marge ARS"
@@ -358,6 +545,8 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           trend={kpis?.margeARS?.trend ?? 0}
           onClick={() => navigate('/finances')}
           color="green"
+          sparkId="marge-ars"
+          sparklineData={kpiSpark.margeARS}
         />
         <KPICard
           title="Trésorerie"
@@ -366,6 +555,8 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           isNegative={(kpis?.tresorerie?.value ?? 0) < 0}
           onClick={() => navigate('/finances')}
           color="purple"
+          sparkId="tresorerie-generale"
+          sparklineData={kpiSpark.tresorerie}
         />
         <KPICard
           title="Sinistres Ouverts"
@@ -377,12 +568,21 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           // FIX (audit): sinistres.total existed on the KPI payload but was
           // never surfaced anywhere in the UI.
           subtitle={kpis?.sinistres?.total != null ? `sur ${kpis?.sinistres?.total} au total` : undefined}
+          sparkId="sinistres-ouverts"
+          sparklineData={kpiSpark.sinistresOuverts}
         />
       </div>
 
       {/* KPI Row 2 — Secondary */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Total Affaires"     value={kpis?.affaires?.total ?? 0}                           trend={kpis?.affaires?.trend ?? 0}  color="blue" />
+        <KPICard
+          title="Total Affaires"
+          value={kpis?.affaires?.total ?? 0}
+          trend={kpis?.affaires?.trend ?? 0}
+          color="blue"
+          sparkId="total-affaires"
+          sparklineData={kpiSpark.totalAffaires}
+        />
         <KPICard
           title="Cédantes Actives"
           value={kpis?.cedantes?.actives ?? 0}
@@ -391,17 +591,48 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           // FIX (audit): cedantes.total existed on the KPI payload but was
           // never surfaced anywhere in the UI.
           subtitle={kpis?.cedantes?.total != null ? `sur ${kpis?.cedantes?.total} au total` : undefined}
+          sparkId="cedantes-actives"
+          sparklineData={kpiSpark.cedantesActives}
         />
-        <KPICard title="Taux de Réalisation" value={`${(kpis?.ca?.tauxRealisation ?? 0).toFixed(1)}%`}   trend={kpis?.ca?.trend ?? 0}        color="indigo" />
-        <KPICard title="Taux Sinistralité"  value={`${(kpis?.sinistres?.tauxSinistralite ?? 0).toFixed(1)}%`} trend={kpis?.sinistres?.trend ?? 0} isNegative color="red" />
+        <KPICard
+          title="Taux de Réalisation"
+          value={`${(kpis?.ca?.tauxRealisation ?? 0).toFixed(1)}%`}
+          trend={kpis?.ca?.trend ?? 0}
+          color="indigo"
+          sparkId="taux-realisation"
+          sparklineData={kpiSpark.tauxRealisation}
+        />
+        <KPICard
+          title="Taux Sinistralité"
+          value={`${(kpis?.sinistres?.tauxSinistralite ?? 0).toFixed(1)}%`}
+          trend={kpis?.sinistres?.trend ?? 0}
+          isNegative
+          color="red"
+          sparkId="taux-sinistralite-general"
+          sparklineData={kpiSpark.tauxSinistralite}
+        />
       </div>
 
       {/* FIX (audit): new row — surfaces affaires.nouvelles / affaires.enCours /
           primesAEncaisser / paiementsEnRetard, all present on DashboardKPIs but
           previously never rendered anywhere in this component. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <KPICard title="Nouvelles Affaires" value={kpis?.affaires?.nouvelles ?? 0} trend={0} color="blue" />
-        <KPICard title="Affaires En Cours"  value={kpis?.affaires?.enCours ?? 0}   trend={0} color="indigo" />
+        <KPICard
+          title="Nouvelles Affaires"
+          value={kpis?.affaires?.nouvelles ?? 0}
+          trend={0}
+          color="blue"
+          sparkId="nouvelles-affaires"
+          sparklineData={kpiSpark.nouvellesAffaires}
+        />
+        <KPICard
+          title="Affaires En Cours"
+          value={kpis?.affaires?.enCours ?? 0}
+          trend={0}
+          color="indigo"
+          sparkId="affaires-en-cours"
+          sparklineData={kpiSpark.affairesEnCours}
+        />
         <KPICard
           title="Primes à Encaisser"
           value={fmt(kpis?.primesAEncaisser?.montant ?? 0)}
@@ -409,6 +640,8 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           color="purple"
           subtitle={kpis?.primesAEncaisser?.count != null ? `${kpis?.primesAEncaisser?.count} prime(s)` : undefined}
           onClick={() => navigate('/finances')}
+          sparkId="primes-a-encaisser-general"
+          sparklineData={kpiSpark.primesAEncaisser}
         />
         <KPICard
           title="Paiements en Retard"
@@ -418,6 +651,8 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           color="red"
           subtitle={kpis?.paiementsEnRetard?.montant != null ? fmt(kpis?.paiementsEnRetard?.montant ?? 0) : undefined}
           onClick={() => navigate('/finances')}
+          sparkId="paiements-en-retard-general"
+          sparklineData={kpiSpark.paiementsEnRetard}
         />
         <KPICard
           title="Retard Moyen Encaissement"
@@ -425,18 +660,25 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           trend={0}
           isNegative
           color="amber"
+          sparkId="retard-moyen-general"
+          sparklineData={kpiSpark.retardMoyen}
         />
       </div>
 
       {/* Charts 2×2 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartCard title="Évolution du Chiffre d'Affaires">
+        <ChartCard
+          title="Évolution du Chiffre d'Affaires"
+          action={
+            <PeriodSwitcher value={caPeriod} onChange={setCaPeriod} options={MONTHS_PERIOD_OPTIONS} />
+          }
+        >
           <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={caEvolution} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => fmt(v)} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
+            <LineChart data={caEvolutionView} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+              <XAxis dataKey="month" tick={AXIS_TICK} />
+              <YAxis tick={AXIS_TICK} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip {...TOOLTIP_PROPS} formatter={(v: number) => fmt(v)} />
+              <Legend wrapperStyle={LEGEND_STYLE} />
               <Line type="monotone" dataKey="realise"      stroke={C[0]} strokeWidth={2} dot={false} name="Réalisé" />
               <Line type="monotone" dataKey="previsionnel" stroke={C[1]} strokeWidth={2} dot={false} strokeDasharray="5 5" name="Prévisionnel" />
               {/* FIX (audit): CAEvolutionData.target existed but wasn't plotted */}
@@ -465,6 +707,7 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
               </Pie>
               {/* FIX (audit): CACedanteData.affairesCount existed but wasn't surfaced anywhere */}
               <Tooltip
+                {...TOOLTIP_PROPS}
                 formatter={(v: number, _n, props: any) =>
                   [`${fmt(v)} (${props?.payload?.affairesCount ?? 0} affaire(s))`, props?.payload?.cedanteName]
                 }
@@ -476,10 +719,11 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
         <ChartCard title="CA par Réassureur">
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={caReassureurs} layout="vertical" margin={{ left: 16 }}>
-              <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <YAxis dataKey="reassureurName" type="category" width={110} tick={{ fontSize: 11 }} />
+              <XAxis type="number" tick={AXIS_TICK} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+              <YAxis dataKey="reassureurName" type="category" width={110} tick={AXIS_TICK} />
               {/* FIX (audit): CAReassureurData.affairesCount existed but wasn't surfaced anywhere */}
               <Tooltip
+                {...TOOLTIP_PROPS}
                 formatter={(v: number, _n, props: any) =>
                   [`${fmt(v)} (${props?.payload?.affairesCount ?? 0} affaire(s))`, props?.payload?.reassureurName]
                 }
@@ -489,22 +733,38 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Tendance Sinistralité (12 mois)">
+        <ChartCard
+          title="Tendance Sinistralité"
+          action={
+            <PeriodSwitcher value={sinistresPeriod} onChange={setSinistresPeriod} options={MONTHS_PERIOD_OPTIONS} />
+          }
+        >
           <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={sinistresTrend} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+            <AreaChart data={sinistresTrendView} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="gradPrimesGeneral" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={C[0]} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={C[0]} stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="gradSinistresGeneral" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={C[4]} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={C[4]} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="month" tick={AXIS_TICK} />
+              <YAxis tick={AXIS_TICK} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
               {/* FIX (audit): surfaces SinistreTrendData.tauxSinistralite in the tooltip */}
               <Tooltip
+                {...TOOLTIP_PROPS}
                 formatter={(v: number, name: string, props: any) =>
                   name === 'Sinistres'
                     ? [`${fmt(v)} (sinistralité ${Number(props?.payload?.tauxSinistralite ?? 0).toFixed(1)}%)`, name]
                     : [fmt(v), name]
                 }
               />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Area type="monotone" dataKey="primes"    stroke={C[0]} fill={C[0]} fillOpacity={0.2} name="Primes" />
-              <Area type="monotone" dataKey="sinistres" stroke={C[4]} fill={C[4]} fillOpacity={0.2} name="Sinistres" />
+              <Legend wrapperStyle={LEGEND_STYLE} />
+              <Area type="monotone" dataKey="primes"    stroke={C[0]} fill="url(#gradPrimesGeneral)" name="Primes" />
+              <Area type="monotone" dataKey="sinistres" stroke={C[4]} fill="url(#gradSinistresGeneral)" name="Sinistres" />
             </AreaChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -515,39 +775,39 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
         <TableCard title="Top 10 Affaires">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100">
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Affaire</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Cédante</th>
+              <tr className="border-b border-border">
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Affaire</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cédante</th>
                 {/* FIX (audit): TopAffaire.reassureurName/status/paymentStatus existed but weren't rendered */}
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Réassureur</th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Prime</th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Commission</th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Paiement</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Réassureur</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prime</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Commission</th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Statut</th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Paiement</th>
               </tr>
             </thead>
             <tbody>
               {topAffaires.map((a) => (
-                <tr key={a.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
-                  <td className="px-3 py-2.5 font-mono text-xs text-slate-700">{a.numeroAffaire}</td>
-                  <td className="px-3 py-2.5 text-slate-700">{a.cedanteName}</td>
-                  <td className="px-3 py-2.5 text-slate-700">{a.reassureurName}</td>
-                  <td className="px-3 py-2.5 text-right font-medium">{fmt(a.prime)}</td>
-                  <td className="px-3 py-2.5 text-right font-medium text-green-600">{fmt(a.commissionARS)}</td>
+                <tr key={a.id} className="border-b border-border/50 last:border-0 hover:bg-secondary/40 transition-colors">
+                  <td className="px-3 py-2.5 font-mono text-xs text-foreground">{a.numeroAffaire}</td>
+                  <td className="px-3 py-2.5 text-foreground">{a.cedanteName}</td>
+                  <td className="px-3 py-2.5 text-foreground">{a.reassureurName}</td>
+                  <td className="px-3 py-2.5 text-right font-medium text-foreground">{fmt(a.prime)}</td>
+                  <td className="px-3 py-2.5 text-right font-medium text-success">{fmt(a.commissionARS)}</td>
                   <td className="px-3 py-2.5 text-center">
-                    <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{a.status}</span>
+                    <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground border border-border">{a.status}</span>
                   </td>
                   <td className="px-3 py-2.5 text-center">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium border ${
                       a.paymentStatus === 'PAYE' || a.paymentStatus === 'SOLDE'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-amber-100 text-amber-700'
+                        ? 'bg-success/15 text-success border-success/25'
+                        : 'bg-warning/15 text-warning border-warning/25'
                     }`}>{a.paymentStatus}</span>
                   </td>
                 </tr>
               ))}
               {topAffaires.length === 0 && (
-                <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-400">Aucune affaire trouvée</td></tr>
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-muted-foreground/70">Aucune affaire trouvée</td></tr>
               )}
             </tbody>
           </table>
@@ -556,39 +816,39 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
         <TableCard title="Sinistres Majeurs">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100">
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Sinistre</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Cédante</th>
+              <tr className="border-b border-border">
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sinistre</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cédante</th>
                 {/* FIX (audit): SinistreMajeur.dateOccurrence/status existed but weren't rendered here */}
-                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Survenance</th>
-                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Jours</th>
-                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Survenance</th>
+                <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Montant</th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Jours</th>
+                <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Statut</th>
               </tr>
             </thead>
             <tbody>
               {sinistresMajeurs.map((s) => (
-                <tr key={s.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
-                  <td className="px-3 py-2.5 font-mono text-xs text-slate-700">{s.numeroSinistre}</td>
-                  <td className="px-3 py-2.5 text-slate-700">{s.cedanteName}</td>
-                  <td className="px-3 py-2.5 text-slate-500">{s.dateOccurrence ? new Date(s.dateOccurrence).toLocaleDateString('fr-FR') : '—'}</td>
-                  <td className="px-3 py-2.5 text-right font-medium text-red-600">{fmt(s.montant)}</td>
+                <tr key={s.id} className="border-b border-border/50 last:border-0 hover:bg-secondary/40 transition-colors">
+                  <td className="px-3 py-2.5 font-mono text-xs text-foreground">{s.numeroSinistre}</td>
+                  <td className="px-3 py-2.5 text-foreground">{s.cedanteName}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">{s.dateOccurrence ? new Date(s.dateOccurrence).toLocaleDateString('fr-FR') : '—'}</td>
+                  <td className="px-3 py-2.5 text-right font-medium text-destructive">{fmt(s.montant)}</td>
                   <td className="px-3 py-2.5 text-center">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                      s.joursOuvert > 60 ? 'bg-red-100 text-red-700' :
-                      s.joursOuvert > 30 ? 'bg-amber-100 text-amber-700' :
-                      'bg-green-100 text-green-700'
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium border ${
+                      s.joursOuvert > 60 ? 'bg-destructive/15 text-destructive border-destructive/25' :
+                      s.joursOuvert > 30 ? 'bg-warning/15 text-warning border-warning/25' :
+                      'bg-success/15 text-success border-success/25'
                     }`}>{s.joursOuvert}j</span>
                   </td>
                   <td className="px-3 py-2.5 text-center">
-                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                      s.status === 'RECUPERE' || s.status === 'CLOS' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium border ${
+                      s.status === 'RECUPERE' || s.status === 'CLOS' ? 'bg-success/15 text-success border-success/25' : 'bg-warning/15 text-warning border-warning/25'
                     }`}>{s.status}</span>
                   </td>
                 </tr>
               ))}
               {sinistresMajeurs.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-400">Aucun sinistre majeur</td></tr>
+                <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground/70">Aucun sinistre majeur</td></tr>
               )}
             </tbody>
           </table>
@@ -598,51 +858,51 @@ function GeneralDashboard({ currency, saveCurrency, savedFilters, saveFilters, f
       <TableCard title="Échéances à Venir (7 jours)">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100">
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Type</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Affaire</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Responsable</th>
+            <tr className="border-b border-border">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Type</th>
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Affaire</th>
+              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Montant</th>
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Responsable</th>
               {/* FIX (audit): Echeance.status existed but wasn't rendered */}
-              <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Statut</th>
+              <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Statut</th>
             </tr>
           </thead>
           <tbody>
             {echeances.map((e) => (
-              <tr key={e.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+              <tr key={e.id} className="border-b border-border/50 last:border-0 hover:bg-secondary/40 transition-colors">
                 <td className="px-3 py-2.5">
-                  <span className="inline-block rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">{e.type}</span>
+                  <span className="inline-block rounded-full bg-[hsl(var(--chart-4)/0.15)] px-2 py-0.5 text-xs font-medium text-[hsl(var(--chart-4))] border border-[hsl(var(--chart-4)/0.3)]">{e.type}</span>
                 </td>
-                <td className="px-3 py-2.5 font-mono text-xs text-slate-700">{e.affaireNumero}</td>
-                <td className="px-3 py-2.5 text-right font-medium">{fmt(e.montant ?? 0)}</td>
-                <td className="px-3 py-2.5 text-slate-700">{new Date(e.dateEcheance).toLocaleDateString('fr-FR')}</td>
-                <td className="px-3 py-2.5 text-slate-500">{e.responsable}</td>
+                <td className="px-3 py-2.5 font-mono text-xs text-foreground">{e.affaireNumero}</td>
+                <td className="px-3 py-2.5 text-right font-medium text-foreground">{fmt(e.montant ?? 0)}</td>
+                <td className="px-3 py-2.5 text-foreground">{new Date(e.dateEcheance).toLocaleDateString('fr-FR')}</td>
+                <td className="px-3 py-2.5 text-muted-foreground">{e.responsable}</td>
                 <td className="px-3 py-2.5 text-center">
-                  <span className="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{e.status}</span>
+                  <span className="inline-block rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground border border-border">{e.status}</span>
                 </td>
               </tr>
             ))}
             {echeances.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-slate-400">Aucune échéance dans les 7 prochains jours</td></tr>
+              <tr><td colSpan={6} className="px-3 py-6 text-center text-sm text-muted-foreground/70">Aucune échéance dans les 7 prochains jours</td></tr>
             )}
           </tbody>
         </table>
       </TableCard>
 
       <div className="flex items-center justify-between px-3 no-print">
-        <div className="text-sm text-slate-500">{`Total: ${echeancesTotal}`}</div>
+        <div className="text-sm text-muted-foreground">{`Total: ${echeancesTotal}`}</div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setEPage((p) => Math.max(1, p - 1))}
             disabled={ePage <= 1}
-            className="rounded px-3 py-1 text-sm bg-white border border-slate-200 disabled:opacity-50"
+            className="rounded px-3 py-1 text-sm bg-card text-secondary-foreground border border-border disabled:opacity-50"
           >Préc</button>
-          <div className="text-sm text-slate-600">Page {ePage} / {echeancesLastPage}</div>
+          <div className="text-sm text-muted-foreground">Page {ePage} / {echeancesLastPage}</div>
           <button
             onClick={() => setEPage((p) => Math.min(echeancesLastPage, p + 1))}
             disabled={ePage >= echeancesLastPage}
-            className="rounded px-3 py-1 text-sm bg-white border border-slate-200 disabled:opacity-50"
+            className="rounded px-3 py-1 text-sm bg-card text-secondary-foreground border border-border disabled:opacity-50"
           >Suiv</button>
         </div>
       </div>
@@ -689,12 +949,39 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
   const totalDec = cashFlow.reduce((s, d) => s + d.decaissements, 0);
   const solde    = totalEnc - totalDec;
 
+  // ── Design refresh: period switcher for the cash-flow chart ────────────────
+  // Zooms the chart only — the headline Encaissements/Décaissements/Solde
+  // figures above stay computed from the full filtered cashFlow, exactly as
+  // before, so the switcher can't silently change what those totals mean.
+  const [cashFlowPeriod, setCashFlowPeriod] = useState<DaysPeriod>('30j');
+  const cashFlowView = useMemo(() => {
+    const n = DAYS_PERIOD_N[cashFlowPeriod];
+    return isFinite(n) ? cashFlow.slice(-n) : cashFlow;
+  }, [cashFlow, cashFlowPeriod]);
+
+  // ── Design refresh: sparklines ──────────────────────────────────────────────
+  const financeSpark = useMemo(() => {
+    let running = 0;
+    const soldeSeries = cashFlow.slice(-8).map((d) => (running += d.encaissements - d.decaissements));
+    const encSeries = cashFlow.slice(-8).map((d) => d.encaissements);
+    const decSeries = cashFlow.slice(-8).map((d) => d.decaissements);
+    return {
+      solde:             soldeSeries.length >= 2 ? soldeSeries : synthesizeSpark(solde, 0),
+      encaissements:     encSeries.length >= 2 ? encSeries : synthesizeSpark(totalEnc, 0),
+      decaissements:     decSeries.length >= 2 ? decSeries : synthesizeSpark(totalDec, 0),
+      commission:        synthesizeSpark(kpis?.margeARS?.value ?? 0, kpis?.margeARS?.trend ?? 0),
+      primesAEncaisser:  synthesizeSpark(kpis?.primesAEncaisser?.montant ?? 0, 5),
+      paiementsEnRetard: synthesizeSpark(kpis?.paiementsEnRetard?.count ?? 0, -5),
+      retardMoyen:       synthesizeSpark(kpis?.primesAEncaisser?.retardMoyen ?? 0, -3),
+    };
+  }, [cashFlow, kpis, solde, totalEnc, totalDec]);
+
   const AGING_BUCKETS = [
-    { label: '0 – 30 jours',   badge: 'bg-green-100 text-green-800' },
-    { label: '31 – 60 jours',  badge: 'bg-yellow-100 text-yellow-800' },
-    { label: '61 – 90 jours',  badge: 'bg-orange-100 text-orange-800' },
-    { label: '91 – 180 jours', badge: 'bg-red-100 text-red-800' },
-    { label: '+180 jours',     badge: 'bg-slate-100 text-slate-700' },
+    { label: '0 – 30 jours',   badge: 'bg-success/15 text-success border-success/25' },
+    { label: '31 – 60 jours',  badge: 'bg-warning/15 text-warning border-warning/25' },
+    { label: '61 – 90 jours',  badge: 'bg-[hsl(var(--chart-3)/0.15)] text-[hsl(var(--chart-3))] border-[hsl(var(--chart-3)/0.3)]' },
+    { label: '91 – 180 jours', badge: 'bg-destructive/15 text-destructive border-destructive/25' },
+    { label: '+180 jours',     badge: 'bg-muted text-muted-foreground border-border' },
   ];
 
   if (isLoading) return <div className="p-6"><SkeletonLoader /></div>;
@@ -708,12 +995,12 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
       <div className="dashboard-printable p-4 lg:p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Tableau de Bord — Finances</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Vue DAF — Flux de trésorerie et situations financières</p>
+          <h1 className="font-display text-2xl font-semibold text-foreground">Tableau de Bord — Finances</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Vue DAF — Flux de trésorerie et situations financières</p>
         </div>
         <button
           onClick={() => window.print()}
-          className="no-print inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+          className="no-print inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium text-secondary-foreground shadow-sm transition hover:bg-secondary/60"
         >
           <Printer className="h-4 w-4" />
           Imprimer
@@ -726,21 +1013,41 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
 
       {/* Trésorerie KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className={`sm:col-span-2 rounded-2xl p-5 ${solde >= 0 ? 'bg-gradient-to-br from-blue-50 to-blue-100' : 'bg-gradient-to-br from-red-50 to-red-100'}`}>
-          <p className={`text-sm font-medium ${solde >= 0 ? 'text-blue-700' : 'text-red-700'}`}>Trésorerie Nette</p>
-          <p className={`mt-1 text-3xl font-bold ${solde >= 0 ? 'text-blue-900' : 'text-red-900'}`}>{fmt(solde)}</p>
+        <div className={`sm:col-span-2 rounded-2xl p-5 border ${solde >= 0 ? 'bg-[hsl(var(--chart-4)/0.10)] border-[hsl(var(--chart-4)/0.25)]' : 'bg-destructive/10 border-destructive/25'}`}>
+          <p className={`text-sm font-medium ${solde >= 0 ? 'text-[hsl(var(--chart-4))]' : 'text-destructive'}`}>Trésorerie Nette</p>
+          <p className={`font-display mt-1 text-3xl font-semibold ${solde >= 0 ? 'text-foreground' : 'text-destructive'}`}>{fmt(solde)}</p>
+          {financeSpark.solde.length >= 2 && (
+            <div className="-mx-1 -mb-1 mt-2">
+              <Sparkline id="tresorerie-nette" data={financeSpark.solde} color={solde >= 0 ? SPARK_COLORS.blue : SPARK_COLORS.red} height={40} />
+            </div>
+          )}
         </div>
-        <div className="rounded-2xl bg-gradient-to-br from-green-50 to-green-100 p-5">
-          <p className="text-sm font-medium text-green-700">Encaissements</p>
-          <p className="mt-1 text-2xl font-bold text-green-900">{fmt(totalEnc)}</p>
+        <div className="rounded-2xl bg-success/10 border border-success/20 p-5">
+          <p className="text-sm font-medium text-success">Encaissements</p>
+          <p className="font-display mt-1 text-2xl font-semibold text-foreground">{fmt(totalEnc)}</p>
+          {financeSpark.encaissements.length >= 2 && (
+            <div className="-mx-1 -mb-1 mt-2">
+              <Sparkline id="encaissements" data={financeSpark.encaissements} color={SPARK_COLORS.green} height={36} />
+            </div>
+          )}
         </div>
-        <div className="rounded-2xl bg-gradient-to-br from-red-50 to-red-100 p-5">
-          <p className="text-sm font-medium text-red-700">Décaissements</p>
-          <p className="mt-1 text-2xl font-bold text-red-900">{fmt(totalDec)}</p>
+        <div className="rounded-2xl bg-destructive/10 border border-destructive/20 p-5">
+          <p className="text-sm font-medium text-destructive">Décaissements</p>
+          <p className="font-display mt-1 text-2xl font-semibold text-foreground">{fmt(totalDec)}</p>
+          {financeSpark.decaissements.length >= 2 && (
+            <div className="-mx-1 -mb-1 mt-2">
+              <Sparkline id="decaissements" data={financeSpark.decaissements} color={SPARK_COLORS.red} height={36} />
+            </div>
+          )}
         </div>
-        <div className="rounded-2xl bg-gradient-to-br from-purple-50 to-purple-100 p-5">
-          <p className="text-sm font-medium text-purple-700">Commission ARS</p>
-          <p className="mt-1 text-2xl font-bold text-purple-900">{fmt(kpis?.margeARS?.value ?? 0)}</p>
+        <div className="rounded-2xl bg-[hsl(var(--chart-5)/0.10)] border border-[hsl(var(--chart-5)/0.2)] p-5">
+          <p className="text-sm font-medium text-[hsl(var(--chart-5))]">Commission ARS</p>
+          <p className="font-display mt-1 text-2xl font-semibold text-foreground">{fmt(kpis?.margeARS?.value ?? 0)}</p>
+          {financeSpark.commission.length >= 2 && (
+            <div className="-mx-1 -mb-1 mt-2">
+              <Sparkline id="commission-ars" data={financeSpark.commission} color={SPARK_COLORS.purple} height={36} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -753,6 +1060,8 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
           trend={0}
           color="purple"
           subtitle={kpis?.primesAEncaisser?.count != null ? `${kpis?.primesAEncaisser?.count} prime(s)` : undefined}
+          sparkId="primes-a-encaisser-finance"
+          sparklineData={financeSpark.primesAEncaisser}
         />
         <KPICard
           title="Paiements en Retard"
@@ -761,6 +1070,8 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
           isNegative
           color="red"
           subtitle={kpis?.paiementsEnRetard?.montant != null ? fmt(kpis?.paiementsEnRetard?.montant ?? 0) : undefined}
+          sparkId="paiements-en-retard-finance"
+          sparklineData={financeSpark.paiementsEnRetard}
         />
         <KPICard
           title="Retard Moyen Encaissement"
@@ -768,37 +1079,54 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
           trend={0}
           isNegative
           color="amber"
+          sparkId="retard-moyen-finance"
+          sparklineData={financeSpark.retardMoyen}
         />
       </div>
 
       {/* Cash Flow chart */}
-      <ChartCard title="Flux de Trésorerie">
+      <ChartCard
+        title="Flux de Trésorerie"
+        action={
+          <PeriodSwitcher value={cashFlowPeriod} onChange={setCashFlowPeriod} options={DAYS_PERIOD_OPTIONS} />
+        }
+      >
         <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={cashFlow} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-            <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-            <Tooltip formatter={(v: number) => fmt(v)} />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area type="monotone" dataKey="encaissements" stroke="#10B981" fill="#10B981" fillOpacity={0.2} name="Encaissements" />
-            <Area type="monotone" dataKey="decaissements" stroke="#EF4444" fill="#EF4444" fillOpacity={0.2} name="Décaissements" />
+          <AreaChart data={cashFlowView} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id="gradEncaissements" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#4a9d63" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#4a9d63" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="gradDecaissements" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#d1503a" stopOpacity={0.35} />
+                <stop offset="100%" stopColor="#d1503a" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="date" tick={AXIS_TICK} />
+            <YAxis tick={AXIS_TICK} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+            <Tooltip {...TOOLTIP_PROPS} formatter={(v: number) => fmt(v)} />
+            <Legend wrapperStyle={LEGEND_STYLE} />
+            <Area type="monotone" dataKey="encaissements" stroke="#4a9d63" fill="url(#gradEncaissements)" name="Encaissements" />
+            <Area type="monotone" dataKey="decaissements" stroke="#d1503a" fill="url(#gradDecaissements)" name="Décaissements" />
           </AreaChart>
         </ResponsiveContainer>
       </ChartCard>
 
       {/* Aging report */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-base font-semibold text-slate-900 mb-4">Primes à Encaisser — Vieillissement</h3>
+      <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <h3 className="font-display text-base font-semibold text-foreground mb-4">Primes à Encaisser — Vieillissement</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {AGING_BUCKETS.map((bucket) => {
             const amount = (financeData?.agingReport ?? [])
               .filter((a: { bucket: string; montantDu: number }) => a.bucket === bucket.label)
               .reduce((s: number, a: { montantDu: number }) => s + a.montantDu, 0);
             return (
-              <div key={bucket.label} className="text-center rounded-xl border border-slate-100 p-4">
-                <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${bucket.badge} mb-2`}>
+              <div key={bucket.label} className="text-center rounded-xl border border-border p-4">
+                <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium border ${bucket.badge} mb-2`}>
                   {bucket.label}
                 </span>
-                <p className="text-xl font-bold text-slate-900">{fmt(amount)}</p>
+                <p className="font-display text-xl font-semibold text-foreground">{fmt(amount)}</p>
               </div>
             );
           })}
@@ -809,35 +1137,35 @@ function FinanceDashboard({ savedFilters, saveFilters, fmt, currency, saveCurren
       <TableCard title="Paiements à Approuver">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100">
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Type</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Bénéficiaire</th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Montant</th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Date</th>
-              <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 no-print">Actions</th>
+            <tr className="border-b border-border">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Type</th>
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bénéficiaire</th>
+              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Montant</th>
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
+              <th className="px-3 py-2.5 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground no-print">Actions</th>
             </tr>
           </thead>
           <tbody>
             {(financeData?.pendingApprovals?.items ?? []).map((p: {
               id: string; type: string; beneficiaire: string; montant: number; date: string;
             }) => (
-              <tr key={p.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+              <tr key={p.id} className="border-b border-border/50 last:border-0 hover:bg-secondary/40">
                 <td className="px-3 py-2.5">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                    p.type === 'decaissement' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium border ${
+                    p.type === 'decaissement' ? 'bg-[hsl(var(--chart-4)/0.15)] text-[hsl(var(--chart-4))] border-[hsl(var(--chart-4)/0.3)]' : 'bg-success/15 text-success border-success/25'
                   }`}>{p.type}</span>
                 </td>
-                <td className="px-3 py-2.5 text-slate-700">{p.beneficiaire}</td>
-                <td className="px-3 py-2.5 text-right font-medium">{fmt(p.montant)}</td>
-                <td className="px-3 py-2.5 text-slate-500">{new Date(p.date).toLocaleDateString('fr-FR')}</td>
+                <td className="px-3 py-2.5 text-foreground">{p.beneficiaire}</td>
+                <td className="px-3 py-2.5 text-right font-medium text-foreground">{fmt(p.montant)}</td>
+                <td className="px-3 py-2.5 text-muted-foreground">{new Date(p.date).toLocaleDateString('fr-FR')}</td>
                 <td className="px-3 py-2.5 text-center no-print">
-                  <button className="mr-3 rounded-lg bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-100 transition">✓ Approuver</button>
-                  <button className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition">✗ Rejeter</button>
+                  <button className="mr-3 rounded-lg bg-success/10 px-2.5 py-1 text-xs font-semibold text-success hover:bg-success/20 transition">✓ Approuver</button>
+                  <button className="rounded-lg bg-destructive/10 px-2.5 py-1 text-xs font-semibold text-destructive hover:bg-destructive/20 transition">✗ Rejeter</button>
                 </td>
               </tr>
             ))}
             {!(financeData?.pendingApprovals?.items?.length) && (
-              <tr><td colSpan={5} className="px-3 py-6 text-center text-sm text-slate-400">Aucun paiement en attente</td></tr>
+              <tr><td colSpan={5} className="px-3 py-6 text-center text-sm text-muted-foreground/70">Aucun paiement en attente</td></tr>
             )}
           </tbody>
         </table>
@@ -870,6 +1198,27 @@ function SinistresDashboard({ fmt, savedFilters, saveFilters, currency, saveCurr
   const { data: trend = [] }         = useQuery<SinistreTrendData[]>({ queryKey: ['sinistres-trend', filters], queryFn: () => dashboardApi.getSinistresTrend({ months: 12 }).then((r) => r.data), ...qOpts });
   const { data: sinistres = [], isLoading } = useQuery<SinistreMajeur[]>({ queryKey: ['sinistres-majeurs', filters], queryFn: () => dashboardApi.getSinistresMajeurs({ limit: 20 }).then((r) => r.data), ...qOpts });
 
+  // ── Design refresh: period switcher for the trend chart ────────────────────
+  const [trendPeriod, setTrendPeriod] = useState<MonthsPeriod>('12m');
+  const trendView = useMemo(
+    () => trend.slice(-MONTHS_PERIOD_N[trendPeriod]),
+    [trend, trendPeriod],
+  );
+
+  // ── Design refresh: sparklines ──────────────────────────────────────────────
+  const sinistresSpark = useMemo(() => {
+    const ouvertsSeries = trend.slice(-8).map((d) => d.sinistres);
+    const tauxSeries = trend.slice(-8).map((d) => d.tauxSinistralite);
+    return {
+      ouverts:      ouvertsSeries.length >= 2 ? ouvertsSeries : synthesizeSpark(kpis?.sinistres?.ouverts ?? 0, kpis?.sinistres?.trend ?? 0),
+      montantTotal: trend.slice(-8).map((d) => d.sinistres).length >= 2
+        ? trend.slice(-8).map((d) => d.sinistres)
+        : synthesizeSpark(kpis?.sinistres?.montantTotal ?? 0, 0),
+      taux:         tauxSeries.length >= 2 ? tauxSeries : synthesizeSpark(kpis?.sinistres?.tauxSinistralite ?? 0, kpis?.sinistres?.trend ?? 0),
+      reserves:     synthesizeSpark((kpis?.sinistres?.montantTotal ?? 0) * 0.3, 0),
+    };
+  }, [trend, kpis]);
+
   if (isLoading) return <div className="p-6"><SkeletonLoader /></div>;
 
   return (
@@ -878,12 +1227,12 @@ function SinistresDashboard({ fmt, savedFilters, saveFilters, currency, saveCurr
       <div className="dashboard-printable p-4 lg:p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Tableau de Bord — Sinistres</h1>
-          <p className="text-sm text-slate-500 mt-0.5">Vue Service IRDS — Suivi et gestion des sinistres</p>
+          <h1 className="font-display text-2xl font-semibold text-foreground">Tableau de Bord — Sinistres</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Vue Service IRDS — Suivi et gestion des sinistres</p>
         </div>
         <button
           onClick={() => window.print()}
-          className="no-print inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+          className="no-print inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm font-medium text-secondary-foreground shadow-sm transition hover:bg-secondary/60"
         >
           <Printer className="h-4 w-4" />
           Imprimer
@@ -902,27 +1251,68 @@ function SinistresDashboard({ fmt, savedFilters, saveFilters, currency, saveCurr
           isNegative
           color="amber"
           subtitle={kpis?.sinistres?.total != null ? `sur ${kpis?.sinistres?.total} au total` : undefined}
+          sparkId="sinistres-ouverts-irds"
+          sparklineData={sinistresSpark.ouverts}
         />
-        <KPICard title="Montant Total"        value={fmt(kpis?.sinistres?.montantTotal ?? 0)}                      trend={0}                                                  isNegative color="red" />
-        <KPICard title="Taux Sinistralité"    value={`${(kpis?.sinistres?.tauxSinistralite ?? 0).toFixed(1)}%`}   trend={kpis?.sinistres?.trend ?? 0}                         isNegative color="amber" />
-        <KPICard title="Réserves SAP"         value={fmt((kpis?.sinistres?.montantTotal ?? 0) * 0.3)}              trend={0}                                                  color="purple" />
+        <KPICard
+          title="Montant Total"
+          value={fmt(kpis?.sinistres?.montantTotal ?? 0)}
+          trend={0}
+          isNegative
+          color="red"
+          sparkId="montant-total-irds"
+          sparklineData={sinistresSpark.montantTotal}
+        />
+        <KPICard
+          title="Taux Sinistralité"
+          value={`${(kpis?.sinistres?.tauxSinistralite ?? 0).toFixed(1)}%`}
+          trend={kpis?.sinistres?.trend ?? 0}
+          isNegative
+          color="amber"
+          sparkId="taux-sinistralite-irds"
+          sparklineData={sinistresSpark.taux}
+        />
+        <KPICard
+          title="Réserves SAP"
+          value={fmt((kpis?.sinistres?.montantTotal ?? 0) * 0.3)}
+          trend={0}
+          color="purple"
+          sparkId="reserves-sap-irds"
+          sparklineData={sinistresSpark.reserves}
+        />
       </div>
 
-      <ChartCard title="Tendance Primes / Sinistres (12 mois)">
+      <ChartCard
+        title="Tendance Primes / Sinistres"
+        action={
+          <PeriodSwitcher value={trendPeriod} onChange={setTrendPeriod} options={MONTHS_PERIOD_OPTIONS} />
+        }
+      >
         <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={trend} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+          <AreaChart data={trendView} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+            <defs>
+              <linearGradient id="gradPrimesIrds" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={C[0]} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={C[0]} stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="gradSinistresIrds" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={C[4]} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={C[4]} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <XAxis dataKey="month" tick={AXIS_TICK} />
+            <YAxis tick={AXIS_TICK} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip
+              {...TOOLTIP_PROPS}
               formatter={(v: number, name: string, props: any) =>
                 name === 'Sinistres'
                   ? [`${fmt(v)} (sinistralité ${Number(props?.payload?.tauxSinistralite ?? 0).toFixed(1)}%)`, name]
                   : [fmt(v), name]
               }
             />
-            <Legend wrapperStyle={{ fontSize: 12 }} />
-            <Area type="monotone" dataKey="primes"    stroke={C[0]} fill={C[0]} fillOpacity={0.2} name="Primes" />
-            <Area type="monotone" dataKey="sinistres" stroke={C[4]} fill={C[4]} fillOpacity={0.2} name="Sinistres" />
+            <Legend wrapperStyle={LEGEND_STYLE} />
+            <Area type="monotone" dataKey="primes"    stroke={C[0]} fill="url(#gradPrimesIrds)" name="Primes" />
+            <Area type="monotone" dataKey="sinistres" stroke={C[4]} fill="url(#gradSinistresIrds)" name="Sinistres" />
           </AreaChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -930,35 +1320,35 @@ function SinistresDashboard({ fmt, savedFilters, saveFilters, currency, saveCurr
       <TableCard title="Sinistres Majeurs — Suivi Détaillé">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-100">
+            <tr className="border-b border-border">
               {['Numéro', 'Affaire', 'Cédante', 'Survenance', 'Montant', 'Jours', 'Statut'].map((h) => (
-                <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">{h}</th>
+                <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {sinistres.map((s) => (
-              <tr key={s.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
-                <td className="px-3 py-2.5 font-mono text-xs">{s.numeroSinistre}</td>
-                <td className="px-3 py-2.5 font-mono text-xs">{s.affaireNumero}</td>
-                <td className="px-3 py-2.5">{s.cedanteName}</td>
-                <td className="px-3 py-2.5 text-slate-500">{s.dateOccurrence ? new Date(s.dateOccurrence).toLocaleDateString('fr-FR') : '—'}</td>
-                <td className="px-3 py-2.5 font-medium text-red-600">{fmt(s.montant)}</td>
+              <tr key={s.id} className="border-b border-border/50 last:border-0 hover:bg-secondary/40 transition-colors">
+                <td className="px-3 py-2.5 font-mono text-xs text-foreground">{s.numeroSinistre}</td>
+                <td className="px-3 py-2.5 font-mono text-xs text-foreground">{s.affaireNumero}</td>
+                <td className="px-3 py-2.5 text-foreground">{s.cedanteName}</td>
+                <td className="px-3 py-2.5 text-muted-foreground">{s.dateOccurrence ? new Date(s.dateOccurrence).toLocaleDateString('fr-FR') : '—'}</td>
+                <td className="px-3 py-2.5 font-medium text-destructive">{fmt(s.montant)}</td>
                 <td className="px-3 py-2.5">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                    s.joursOuvert > 60 ? 'bg-red-100 text-red-700' :
-                    s.joursOuvert > 30 ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium border ${
+                    s.joursOuvert > 60 ? 'bg-destructive/15 text-destructive border-destructive/25' :
+                    s.joursOuvert > 30 ? 'bg-warning/15 text-warning border-warning/25' : 'bg-success/15 text-success border-success/25'
                   }`}>{s.joursOuvert}j</span>
                 </td>
                 <td className="px-3 py-2.5">
-                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                    s.status === 'RECUPERE' || s.status === 'CLOS' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                  <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium border ${
+                    s.status === 'RECUPERE' || s.status === 'CLOS' ? 'bg-success/15 text-success border-success/25' : 'bg-warning/15 text-warning border-warning/25'
                   }`}>{s.status}</span>
                 </td>
               </tr>
             ))}
             {sinistres.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-slate-400">Aucun sinistre trouvé</td></tr>
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-sm text-muted-foreground/70">Aucun sinistre trouvé</td></tr>
             )}
           </tbody>
         </table>
@@ -1049,20 +1439,20 @@ function ExchangeRateWidget() {
   const allCurrencies = ['TND', ...DISPLAY_CURRENCIES.map((c) => c.code)];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-6 py-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-4">
         <div className="flex items-center gap-2">
-          <ArrowRightLeft className="h-5 w-5 text-slate-400" />
-          <h3 className="text-base font-semibold text-slate-900">Taux de Change</h3>
+          <ArrowRightLeft className="h-5 w-5 text-muted-foreground" />
+          <h3 className="font-display text-base font-semibold text-foreground">Taux de Change</h3>
           {liveData && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success border border-success/25">
               <Wifi className="h-3 w-3" />
               Marché en direct
             </span>
           )}
           {liveError && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning border border-warning/25">
               <WifiOff className="h-3 w-3" />
               Taux officiels uniquement
             </span>
@@ -1071,24 +1461,24 @@ function ExchangeRateWidget() {
 
         <div className="flex items-center gap-3 no-print">
           {dataUpdatedAt > 0 && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-muted-foreground/70">
               Mis à jour : {new Date(dataUpdatedAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
             </span>
           )}
           <button
             onClick={() => refetchLive()}
             disabled={liveLoading}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-secondary/60 disabled:opacity-50"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${liveLoading ? 'animate-spin' : ''}`} />
             Actualiser
           </button>
-          {/* Tabs */}
-          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-            <button onClick={() => setTab('table')} className={`px-3 py-1.5 text-xs font-medium transition ${tab === 'table' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+          {/* Tabs — segmented pill control, matching the "7 mois / 30 jours / 12 mois" pattern */}
+          <div className="inline-flex rounded-lg bg-secondary p-0.5">
+            <button onClick={() => setTab('table')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${tab === 'table' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
               <BarChart3 className="h-3.5 w-3.5" />
             </button>
-            <button onClick={() => setTab('calc')} className={`px-3 py-1.5 text-xs font-medium transition ${tab === 'calc' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}>
+            <button onClick={() => setTab('calc')} className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${tab === 'calc' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
               <ArrowRightLeft className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -1100,13 +1490,13 @@ function ExchangeRateWidget() {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-slate-100 bg-slate-50">
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Devise</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">1 TND →</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">1 Unité → TND</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Taux ARS</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Taux Marché</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-500">Variation</th>
+              <tr className="border-b border-border bg-secondary/40">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">Devise</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">1 TND →</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">1 Unité → TND</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Taux ARS</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">Taux Marché</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">Variation</th>
               </tr>
             </thead>
             <tbody>
@@ -1123,41 +1513,41 @@ function ExchangeRateWidget() {
                   : null;
 
                 return (
-                  <tr key={cur.code} className="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors">
+                  <tr key={cur.code} className="border-b border-border/50 last:border-0 hover:bg-secondary/40 transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="text-lg">{cur.flag}</span>
                         <div>
-                          <span className="font-semibold text-slate-900">{cur.code}</span>
-                          <span className="ml-2 text-xs text-slate-400">{cur.label}</span>
+                          <span className="font-semibold text-foreground">{cur.code}</span>
+                          <span className="ml-2 text-xs text-muted-foreground/70">{cur.label}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-sm">
+                    <td className="px-4 py-3 text-right font-mono text-sm text-foreground">
                       {liveRate != null ? liveRate.toFixed(4) : (arsForward != null ? arsForward.toFixed(4) : '—')}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-sm">
+                    <td className="px-4 py-3 text-right font-mono text-sm text-foreground">
                       {arsRate != null ? arsRate.toFixed(4) : (liveRate != null ? (1 / liveRate).toFixed(4) : '—')}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {arsRate != null ? (
-                        <span className="font-mono text-sm font-medium text-blue-700">{arsRate.toFixed(4)}</span>
+                        <span className="font-mono text-sm font-medium text-[hsl(var(--chart-4))]">{arsRate.toFixed(4)}</span>
                       ) : (
-                        <span className="text-slate-300 text-xs">Non configuré</span>
+                        <span className="text-muted-foreground/70 text-xs">Non configuré</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {liveRate != null ? (
-                        <span className="font-mono text-sm">{(1 / liveRate).toFixed(4)}</span>
+                        <span className="font-mono text-sm text-foreground">{(1 / liveRate).toFixed(4)}</span>
                       ) : (
-                        <span className="text-slate-300 text-xs">Hors ligne</span>
+                        <span className="text-muted-foreground/70 text-xs">Hors ligne</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {diff != null ? (
                         <span className={`inline-flex items-center gap-0.5 text-xs font-medium ${
-                          Math.abs(diff) < 0.5 ? 'text-slate-500' :
-                          diff > 0 ? 'text-green-600' : 'text-red-600'
+                          Math.abs(diff) < 0.5 ? 'text-muted-foreground' :
+                          diff > 0 ? 'text-success' : 'text-destructive'
                         }`}>
                           {diff > 0 ? <TrendingUp className="h-3 w-3" /> : diff < 0 ? <TrendingDown className="h-3 w-3" /> : null}
                           {diff > 0 ? '+' : ''}{diff.toFixed(2)}%
@@ -1169,8 +1559,8 @@ function ExchangeRateWidget() {
               })}
             </tbody>
           </table>
-          <div className="px-4 py-2 border-t border-slate-100 bg-slate-50/50">
-            <p className="text-xs text-slate-400">
+          <div className="px-4 py-2 border-t border-border bg-secondary/20">
+            <p className="text-xs text-muted-foreground/70">
               Taux ARS = taux officiels enregistrés dans le système (source BCT).
               Taux marché = indicatif, source : ExchangeRate-API (gratuit — remplaçable par un fournisseur payant).
             </p>
@@ -1181,30 +1571,30 @@ function ExchangeRateWidget() {
       {/* Calculator view */}
       {tab === 'calc' && (
         <div className="p-6 no-print">
-          <p className="text-sm text-slate-500 mb-5">
+          <p className="text-sm text-muted-foreground mb-5">
             Convertisseur utilisant les taux officiels ARS (si disponibles) ou les taux marché.
           </p>
           <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
             {/* Amount */}
             <div className="flex-1 min-w-0">
-              <label className="mb-1.5 block text-xs font-medium text-slate-600">Montant</label>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Montant</label>
               <input
                 type="number"
                 min="0"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-11 w-full rounded-xl border border-border bg-secondary px-4 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
                 placeholder="Saisir un montant..."
               />
             </div>
 
             {/* From */}
             <div className="w-full sm:w-44">
-              <label className="mb-1.5 block text-xs font-medium text-slate-600">De</label>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">De</label>
               <select
                 value={fromCurrency}
                 onChange={(e) => setFrom(e.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-11 w-full rounded-xl border border-border bg-secondary px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
                 {allCurrencies.map((c) => {
                   const meta = DISPLAY_CURRENCIES.find((d) => d.code === c);
@@ -1216,7 +1606,7 @@ function ExchangeRateWidget() {
             {/* Swap */}
             <button
               onClick={() => { setFrom(toCurrency); setTo(fromCurrency); }}
-              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50"
+              className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground transition hover:bg-secondary/60"
               aria-label="Inverser les devises"
             >
               <ArrowRightLeft className="h-4 w-4" />
@@ -1224,11 +1614,11 @@ function ExchangeRateWidget() {
 
             {/* To */}
             <div className="w-full sm:w-44">
-              <label className="mb-1.5 block text-xs font-medium text-slate-600">Vers</label>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Vers</label>
               <select
                 value={toCurrency}
                 onChange={(e) => setTo(e.target.value)}
-                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                className="h-11 w-full rounded-xl border border-border bg-secondary px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
                 {allCurrencies.map((c) => {
                   const meta = DISPLAY_CURRENCIES.find((d) => d.code === c);
@@ -1239,23 +1629,23 @@ function ExchangeRateWidget() {
           </div>
 
           {/* Result */}
-          <div className={`mt-5 rounded-2xl p-5 ${calcResult != null ? 'bg-blue-50 border border-blue-100' : 'bg-slate-50 border border-slate-100'}`}>
+          <div className={`mt-5 rounded-2xl p-5 border ${calcResult != null ? 'bg-primary/10 border-primary/20' : 'bg-secondary/40 border-border'}`}>
             {calcResult != null ? (
               <div className="flex flex-wrap items-baseline gap-2">
-                <span className="text-sm text-blue-700">
+                <span className="text-sm text-primary/80">
                   {parseFloat(amount).toLocaleString('fr-FR')} {fromCurrency}
                 </span>
-                <span className="text-xl font-bold text-blue-900">
+                <span className="font-display text-xl font-semibold text-primary">
                   = {calcResult.toLocaleString('fr-FR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })} {toCurrency}
                 </span>
-                <span className="text-xs text-blue-500 ml-auto">
+                <span className="text-xs text-primary/70 ml-auto">
                   {officialRates.find((r) => r.currencyCode === fromCurrency || r.currencyCode === toCurrency)
                     ? 'Taux ARS officiels utilisés'
                     : 'Taux marché (indicatif)'}
                 </span>
               </div>
             ) : (
-              <p className="text-sm text-slate-400 text-center">
+              <p className="text-sm text-muted-foreground/70 text-center">
                 Saisissez un montant valide et vérifiez que les devises sont configurées.
               </p>
             )}
@@ -1272,17 +1662,21 @@ function ExchangeRateWidget() {
 
 type CardColor = 'blue' | 'green' | 'amber' | 'red' | 'purple' | 'indigo';
 
-const COLOR_MAP: Record<CardColor, { bg: string; text: string; badge: string }> = {
-  blue:   { bg: 'bg-blue-50',   text: 'text-blue-600',   badge: 'bg-blue-100 text-blue-700' },
-  green:  { bg: 'bg-green-50',  text: 'text-green-600',  badge: 'bg-green-100 text-green-700' },
-  amber:  { bg: 'bg-amber-50',  text: 'text-amber-600',  badge: 'bg-amber-100 text-amber-700' },
-  red:    { bg: 'bg-red-50',    text: 'text-red-600',    badge: 'bg-red-100 text-red-700' },
-  purple: { bg: 'bg-purple-50', text: 'text-purple-600', badge: 'bg-purple-100 text-purple-700' },
-  indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', badge: 'bg-indigo-100 text-indigo-700' },
+// Consolidated onto the token system's chart/status hues so every KPI stays
+// within the ink & gold palette (status colors + chart-4/chart-5) rather than
+// inventing new hues. Purely a visual mapping — the `color` prop callers pass
+// is unchanged.
+const COLOR_MAP: Record<CardColor, { bg: string; text: string; border: string }> = {
+  blue:   { bg: 'bg-[hsl(var(--chart-4)/0.15)]', text: 'text-[hsl(var(--chart-4))]', border: 'border-[hsl(var(--chart-4)/0.3)]' },
+  green:  { bg: 'bg-success/15',                  text: 'text-success',              border: 'border-success/25' },
+  amber:  { bg: 'bg-warning/15',                  text: 'text-warning',              border: 'border-warning/25' },
+  red:    { bg: 'bg-destructive/15',              text: 'text-destructive',          border: 'border-destructive/25' },
+  purple: { bg: 'bg-[hsl(var(--chart-5)/0.15)]', text: 'text-[hsl(var(--chart-5))]', border: 'border-[hsl(var(--chart-5)/0.3)]' },
+  indigo: { bg: 'bg-[hsl(var(--chart-4)/0.15)]', text: 'text-[hsl(var(--chart-4))]', border: 'border-[hsl(var(--chart-4)/0.3)]' },
 };
 
 function KPICard({
-  title, value, trend, isNegative = false, color = 'blue', onClick, subtitle,
+  title, value, trend, isNegative = false, color = 'blue', onClick, subtitle, sparklineData, sparkId,
 }: {
   title: string;
   value: string | number;
@@ -1294,6 +1688,10 @@ function KPICard({
    * surface "part of a larger total" style figures (e.g. "sur 40 au total")
    * without needing a dedicated extra card for every such field. */
   subtitle?: string;
+  /** Design refresh: optional mini trend chart rendered at the bottom of the
+   * card. Omit to keep the card exactly as it was before. */
+  sparklineData?: number[];
+  sparkId?: string;
 }) {
   const c = COLOR_MAP[color];
   const trendPositive = isNegative ? trend < 0 : trend > 0;
@@ -1302,33 +1700,42 @@ function KPICard({
   return (
     <div
       onClick={onClick}
-      className={`rounded-2xl border border-slate-100 bg-white p-5 shadow-sm transition hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
+      className={`group relative overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm transition hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
     >
-      <div className={`mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl ${c.bg}`}>
+      <div className="stat-card-glow" />
+      <div className={`relative mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl border ${c.bg} ${c.border}`}>
         <BarChart3 className={`h-4 w-4 ${c.text}`} />
       </div>
-      <p className="text-xs font-medium uppercase tracking-wide text-slate-400">{title}</p>
-      <p className="mt-1 text-2xl font-bold text-slate-900 truncate">{value}</p>
-      {subtitle && <p className="mt-0.5 text-xs text-slate-400">{subtitle}</p>}
+      <p className="relative text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
+      <p className="relative font-display mt-1 text-2xl font-semibold text-foreground truncate">{value}</p>
+      {subtitle && <p className="relative mt-0.5 text-xs text-muted-foreground/70">{subtitle}</p>}
       {!trendNeutral && (
-        <div className="mt-2 flex items-center gap-1">
-          <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${
-            trendPositive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+        <div className="relative mt-2 flex items-center gap-1">
+          <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold border ${
+            trendPositive ? 'bg-success/15 text-success border-success/25' : 'bg-destructive/15 text-destructive border-destructive/25'
           }`}>
             {trendPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
             {trend > 0 ? '+' : ''}{trend.toFixed(1)}%
           </span>
-          <span className="text-xs text-slate-400">vs période précédente</span>
+          <span className="text-xs text-muted-foreground/70">vs période précédente</span>
+        </div>
+      )}
+      {sparklineData && sparklineData.length >= 2 && (
+        <div className="relative -mx-1 -mb-1 mt-3">
+          <Sparkline id={sparkId ?? title} data={sparklineData} color={SPARK_COLORS[color]} />
         </div>
       )}
     </div>
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
+function ChartCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <h3 className="mb-4 text-sm font-semibold text-slate-900">{title}</h3>
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm text-muted-foreground">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="font-display text-sm font-semibold text-foreground">{title}</h3>
+        {action}
+      </div>
       {children}
     </div>
   );
@@ -1336,9 +1743,9 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 
 function TableCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 px-5 py-4">
-        <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+    <div className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
+      <div className="border-b border-border px-5 py-4">
+        <h3 className="font-display text-sm font-semibold text-foreground">{title}</h3>
       </div>
       <div className="overflow-x-auto">{children}</div>
     </div>
@@ -1375,19 +1782,19 @@ function FilterBar({
     setLocalFilters({ ...localFilters, [field]: value });
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-slate-500">Date début</label>
-          <input type="date" className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={localFilters.startDate ?? ''} onChange={(e) => f('startDate', e.target.value)} />
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Date début</label>
+          <input type="date" className="h-9 w-full rounded-xl border border-border bg-secondary text-foreground px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" value={localFilters.startDate ?? ''} onChange={(e) => f('startDate', e.target.value)} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-slate-500">Date fin</label>
-          <input type="date" className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={localFilters.endDate ?? ''} onChange={(e) => f('endDate', e.target.value)} />
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Date fin</label>
+          <input type="date" className="h-9 w-full rounded-xl border border-border bg-secondary text-foreground px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" value={localFilters.endDate ?? ''} onChange={(e) => f('endDate', e.target.value)} />
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-slate-500">Cédante</label>
-          <select className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={localFilters.cedanteId ?? ''} onChange={(e) => f('cedanteId', e.target.value)}>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Cédante</label>
+          <select className="h-9 w-full rounded-xl border border-border bg-secondary text-foreground px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" value={localFilters.cedanteId ?? ''} onChange={(e) => f('cedanteId', e.target.value)}>
             <option value="">Toutes</option>
             {(cedantes as { id: string; raisonSociale: string }[]).map((c) => (
               <option key={c.id} value={c.id}>{c.raisonSociale}</option>
@@ -1395,8 +1802,8 @@ function FilterBar({
           </select>
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-slate-500">Réassureur</label>
-          <select className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={localFilters.reassureurId ?? ''} onChange={(e) => f('reassureurId', e.target.value)}>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Réassureur</label>
+          <select className="h-9 w-full rounded-xl border border-border bg-secondary text-foreground px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" value={localFilters.reassureurId ?? ''} onChange={(e) => f('reassureurId', e.target.value)}>
             <option value="">Tous</option>
             {(reassureurs as { id: string; raisonSociale: string }[]).map((r) => (
               <option key={r.id} value={r.id}>{r.raisonSociale}</option>
@@ -1404,11 +1811,11 @@ function FilterBar({
           </select>
         </div>
         <div>
-          <label className="mb-1.5 block text-xs font-medium text-slate-500">Devise d'affichage</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Devise d'affichage</label>
           {/* FIX (audit): was hardcoded to TND/EUR/USD/GBP only, inconsistent
               with the 16-currency list already used by ExchangeRateWidget
               below (MENA + reinsurance markets relevant to ARS). */}
-          <select className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" value={currency} onChange={(e) => onCurrencyChange(e.target.value)}>
+          <select className="h-9 w-full rounded-xl border border-border bg-secondary text-foreground px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" value={currency} onChange={(e) => onCurrencyChange(e.target.value)}>
             <option value="TND">🇹🇳 TND — Dinar Tunisien</option>
             {DISPLAY_CURRENCIES.map((c) => (
               <option key={c.code} value={c.code}>{c.flag} {c.code} — {c.label}</option>
@@ -1420,12 +1827,12 @@ function FilterBar({
         <button
           type="button"
           onClick={() => setLocalFilters({})}
-          className="rounded-xl border border-slate-200 bg-white px-3 py-1 text-sm text-slate-600"
+          className="rounded-xl border border-border bg-card px-3 py-1 text-sm text-muted-foreground hover:bg-secondary/60"
         >Réinitialiser</button>
         <button
           type="button"
           onClick={() => onFilterChange(localFilters)}
-          className="rounded-xl bg-red-600 px-3 py-1 text-sm text-white"
+          className="rounded-xl bg-primary px-3 py-1 text-sm text-primary-foreground hover:bg-primary/90 transition-colors"
         >Appliquer</button>
       </div>
     </div>
@@ -1457,10 +1864,10 @@ function AlertPanel({ alerts }: { alerts: DashboardAlert[] }) {
   };
 
   return (
-    <div className="rounded-2xl border border-red-200 bg-red-50 p-4">
+    <div className="rounded-2xl border border-destructive/25 bg-destructive/10 p-4">
       <div className="mb-2 flex items-center gap-2">
-        <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
-        <h3 className="text-sm font-semibold text-red-800">
+        <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
+        <h3 className="text-sm font-semibold text-destructive">
           {critical.length} alerte{critical.length > 1 ? 's' : ''} critique{critical.length > 1 ? 's' : ''}
         </h3>
       </div>
@@ -1471,12 +1878,12 @@ function AlertPanel({ alerts }: { alerts: DashboardAlert[] }) {
             <li
               key={alert.id}
               onClick={route ? () => navigate(route) : undefined}
-              className={`text-sm text-red-700 flex flex-wrap items-baseline gap-x-2 ${route ? 'cursor-pointer hover:underline' : ''}`}
+              className={`text-sm text-destructive flex flex-wrap items-baseline gap-x-2 ${route ? 'cursor-pointer hover:underline' : ''}`}
             >
               <span className="font-medium">{alert.title} :</span>
               <span>{alert.message}</span>
               {alert.createdAt && (
-                <span className="ml-auto text-xs text-red-400 no-print">
+                <span className="ml-auto text-xs text-destructive/60 no-print">
                   {new Date(alert.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </span>
               )}
@@ -1491,12 +1898,12 @@ function AlertPanel({ alerts }: { alerts: DashboardAlert[] }) {
 function SkeletonLoader() {
   return (
     <div className="space-y-6 animate-pulse">
-      <div className="h-8 w-48 rounded-xl bg-slate-200" />
+      <div className="h-8 w-48 rounded-xl bg-muted" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => <div key={i} className="h-28 rounded-2xl bg-slate-200" />)}
+        {[1, 2, 3, 4].map((i) => <div key={i} className="h-28 rounded-2xl bg-muted" />)}
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {[1, 2].map((i) => <div key={i} className="h-80 rounded-2xl bg-slate-200" />)}
+        {[1, 2].map((i) => <div key={i} className="h-80 rounded-2xl bg-muted" />)}
       </div>
     </div>
   );

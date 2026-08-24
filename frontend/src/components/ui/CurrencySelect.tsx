@@ -75,15 +75,15 @@ export default function CurrencySelect({
     <div ref={containerRef} className={`relative ${className}`}>
       <div
         onClick={handleOpen}
-        className={`flex items-center justify-between w-full px-3 py-2 border rounded-lg text-[13px] cursor-pointer transition-colors ${
+        className={`flex items-center justify-between w-full px-3 py-2 rounded-xl border text-[13px] cursor-pointer transition-colors ${
           disabled
-            ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
+            ? 'bg-muted text-muted-foreground/70 border-border cursor-not-allowed'
             : open
-            ? 'border-blue-500 ring-2 ring-blue-500/20 bg-white'
-            : 'border-gray-200 bg-white hover:border-gray-300'
+            ? 'border-primary bg-card ring-1 ring-primary ring-offset-2 ring-offset-background'
+            : 'bg-card border-border hover:border-secondary-border'
         }`}
       >
-        <span className={selected ? 'text-gray-900' : 'text-gray-400'}>
+        <span className={selected ? 'text-foreground' : 'text-muted-foreground/70'}>
           {selected ? `${selected.cc} — ${selected.name}` : placeholder}
         </span>
         <div className="flex items-center gap-1 shrink-0">
@@ -91,18 +91,18 @@ export default function CurrencySelect({
             <button
               type="button"
               onClick={handleClear}
-              className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+              className="rounded p-0.5 text-muted-foreground/70 transition-colors hover:bg-secondary hover:text-muted-foreground"
             >
               <X size={12} />
             </button>
           )}
-          <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown size={14} className={`text-muted-foreground/70 transition-transform ${open ? 'rotate-180' : ''}`} />
         </div>
       </div>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-          <div className="p-2 border-b border-gray-100">
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+          <div className="border-b border-border p-2">
             <input
               ref={inputRef}
               type="text"
@@ -110,12 +110,12 @@ export default function CurrencySelect({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Rechercher (code ou nom)..."
-              className="w-full px-2.5 py-1.5 text-[12px] border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-md border border-border bg-secondary px-2.5 py-1.5 text-[12px] text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
             />
           </div>
           <ul className="max-h-52 overflow-y-auto py-1">
             {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-[12px] text-gray-400 text-center">Aucun résultat</li>
+              <li className="px-3 py-2 text-center text-[12px] text-muted-foreground/70">Aucun résultat</li>
             ) : (
               filtered.map((c) => (
                 <li
@@ -123,12 +123,12 @@ export default function CurrencySelect({
                   onMouseDown={() => handleSelect(c.cc)}
                   className={`flex items-center justify-between px-3 py-1.5 text-[13px] cursor-pointer transition-colors ${
                     c.cc === value
-                      ? 'bg-blue-50 text-blue-700 font-medium'
-                      : 'text-gray-900 hover:bg-gray-50'
+                      ? 'bg-primary/10 font-medium text-accent-foreground'
+                      : 'text-foreground hover:bg-secondary/60'
                   }`}
                 >
                   <span>{c.cc} — {c.name}</span>
-                  <span className="text-[11px] text-gray-400 ml-2 shrink-0">{c.symbol}</span>
+                  <span className="ml-2 shrink-0 text-[11px] text-muted-foreground/70">{c.symbol}</span>
                 </li>
               ))
             )}

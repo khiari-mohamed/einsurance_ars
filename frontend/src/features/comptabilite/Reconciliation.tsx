@@ -57,16 +57,16 @@ export default function Reconciliation() {
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Réconciliation Bancaire</h1>
+        <h1 className="font-display text-2xl font-semibold text-foreground">Réconciliation Bancaire</h1>
         <div className="flex gap-4">
-          <div className="bg-orange-50 px-4 py-2 rounded-lg flex items-center gap-2">
-            <AlertCircle className="text-orange-600" size={20} />
-            <div><p className="text-xs text-gray-600">Mouvements non rapprochés</p><p className="text-lg font-bold text-orange-600">{movements.length}</p></div>
+          <div className="bg-warning/10 border border-warning/25 px-4 py-2 rounded-lg flex items-center gap-2">
+            <AlertCircle className="text-warning" size={20} />
+            <div><p className="text-xs text-muted-foreground">Mouvements non rapprochés</p><p className="text-lg font-bold text-warning">{movements.length}</p></div>
           </div>
           <button
             onClick={() => reconcileMutation.mutate()}
             disabled={!canConfirm || reconcileMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40"
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-40"
           >
             <Link2 size={18} />
             {reconcileMutation.isPending ? 'Rapprochement...' : 'Rapprocher la sélection'}
@@ -75,21 +75,21 @@ export default function Reconciliation() {
       </div>
 
       <div className="grid grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow">
+        <div className="bg-card rounded-[var(--radius)] border border-border">
           <div className="p-4 border-b"><h2 className="text-lg font-semibold">Mouvements Bancaires (non rapprochés)</h2></div>
           <div className="overflow-x-auto max-h-[600px]">
             {loadingMovements ? (
-              <p className="text-center py-8 text-gray-500">Chargement...</p>
+              <p className="text-center py-8 text-muted-foreground">Chargement...</p>
             ) : movements.length === 0 ? (
-              <p className="text-center py-8 text-gray-500">Aucun mouvement en attente</p>
+              <p className="text-center py-8 text-muted-foreground">Aucun mouvement en attente</p>
             ) : (
               <table className="w-full">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Date</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Réf</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Type</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">Montant</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Date</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Réf</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Type</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Montant</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -97,7 +97,7 @@ export default function Reconciliation() {
                     <tr
                       key={m.id}
                       onClick={() => setSelectedMovementId(m.id)}
-                      className={`cursor-pointer hover:bg-blue-50 ${selectedMovementId === m.id ? 'bg-blue-100' : ''}`}
+                      className={`cursor-pointer hover:bg-primary/10 ${selectedMovementId === m.id ? 'bg-primary/15' : ''}`}
                     >
                       <td className="px-3 py-2 text-xs">{formatDate(m.dateValeur)}</td>
                       <td className="px-3 py-2 text-xs font-mono">{m.reference || '-'}</td>
@@ -111,20 +111,20 @@ export default function Reconciliation() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow">
+        <div className="bg-card rounded-[var(--radius)] border border-border">
           <div className="p-4 border-b"><h2 className="text-lg font-semibold">Encaissements / Décaissements (non rapprochés)</h2></div>
           <div className="overflow-x-auto max-h-[600px]">
             {loadingItems ? (
-              <p className="text-center py-8 text-gray-500">Chargement...</p>
+              <p className="text-center py-8 text-muted-foreground">Chargement...</p>
             ) : encaissements.length === 0 && decaissements.length === 0 ? (
-              <p className="text-center py-8 text-gray-500">Aucun élément en attente</p>
+              <p className="text-center py-8 text-muted-foreground">Aucun élément en attente</p>
             ) : (
               <table className="w-full">
                 <thead className="bg-gray-50 sticky top-0">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Réf</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-700">Type</th>
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-700">Montant</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Réf</th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Type</th>
+                    <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Montant</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -158,7 +158,7 @@ export default function Reconciliation() {
       </div>
 
       {canConfirm && (
-        <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-center gap-2 text-sm text-blue-800">
+        <div className="mt-4 p-3 bg-primary/10 border border-primary/30 rounded-lg flex items-center gap-2 text-sm text-foreground">
           <CheckCircle size={16} /> Sélection prête — cliquez "Rapprocher la sélection" pour confirmer.
         </div>
       )}

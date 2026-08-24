@@ -30,8 +30,8 @@ export default function CoCourtierFreeFieldsModal({ freeFields, onSave, onClose,
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+      <div className="bg-card rounded-[var(--radius)] border border-border w-full max-w-lg overflow-hidden">
+        <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-[16px] font-semibold text-gray-900">Champs libres</h2>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
             <X size={18} />

@@ -82,44 +82,44 @@ export default function AffairesList() {
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
           <div>
-            <h1 className="text-[24px] font-semibold text-gray-900">Affaires</h1>
-            <p className="text-[13px] text-gray-600 mt-1">
+            <h1 className="font-display text-2xl font-semibold text-foreground">Affaires</h1>
+            <p className="text-[13px] text-muted-foreground mt-1">
               {total} affaire{total !== 1 ? 's' : ''}
               {statutCounts && (
-                <> • {statutCounts.enCotation} en cotation • {statutCounts.prevision} en prévision • {statutCounts.placement} placées</>
+                <> · {statutCounts.enCotation} en cotation · {statutCounts.prevision} en prévision · {statutCounts.placement} placées</>
               )}
             </p>
           </div>
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2.5 rounded-lg hover:bg-blue-700 transition-colors text-[13px] font-medium"
+            className="flex items-center gap-2 rounded-xl border border-primary-border bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Plus size={18} />
             Nouvelle Affaire
           </button>
         </div>
 
-        <div className="flex gap-2">
+        <div className="inline-flex rounded-lg bg-secondary p-0.5">
           <button
             onClick={() => updateFilter('type', '')}
-            className={`px-4 py-2 text-[13px] font-medium rounded-lg transition-colors ${
-              !typeFilter ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+            className={`px-4 py-2 text-[13px] font-medium rounded-md transition-colors ${
+              !typeFilter ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             Tous
           </button>
           <button
             onClick={() => updateFilter('type', AffaireType.FACULTATIVE)}
-            className={`px-4 py-2 text-[13px] font-medium rounded-lg transition-colors ${
-              typeFilter === AffaireType.FACULTATIVE ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+            className={`px-4 py-2 text-[13px] font-medium rounded-md transition-colors ${
+              typeFilter === AffaireType.FACULTATIVE ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             Facultatives
           </button>
           <button
             onClick={() => updateFilter('type', AffaireType.TRAITE)}
-            className={`px-4 py-2 text-[13px] font-medium rounded-lg transition-colors ${
-              typeFilter === AffaireType.TRAITE ? 'bg-purple-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+            className={`px-4 py-2 text-[13px] font-medium rounded-md transition-colors ${
+              typeFilter === AffaireType.TRAITE ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             Traités
@@ -127,23 +127,23 @@ export default function AffairesList() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-[0_4px_20px_rgba(0,0,0,0.04)]">
-        <div className="p-4 border-b border-gray-100 space-y-3">
+      <div className="rounded-2xl border border-border bg-card shadow-sm">
+        <div className="p-4 border-b border-border space-y-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/70" size={18} />
             <input
               type="text"
               placeholder="Rechercher par numéro, assuré, cédante, référence traité..."
               value={searchTerm}
               onChange={(e) => updateFilter('search', e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full rounded-xl border border-border bg-secondary py-2.5 pl-10 pr-4 text-[13px] text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
             />
           </div>
           <div className="flex gap-3">
             <select
               value={statutFilter}
               onChange={(e) => updateFilter('statut', e.target.value)}
-              className="px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="rounded-xl border border-border bg-secondary px-3 py-2 text-[13px] text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
             >
               <option value="">Tous les statuts</option>
               {Object.entries(statutLabels).map(([value, label]) => (
@@ -154,56 +154,58 @@ export default function AffairesList() {
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-gray-500">Chargement...</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">Chargement...</div>
         ) : affaires.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">Aucune affaire trouvée</div>
+          <div className="p-8 text-center text-sm text-muted-foreground">Aucune affaire trouvée</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-100">
+              <thead className="bg-secondary/40 border-b border-border">
                 <tr>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">N° Affaire</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Type</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Assuré / Traité</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Cédante</th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Prime</th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Commission ARS</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Statut</th>
-                  <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">N° Affaire</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Type</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Assuré / Traité</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Cédante</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Prime</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Commission ARS</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Statut</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-border/50">
                 {affaires.map((affaire: Affaire) => (
-                  <tr key={affaire.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-[13px] font-medium text-gray-900 font-mono">{affaire.numero}</td>
+                  <tr key={affaire.id} className="transition-colors hover:bg-secondary/40">
+                    <td className="px-4 py-3 text-[13px] font-medium text-foreground font-mono">{affaire.numero}</td>
                     <td className="px-4 py-3 text-[13px]">
-                      <span className={`px-2 py-1 text-[11px] rounded-full ${
-                        affaire.type === AffaireType.FACULTATIVE ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'
+                      <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-medium ${
+                        affaire.type === AffaireType.FACULTATIVE
+                          ? 'bg-[hsl(var(--chart-4)/0.15)] text-[hsl(var(--chart-4))] border-[hsl(var(--chart-4)/0.3)]'
+                          : 'bg-[hsl(var(--chart-5)/0.15)] text-[hsl(var(--chart-5))] border-[hsl(var(--chart-5)/0.3)]'
                       }`}>
                         {typeLabels[affaire.type]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-gray-900">
+                    <td className="px-4 py-3 text-[13px] text-foreground">
                       {affaire.type === AffaireType.FACULTATIVE
                         ? affaire.facultativeData?.assure?.raisonSociale || '-'
-                        : affaire.traiteData?.referenceTraite || <span className="text-gray-400">Sans référence</span>}
+                        : affaire.traiteData?.referenceTraite || <span className="text-muted-foreground/70">Sans référence</span>}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-gray-900">{affaire.cedante?.raisonSociale || '-'}</td>
-                    <td className="px-4 py-3 text-[13px] text-right font-medium text-gray-900">
+                    <td className="px-4 py-3 text-[13px] text-foreground">{affaire.cedante?.raisonSociale || '-'}</td>
+                    <td className="px-4 py-3 text-[13px] text-right font-medium text-foreground">
                       {formatCurrency(primeAffichee(affaire), affaire.currency)}
                     </td>
-                    <td className="px-4 py-3 text-[13px] text-right font-medium text-green-600">
+                    <td className="px-4 py-3 text-[13px] text-right font-medium text-success">
                       {formatCurrency(commissionTotal(affaire), affaire.currency)}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-1 text-[11px] rounded-full ${statutColors[affaire.statut]}`}>
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${statutColors[affaire.statut]}`}>
                         {statutLabels[affaire.statut]}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => navigate(`/affaires/${affaire.id}`)}
-                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 transition-colors"
+                        className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                         title="Voir détails"
                       >
                         <Eye size={16} />
@@ -214,20 +216,20 @@ export default function AffairesList() {
               </tbody>
             </table>
 
-            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
-              <p className="text-[12px] text-gray-500">Page {page} / {totalPages}</p>
+            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+              <p className="text-[12px] text-muted-foreground">Page {page} / {totalPages}</p>
               <div className="flex gap-2">
                 <button
                   onClick={() => updateFilter('page', String(Math.max(1, page - 1)))}
                   disabled={page <= 1}
-                  className="px-3 py-1.5 text-[12px] rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                  className="rounded-xl border border-border px-3 py-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-secondary/60 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Précédent
                 </button>
                 <button
                   onClick={() => updateFilter('page', String(Math.min(totalPages, page + 1)))}
                   disabled={page >= totalPages}
-                  className="px-3 py-1.5 text-[12px] rounded-lg border border-gray-200 text-gray-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-50"
+                  className="rounded-xl border border-border px-3 py-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-secondary/60 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Suivant
                 </button>
