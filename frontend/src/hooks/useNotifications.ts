@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '@/lib/store';
+import { BASE_URL } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface Notification {
@@ -23,8 +24,8 @@ export function useNotifications() {
   useEffect(() => {
     if (!user) return;
 
-    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-    const newSocket = io(`${API_URL}/notifications`, {
+    const socketOrigin = new URL(BASE_URL, window.location.origin).origin;
+    const newSocket = io(`${socketOrigin}/notifications`, {
       query: { userId: user.id },
       transports: ['websocket'],
     });
