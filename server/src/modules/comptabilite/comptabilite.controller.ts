@@ -19,18 +19,6 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Permission } from '../../config/permissions.config';
-
-// NOTE on scope: no Bilan (Balance Sheet, actif/passif) endpoint exists
-// here, deliberately. The CDC's "Fenêtres de l'application" diagram lists
-// exactly two things under Comptabilité — génération de l'écriture
-// comptable + fichier d'intégration — and the accompanying text describes
-// the statutory/actif-passif accounting as living in ARS's separate
-// accounting software, fed by this module's export (getExport below). A
-// Bilan built off a 10-account seed chart with no full balance-sheet
-// structure (immobilisations, capitaux propres, etc.) would be a fabricated
-// deliverable the data can't honestly support. getProfitLoss() (compte de
-// résultat, classes 6/7) IS implemented, since it's a direct, honest
-// derivative of the validated trial balance and is CDC-adjacent.
 @ApiTags('Comptabilité')
 @ApiBearerAuth()
 @Controller('comptabilite')
@@ -90,6 +78,12 @@ export class ComptabiliteController {
   generateTraite(@Param('situationId') situationId: string) {
     return this.engine.generateForTraiteSituation(situationId).then((id) => this.service.findOne(id));
   }
+  @Post('generate/traite-liquidation/:liquidationId')
+  @RequirePermissions(Permission.COMPTABILITE_CREATE)
+  @ApiOperation({ summary: 'Comptabiliser une liquidation de traité validée (solde net uniquement — CEDANTE_DOIT)' })
+  generateTraiteLiquidation(@Param('liquidationId') liquidationId: string) {
+    return this.engine.generateForTraiteLiquidation(liquidationId).then((id) => this.service.findOne(id));
+  }
 
   @Post('generate/encaissement/:encaissementId')
   @RequirePermissions(Permission.COMPTABILITE_CREATE)
@@ -101,6 +95,20 @@ export class ComptabiliteController {
   @RequirePermissions(Permission.COMPTABILITE_CREATE)
   generateDecaissement(@Param('decaissementId') decaissementId: string) {
     return this.engine.generateForDecaissement(decaissementId).then((id) => this.service.findOne(id));
+  }
+
+  @Post('generate/sinistre-paiement/:sinistreId')
+  @RequirePermissions(Permission.COMPTABILITE_CREATE)
+  @ApiOperation({ summary: 'Générer l\'écriture de règlement sinistre (exercice courant)' })
+  generateSinistrePaiement(@Param('sinistreId') sinistreId: string) {
+    return this.engine.generateForSinistrePaiement(sinistreId).then((id) => this.service.findOne(id));
+  }
+
+  @Post('generate/sinistre-recuperation/:sinistreId')
+  @RequirePermissions(Permission.COMPTABILITE_CREATE)
+  @ApiOperation({ summary: 'Générer l\'écriture de récupération sinistre auprès des réassureurs' })
+  generateSinistreRecuperation(@Param('sinistreId') sinistreId: string) {
+    return this.engine.generateForSinistreRecuperation(sinistreId).then((id) => this.service.findOne(id));
   }
 
   // ── Ledger / reports ──────────────────────────────────────────────
