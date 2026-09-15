@@ -7,18 +7,10 @@ import { GuaranteeLineInput } from '../../types/facultative.types';
 
 interface Props {
   affaireId: string;
+  currency?: string;
 }
 
-// FIX (Affaires Pass 2): full rewrite. The previous version invented fields
-// (numeroLigne, codeGarantie, libelleGarantie, tauxPrime, primeNette,
-// franchise, plafond, observations) that don't exist on the real
-// GuaranteeLine model (garantie, capitauxAssures100, ordre only) and called
-// a guaranteeLinesApi with getByAffaire/getTotals routes that have no
-// backend counterpart. This version uses facultativeApi (wired to the real
-// /facultatives controller) and edits via the atomic replace-all endpoint,
-// which matches the CDC's "table répétable" pattern for guarantee lines and
-// avoids partial-save inconsistencies.
-export function GuaranteeLinesManager({ affaireId }: Props) {
+export function GuaranteeLinesManager({ affaireId, currency = 'TND' }: Props) {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<GuaranteeLineInput[]>([]);
   const [isDirty, setIsDirty] = useState(false);
@@ -74,7 +66,7 @@ export function GuaranteeLinesManager({ affaireId }: Props) {
     saveMutation.mutate(rows.map((r, i) => ({ ...r, ordre: i + 1 })));
   };
 
-  const totalCapitaux = rows.reduce((sum, r) => sum + (r.capitauxAssures100 || 0), 0);
+  const totalCapitaux = rows.reduce((sum, r) => sum + Number(r.capitauxAssures100 || 0), 0);
 
   if (isLoading) return <div className="p-4 text-[13px] text-gray-500">Chargement...</div>;
 
@@ -158,7 +150,7 @@ export function GuaranteeLinesManager({ affaireId }: Props) {
             <tfoot className="bg-gray-50 border-t border-gray-100">
               <tr>
                 <td className="px-3 py-2 text-[12px] font-semibold text-gray-700">Total</td>
-                <td className="px-3 py-2 text-[13px] font-semibold text-gray-900 text-right">{formatCurrency(totalCapitaux, 'TND')}</td>
+                <td className="px-3 py-2 text-[13px] font-semibold text-gray-900 text-right">{formatCurrency(totalCapitaux, currency)}</td>
                 <td></td>
               </tr>
             </tfoot>

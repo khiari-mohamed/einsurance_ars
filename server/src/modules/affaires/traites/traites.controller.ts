@@ -11,6 +11,8 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { Response } from 'express';
 import {
@@ -27,10 +29,13 @@ import {
   PmdInstalmentDto,
 } from './dto/create-traite.dto';
 import { UpdateTraiteDto } from './dto/update-traite.dto';
-import { LiquidationInput } from './treaty-calculator.service';
+import { CalculateLiquidationDto } from './dto/calculate-liquidation.dto';
+import { CalculateDistributionDto } from './dto/calculate-distribution.dto';
+import { PersistLiquidationDto } from './dto/persist-liquidation.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
+import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Permission } from '../../../config/permissions.config';
 
 @ApiTags('Traités')
@@ -56,28 +61,18 @@ export class TraitesController {
     @Query('periodicite') periodicite?: Periodicite,
     @Query('statut') statut?: AffaireStatut,
     @Query('search') search?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
   ) {
-    return this.service.findAll({
-      cedanteId,
-      reassuranceType,
-      periodicite,
-      statut,
-      search,
-      page,
-      limit,
-    });
+    return this.service.findAll({ cedanteId, reassuranceType, periodicite, statut, search, page, limit });
   }
 
   @Get('renewals-alert')
   @RequirePermissions(Permission.AFFAIRES_READ)
-  @ApiOperation({ summary: 'Traités arrivant à échéance prochainement' })
+  @ApiOperation({ summary: 'Traités arrivant à échéance prochainement (marque renewalReminderSent + tâche de renouvellement)' })
   @ApiQuery({ name: 'daysAhead', required: false })
   getRenewalsAlert(@Query('daysAhead') daysAhead?: number) {
-    return this.service.getRenewalsAlert(
-      daysAhead ? Number(daysAhead) : 60,
-    );
+    return this.service.getRenewalsAlert(daysAhead ? Number(daysAhead) : 60);
   }
 
   @Get('stats')
@@ -105,18 +100,13 @@ export class TraitesController {
   @Put(':affaireId')
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
   @ApiOperation({ summary: "Mettre à jour les données du traité" })
-  update(
-    @Param('affaireId') affaireId: string,
-    @Body() dto: UpdateTraiteDto,
-  ) {
+  update(@Param('affaireId') affaireId: string, @Body() dto: UpdateTraiteDto) {
     return this.service.update(affaireId, dto);
   }
 
-  // ── Account Rubriques ────────────────────────────────────────────
-
   @Put(':affaireId/account-rubriques')
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
-  @ApiOperation({ summary: 'Remplacer les rubriques de compte du traité' })
+  @ApiOperation({ summary: 'Remplacer les rubriques de compte du traité (verrouillé après placement)' })
   replaceAccountRubriques(
     @Param('affaireId') affaireId: string,
     @Body() rubriques: TreatyAccountRubriqueDto[],
@@ -124,36 +114,20 @@ export class TraitesController {
     return this.service.replaceAccountRubriques(affaireId, rubriques);
   }
 
-  // ── PMD Instalments ──────────────────────────────────────────────
-
   @Get(':affaireId/pmd-instalments')
   @RequirePermissions(Permission.AFFAIRES_READ)
-  @ApiOperation({ summary: 'Calendrier de versement PMD' })
   getPmdInstalments(@Param('affaireId') affaireId: string) {
     return this.service.getPmdInstalments(affaireId);
   }
 
-  // FIX (Traités pass): was entirely missing. account-rubriques already had
-  // a replace-all PUT; pmd-instalments only had regenerate (auto-derived
-  // from pmd/periodicite) and per-tranche pay — no way to hand-edit a
-  // custom schedule (e.g. an uneven split negotiated with the cedante).
-  // Mirrors the account-rubriques pattern exactly. Service-side guard
-  // blocks the replace if any tranche is already paid, since a full
-  // delete+recreate would orphan the Encaissement row markInstalmentPaid()
-  // already created.
   @Put(':affaireId/pmd-instalments')
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
-  @ApiOperation({ summary: 'Remplacer intégralement le calendrier PMD (tranches personnalisées)' })
-  replacePmdInstalments(
-    @Param('affaireId') affaireId: string,
-    @Body() instalments: PmdInstalmentDto[],
-  ) {
+  replacePmdInstalments(@Param('affaireId') affaireId: string, @Body() instalments: PmdInstalmentDto[]) {
     return this.service.replacePmdInstalments(affaireId, instalments);
   }
 
   @Post(':affaireId/pmd-instalments/regenerate')
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
-  @ApiOperation({ summary: 'Régénérer le calendrier PMD depuis le PMD et la périodicité' })
   @HttpCode(HttpStatus.OK)
   regeneratePmdInstalments(@Param('affaireId') affaireId: string) {
     return this.service.regeneratePmdInstalments(affaireId);
@@ -161,70 +135,74 @@ export class TraitesController {
 
   @Patch(':affaireId/pmd-instalments/:instalmentId/pay')
   @RequirePermissions(Permission.FINANCES_CREATE)
-  @ApiOperation({ summary: 'Marquer une tranche PMD comme payée' })
   @HttpCode(HttpStatus.OK)
-  markInstalmentPaid(
-    @Param('affaireId') affaireId: string,
-    @Param('instalmentId') instalmentId: string,
-  ) {
+  markInstalmentPaid(@Param('affaireId') affaireId: string, @Param('instalmentId') instalmentId: string) {
     return this.service.markInstalmentPaid(affaireId, instalmentId);
   }
 
-  // ── Calculations ─────────────────────────────────────────────────
-
   @Post(':affaireId/calculate-liquidation')
   @RequirePermissions(Permission.AFFAIRES_READ)
-  @ApiOperation({ summary: 'Calculer le compte de liquidation du traité' })
+  @ApiOperation({ summary: 'Simuler le compte de liquidation du traité (non persisté)' })
   @HttpCode(HttpStatus.OK)
-  calculateLiquidation(
-    @Param('affaireId') affaireId: string,
-    @Body() input: LiquidationInput,
-  ) {
+  calculateLiquidation(@Param('affaireId') affaireId: string, @Body() input: CalculateLiquidationDto) {
     return this.service.calculateLiquidation(affaireId, input);
+  }
+
+  // NEW: persists a computed liquidation as a durable, auditable record —
+  // closes the "simulation-only" gap. Deliberately does not touch
+  // Comptabilité/JournalEntry — see class-level note in traites.service.ts.
+  @Post(':affaireId/liquidations')
+  @RequirePermissions(Permission.AFFAIRES_UPDATE)
+  @ApiOperation({ summary: 'Calculer ET enregistrer un compte de liquidation (statut SIMULATION)' })
+  persistLiquidation(
+    @Param('affaireId') affaireId: string,
+    @Body() dto: PersistLiquidationDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.persistLiquidation(affaireId, dto, user.id);
+  }
+
+  @Get(':affaireId/liquidations')
+  @RequirePermissions(Permission.AFFAIRES_READ)
+  @ApiOperation({ summary: 'Historique des liquidations enregistrées' })
+  getLiquidations(@Param('affaireId') affaireId: string) {
+    return this.service.getLiquidations(affaireId);
+  }
+
+  @Patch(':affaireId/liquidations/:liquidationId/validate')
+  @RequirePermissions(Permission.AFFAIRES_VALIDATE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Valider définitivement une liquidation enregistrée' })
+  validateLiquidation(
+    @Param('affaireId') affaireId: string,
+    @Param('liquidationId') liquidationId: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.service.validateLiquidation(affaireId, liquidationId, user.id);
   }
 
   @Post(':affaireId/calculate-distribution')
   @RequirePermissions(Permission.AFFAIRES_READ)
-  @ApiOperation({ summary: 'Calculer la distribution de prime par réassureur' })
   @HttpCode(HttpStatus.OK)
-  calculateDistribution(
-    @Param('affaireId') affaireId: string,
-    @Body('primeNetteCedante') primeNetteCedante: number,
-  ) {
-    return this.service.calculateDistribution(affaireId, primeNetteCedante);
+  calculateDistribution(@Param('affaireId') affaireId: string, @Body() dto: CalculateDistributionDto) {
+    return this.service.calculateDistribution(affaireId, dto.primeNetteCedante);
   }
-
-  // ── PDF ──────────────────────────────────────────────────────────
 
   @Get(':affaireId/treaty-statement/pdf')
   @RequirePermissions(Permission.AFFAIRES_READ)
-  @ApiOperation({ summary: 'Générer le relevé de compte traité en PDF' })
-  async downloadTreatyStatement(
-    @Param('affaireId') affaireId: string,
-    @Res() res: Response,
-  ) {
+  async downloadTreatyStatement(@Param('affaireId') affaireId: string, @Res() res: Response) {
     const buffer = await this.service.generateTreatyStatement(affaireId);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="traite-statement-${affaireId}.pdf"`,
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="traite-statement-${affaireId}.pdf"`);
     res.send(buffer);
   }
 
   @Get(':affaireId/pmd-invoice/pdf')
   @RequirePermissions(Permission.AFFAIRES_READ)
-  @ApiOperation({ summary: 'Générer la facture dépôt de prime PMD en PDF' })
-  async downloadPmdInvoice(
-    @Param('affaireId') affaireId: string,
-    @Res() res: Response,
-  ) {
+  async downloadPmdInvoice(@Param('affaireId') affaireId: string, @Res() res: Response) {
     const buffer = await this.service.generatePmdInvoice(affaireId);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="pmd-invoice-${affaireId}.pdf"`,
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="pmd-invoice-${affaireId}.pdf"`);
     res.send(buffer);
   }
 }

@@ -15,12 +15,6 @@ interface Props {
   onClose: () => void;
 }
 
-// FIX (Affaires pass): full rewrite — the old version edited a flat,
-// nonexistent shape (assureId/capitalAssure100/tauxCommissionARS directly on
-// Affaire, single global commission). This edits the real nested structure
-// and — per AffairesService.update()'s contract — sends the FULL
-// facultativeData/traiteData object on every save (the backend's nested
-// DTOs require their base fields even on partial updates), not a delta.
 export default function AffaireEditModal({ affaire, onClose }: Props) {
   const queryClient = useQueryClient();
   const [errors, setErrors] = useState<string[]>([]);
@@ -78,6 +72,12 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
       if (!r.reassureurId) errs.push('Chaque ligne doit avoir un réassureur sélectionné');
       if (seen.has(r.reassureurId)) errs.push('Un même réassureur ne peut apparaître qu\'une seule fois');
       seen.add(r.reassureurId);
+      if (r.commissionMode === CommissionMode.CALCULABLE && (r.tauxCommissionArs === undefined || r.tauxCommissionArs === null)) {
+        errs.push('Taux de commission ARS requis en mode Calculable');
+      }
+      if (r.commissionMode === CommissionMode.FORFAITAIRE && (r.commissionForfait === undefined || r.commissionForfait === null)) {
+        errs.push('Montant forfaitaire requis en mode Forfaitaire');
+      }
     }
     const dateEffet = affaire.type === AffaireType.FACULTATIVE ? fac?.dateEffet : traite?.dateEffet;
     const dateEcheance = affaire.type === AffaireType.FACULTATIVE ? fac?.dateEcheance : traite?.dateEcheance;
@@ -138,9 +138,7 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
               commissionLiquidationArs: traite.commissionLiquidationArs,
               seuilNotification: traite.seuilNotification,
               // accountRubriques/pmdInstalments intentionally omitted here —
-              // left unchanged unless edited; a dedicated manager UI for
-              // those (TreatyParametersManager / PmdInstalmentsManager,
-              // already in the tree) is reviewed in the Traité pass.
+              // left unchanged unless edited via their dedicated managers.
             },
           }
         : {}),
@@ -204,8 +202,11 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">N° Police cédante</label>
-                  <input type="text" value={fac.numeroPoliceCedante || ''} onChange={(e) => setFac({ ...fac, numeroPoliceCedante: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
+                    N° Police cédante <span className="font-normal text-gray-400">(référence cédante)</span>
+                  </label>
+                  <input type="text" value={fac.numeroPoliceCedante || ''} onChange={(e) => setFac({ ...fac, numeroPoliceCedante: e.target.value })} placeholder="Ex: POL-2026-00123" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <p className="mt-1 text-[11px] text-gray-400">Numéro de police propre à la cédante — distinct du numéro d'affaire ARS.</p>
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de renouvellement</label>
@@ -300,6 +301,11 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission Cédante (%)</label>
                   <input type="number" step="0.0001" value={traite.tauxCommissionCedante || 0} onChange={(e) => setTraite({ ...traite, tauxCommissionCedante: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Commission Liquidation ARS</label>
+                  <input type="number" step="0.001" value={traite.commissionLiquidationArs || 0} onChange={(e) => setTraite({ ...traite, commissionLiquidationArs: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <p className="mt-1 text-[11px] text-gray-400">Montant fixe saisi manuellement — non calculé automatiquement (distinct de la commission de courtage par réassureur, définie à l'étape 3).</p>
                 </div>
               </div>
               <p className="text-[11px] text-gray-400">

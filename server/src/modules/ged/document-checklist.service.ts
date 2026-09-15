@@ -31,10 +31,6 @@ export class DocumentChecklistService {
     return this.updateCompletionPct(checklistId);
   }
 
-  // NEW: there was no way to reject a received document from the checklist
-  // review flow. Also clears documentId/receivedAt — otherwise a rejected
-  // slot would keep pointing at (and letting the user download) the very
-  // document that was just rejected.
   async markItemRejected(checklistId: string, itemId: string) {
     await this.prisma.documentChecklistItem.update({
       where: { id: itemId },
@@ -47,8 +43,9 @@ export class DocumentChecklistService {
     const items = await this.prisma.documentChecklistItem.findMany({
       where: { checklistId },
     });
-    const total = items.length;
-    const received = items.filter((i) => i.statut === DocumentStatut.RECU).length;
+    const mandatoryItems = items.filter((i) => i.isMandatory);
+    const total = mandatoryItems.length;
+    const received = mandatoryItems.filter((i) => i.statut === DocumentStatut.RECU).length;
     const pct = total > 0 ? Math.round((received / total) * 100 * 10) / 10 : 0;
 
     return this.prisma.documentChecklist.update({

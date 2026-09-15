@@ -72,11 +72,6 @@ export interface XolPremiumResult {
 
 @Injectable()
 export class TreatyCalculatorService {
-  /**
-   * Generate a PMD instalment schedule from a total PMD amount
-   * and a payment frequency. If custom instalments are provided
-   * they override the auto-generated ones.
-   */
   generatePmdInstalments(
     pmd: number,
     periodicite: Periodicite,
@@ -107,11 +102,6 @@ export class TreatyCalculatorService {
 
     return results;
   }
-
-  /**
-   * Distribute a proportional treaty net premium across reinsurers
-   * according to their participation percentages and ARS commission mode.
-   */
   calculateTreatyDistribution(
     input: TreatyDistributionInput,
   ): TreatyDistributionResult[] {
@@ -137,70 +127,65 @@ export class TreatyCalculatorService {
       };
     });
   }
-
-  /**
-   * Compute the treaty liquidation account (compte d'exploitation).
-   * Returns debit/credit totals and the netting direction.
-   */
   calculateLiquidation(input: LiquidationInput): LiquidationResult {
     const lines: Array<{ libelle: string; debit: number; credit: number }> = [
-      // ── DEBIT SIDE ────────────────────────────────────────────
-      {
-        libelle: 'Primes cédées',
-        debit: input.primesCedees,
-        credit: 0,
-      },
-      {
-        libelle: 'Participations bénéficiaires reçues',
-        debit: input.participationsBenefReçues,
-        credit: 0,
-      },
-      {
-        libelle: 'Intérêts sur dépôts',
-        debit: input.interetsSurDepots,
-        credit: 0,
-      },
-      {
-        libelle: 'PMD déductible',
-        debit: input.pmdDeductible,
-        credit: 0,
-      },
-
-      // ── CREDIT SIDE ───────────────────────────────────────────
+      // ── DEBIT SIDE (per CDC §8.3 / BordereauLine) ──────────────
       {
         libelle: 'Sinistres payés (part réassureurs)',
-        debit: 0,
-        credit: input.sinistresPayes,
+        debit: input.sinistresPayes,
+        credit: 0,
       },
       {
         libelle: 'Réserves constituées (SAP)',
-        debit: 0,
-        credit: input.reservesConstituees,
-      },
-      {
-        libelle: 'Réserves libérées antérieures',
-        debit: input.reservesLibereesAnterieur,
+        debit: input.reservesConstituees,
         credit: 0,
       },
       {
         libelle: 'Commission cédante',
-        debit: 0,
-        credit: input.commissionCedante,
+        debit: input.commissionCedante,
+        credit: 0,
       },
       {
         libelle: 'Commission liquidation ARS',
-        debit: 0,
-        credit: input.commissionLiquidationArs,
+        debit: input.commissionLiquidationArs,
+        credit: 0,
       },
       {
         libelle: 'Courtage',
-        debit: 0,
-        credit: input.courtage,
+        debit: input.courtage,
+        credit: 0,
       },
       {
         libelle: 'Taxes',
+        debit: input.taxes,
+        credit: 0,
+      },
+
+      // ── CREDIT SIDE (per CDC §8.3 / BordereauLine) ─────────────
+      {
+        libelle: 'Primes cédées',
         debit: 0,
-        credit: input.taxes,
+        credit: input.primesCedees,
+      },
+      {
+        libelle: 'Réserves libérées antérieures',
+        debit: 0,
+        credit: input.reservesLibereesAnterieur,
+      },
+      {
+        libelle: 'Participations bénéficiaires reçues',
+        debit: 0,
+        credit: input.participationsBenefReçues,
+      },
+      {
+        libelle: 'Intérêts sur dépôts',
+        debit: 0,
+        credit: input.interetsSurDepots,
+      },
+      {
+        libelle: 'PMD déductible',
+        debit: 0,
+        credit: input.pmdDeductible,
       },
     ].filter((l) => l.debit > 0 || l.credit > 0);
 
@@ -210,16 +195,16 @@ export class TreatyCalculatorService {
     const totalCredit = this.round3(
       lines.reduce((s, l) => s + l.credit, 0),
     );
-    const soldeNet = this.round3(totalDebit - totalCredit);
+    const soldeNet = this.round3(totalCredit - totalDebit);
 
     let soldeDirection: LiquidationResult['soldeDirection'];
     if (Math.abs(soldeNet) < 0.001) {
       soldeDirection = 'EQUILIBRE';
     } else if (soldeNet > 0) {
-      // More debit than credit → cedante owes ARS → ARS collects
+      // More credit than debit → cedante owes ARS → ARS collects
       soldeDirection = 'CEDANTE_DOIT';
     } else {
-      // More credit than debit → ARS owes reinsurers
+      // More debit than credit → ARS owes reinsurers
       soldeDirection = 'ARS_DOIT';
     }
 
@@ -247,10 +232,6 @@ export class TreatyCalculatorService {
     };
   }
 
-  /**
-   * Calculate pro-rata premium for partial year coverage.
-   * Used when a treaty starts or ends mid-year.
-   */
   calculateProRata(annualPremium: number, dateEffet: Date, dateEcheance: Date): number {
     const msYear = 365.25 * 24 * 60 * 60 * 1000;
     const msCoverage = dateEcheance.getTime() - dateEffet.getTime();

@@ -45,9 +45,6 @@ export default function FacultativesList() {
     enabled: !showRenewals,
   });
 
-  // FIX (Affaires Pass 2): the backend's renewals-alert endpoint had zero
-  // frontend consumers. Wired here as a toggle view, since it's directly
-  // useful for the "alerte de renouvellement" requirement (CDC §6.6).
   const { data: renewals } = useQuery({
     queryKey: ['facultatives-renewals'],
     queryFn: async () => (await facultativeApi.getRenewalsAlert(30)).data,
@@ -62,8 +59,9 @@ export default function FacultativesList() {
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
 
+  // FIX (Affaires pass — Number() coercion, same rationale as AffairesList).
   const commissionTotal = (item: FacultativeListItem) =>
-    item.affaire.reassureurs.reduce((sum, r) => sum + (r.commissionArs ?? 0), 0);
+    item.affaire.reassureurs.reduce((sum, r) => sum + Number(r.commissionArs ?? 0), 0);
 
   return (
     <div className="p-4 lg:p-6">
@@ -208,10 +206,10 @@ export default function FacultativesList() {
                     <td className="px-4 py-3 text-[13px] text-gray-600 font-mono">{item.numeroPoliceCedante || '-'}</td>
                     <td className="px-4 py-3 text-[13px] text-gray-600">{item.branche || '-'}</td>
                     <td className="px-4 py-3 text-[13px] text-right font-medium text-gray-900">
-                      {formatCurrency(item.primeCedee ?? 0, item.affaire ? 'TND' : 'TND')}
+                      {formatCurrency(Number(item.primeCedee ?? 0), item.affaire?.currency ?? 'TND')}
                     </td>
                     <td className="px-4 py-3 text-[13px] text-right font-medium text-green-600">
-                      {formatCurrency(commissionTotal(item), 'TND')}
+                      {formatCurrency(commissionTotal(item), item.affaire?.currency ?? 'TND')}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 text-[11px] rounded-full ${statutColors[item.affaire.statut]}`}>

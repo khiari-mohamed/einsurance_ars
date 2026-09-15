@@ -10,6 +10,7 @@ import {
   AffaireStatut,
   ModeRenouvellement,
   Periodicite,
+  TraiteLiquidationStatut,
 } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -24,7 +25,7 @@ import {
   PmdInstalmentDto,
 } from './dto/create-traite.dto';
 import { UpdateTraiteDto } from './dto/update-traite.dto';
-
+import { PersistLiquidationDto } from './dto/persist-liquidation.dto';
 @Injectable()
 export class TraitesService {
   private readonly logger = new Logger(TraitesService.name);
@@ -36,8 +37,6 @@ export class TraitesService {
     private readonly pdf: PdfService,
   ) {}
 
-  // ── List ─────────────────────────────────────────────────────────
-
   async findAll(filters: {
     cedanteId?: string;
     reassuranceType?: string;
@@ -47,16 +46,7 @@ export class TraitesService {
     page?: number;
     limit?: number;
   }) {
-    const {
-      cedanteId,
-      reassuranceType,
-      periodicite,
-      statut,
-      search,
-      page = 1,
-      limit = 20,
-    } = filters;
-
+    const { cedanteId, reassuranceType, periodicite, statut, search, page = 1, limit = 20 } = filters;
     const skip = (page - 1) * limit;
 
     const where: any = {
@@ -70,24 +60,10 @@ export class TraitesService {
       ...(periodicite && { periodicite }),
       ...(search && {
         OR: [
-          {
-            referenceTraite: { contains: search, mode: 'insensitive' },
-          },
-          {
-            branche: { contains: search, mode: 'insensitive' },
-          },
-          {
-            affaire: {
-              numero: { contains: search, mode: 'insensitive' },
-            },
-          },
-          {
-            affaire: {
-              cedante: {
-                raisonSociale: { contains: search, mode: 'insensitive' },
-              },
-            },
-          },
+          { referenceTraite: { contains: search, mode: 'insensitive' } },
+          { branche: { contains: search, mode: 'insensitive' } },
+          { affaire: { numero: { contains: search, mode: 'insensitive' } } },
+          { affaire: { cedante: { raisonSociale: { contains: search, mode: 'insensitive' } } } },
         ],
       }),
     };
@@ -98,24 +74,15 @@ export class TraitesService {
         include: {
           affaire: {
             include: {
-              cedante: {
-                select: { id: true, code: true, raisonSociale: true },
-              },
-              reassureurs: {
-                include: {
-                  reassureur: {
-                    select: { id: true, code: true, raisonSociale: true },
-                  },
-                },
-              },
+              cedante: { select: { id: true, code: true, raisonSociale: true } },
+              reassureurs: { include: { reassureur: { select: { id: true, code: true, raisonSociale: true } } } },
             },
           },
           accountRubriques: { orderBy: { ordre: 'asc' } },
           pmdInstalments: { orderBy: { numeroTranche: 'asc' } },
           _count: { select: { situations: true } },
         },
-        skip,
-        take: limit,
+        skip, take: limit,
         orderBy: { affaire: { createdAt: 'desc' } },
       }),
       this.prisma.traiteAffaire.count({ where }),
@@ -124,8 +91,6 @@ export class TraitesService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
-  // ── Find one ─────────────────────────────────────────────────────
-
   async findOne(affaireId: string) {
     const traite = await this.prisma.traiteAffaire.findUnique({
       where: { affaireId },
@@ -133,24 +98,12 @@ export class TraitesService {
         affaire: {
           include: {
             cedante: true,
-            reassureurs: {
-              include: {
-                reassureur: {
-                  include: { bankAccounts: { where: { isDefault: true } } },
-                },
-              },
-            },
+            reassureurs: { include: { reassureur: { include: { bankAccounts: { where: { isDefault: true } } } } } },
           },
         },
         accountRubriques: { orderBy: { ordre: 'asc' } },
         pmdInstalments: { orderBy: { numeroTranche: 'asc' } },
-        situations: {
-          orderBy: { createdAt: 'desc' },
-          take: 5,
-          include: {
-            _count: { select: { lines: true } },
-          },
-        },
+        situations: { orderBy: { createdAt: 'desc' }, take: 5, include: { _count: { select: { lines: true } } } },
       },
     });
 
@@ -158,44 +111,20 @@ export class TraitesService {
     return traite;
   }
 
-  // ── Create ───────────────────────────────────────────────────────
-
   async create(dto: CreateTraiteDto) {
-    const affaire = await this.prisma.affaire.findUnique({
-      where: { id: dto.affaireId },
-    });
+    const affaire = await this.prisma.affaire.findUnique({ where: { id: dto.affaireId } });
 
-    if (!affaire || !affaire.isActive) {
-      throw new NotFoundException('Affaire introuvable');
-    }
-    if (affaire.type !== AffaireType.TRAITE) {
-      throw new BadRequestException(
-        "L'affaire doit être de type TRAITE",
-      );
-    }
+    if (!affaire || !affaire.isActive) throw new NotFoundException('Affaire introuvable');
+    if (affaire.type !== AffaireType.TRAITE) throw new BadRequestException("L'affaire doit être de type TRAITE");
 
-    const existing = await this.prisma.traiteAffaire.findUnique({
-      where: { affaireId: dto.affaireId },
-    });
-    if (existing) {
-      throw new ConflictException(
-        'Des données de traité existent déjà pour cette affaire',
-      );
-    }
+    const existing = await this.prisma.traiteAffaire.findUnique({ where: { affaireId: dto.affaireId } });
+    if (existing) throw new ConflictException('Des données de traité existent déjà pour cette affaire');
 
-    // FIX (Traités pass): dateEffet/dateEcheance order was never validated —
-    // mirrors the guard AffairesService and FacultativeService both have.
     this.assertDateOrder(dto.dateEffet, dto.dateEcheance);
 
     const dateEffet = new Date(dto.dateEffet);
 
-    // Auto-generate PMD instalments if PMD set but no custom schedule provided
-    let pmdInstalmentsData: Array<{
-      numeroTranche: number;
-      dateEcheance: Date;
-      montant: number;
-      tauxDeduction?: number;
-    }> = [];
+    let pmdInstalmentsData: Array<{ numeroTranche: number; dateEcheance: Date; montant: number; tauxDeduction?: number }> = [];
 
     if (dto.pmdInstalments?.length) {
       pmdInstalmentsData = dto.pmdInstalments.map((p) => ({
@@ -205,11 +134,7 @@ export class TraitesService {
         tauxDeduction: p.tauxDeduction,
       }));
     } else if (dto.pmd && dto.pmd > 0) {
-      const generated = this.calculator.generatePmdInstalments(
-        dto.pmd,
-        dto.periodicite,
-        dateEffet,
-      );
+      const generated = this.calculator.generatePmdInstalments(dto.pmd, dto.periodicite, dateEffet);
       pmdInstalmentsData = generated.map((g) => ({
         numeroTranche: g.numeroTranche,
         dateEcheance: g.dateEcheance,
@@ -227,9 +152,7 @@ export class TraitesService {
         dateEffet,
         dateEcheance: new Date(dto.dateEcheance),
         modeRenouvellement: dto.modeRenouvellement,
-        dateAvisResiliation: dto.dateAvisResiliation
-          ? new Date(dto.dateAvisResiliation)
-          : undefined,
+        dateAvisResiliation: dto.dateAvisResiliation ? new Date(dto.dateAvisResiliation) : undefined,
         zoneGeographique: dto.zoneGeographique,
         branche: dto.branche,
         produit: dto.produit,
@@ -241,17 +164,9 @@ export class TraitesService {
         commissionLiquidationArs: dto.commissionLiquidationArs,
         seuilNotification: dto.seuilNotification,
         accountRubriques: dto.accountRubriques
-          ? {
-              create: dto.accountRubriques.map((r, i) => ({
-                rubrique: r.rubrique,
-                compteReference: r.compteReference,
-                ordre: r.ordre ?? i + 1,
-              })),
-            }
+          ? { create: dto.accountRubriques.map((r, i) => ({ rubrique: r.rubrique, compteReference: r.compteReference, ordre: r.ordre ?? i + 1 })) }
           : undefined,
-        pmdInstalments: pmdInstalmentsData.length
-          ? { create: pmdInstalmentsData }
-          : undefined,
+        pmdInstalments: pmdInstalmentsData.length ? { create: pmdInstalmentsData } : undefined,
       },
       include: {
         accountRubriques: { orderBy: { ordre: 'asc' } },
@@ -263,130 +178,80 @@ export class TraitesService {
     return traite;
   }
 
-  // ── Update ───────────────────────────────────────────────────────
-
   async update(affaireId: string, dto: UpdateTraiteDto) {
     const traite = await this.findOne(affaireId);
 
     if (traite.affaire.statut === AffaireStatut.PLACEMENT_REALISE) {
-      // Allow updates to purely operational fields (seuil, periodicite,
-      // modeRenouvellement...) even when placed.
-      // FIX (Traités pass): the error message below says "les champs
-      // financiers et dates" but the guard previously only checked
-      // formeCouverture/dateEffet/dateEcheance/pmd — primePrevisionnelle,
-      // tauxCommissionCedante and commissionLiquidationArs (all financial
-      // fields) were silently editable post-placement, contradicting the
-      // method's own stated rule. Added them.
       const restrictedFields: (keyof UpdateTraiteDto)[] = [
-        'formeCouverture',
-        'dateEffet',
-        'dateEcheance',
-        'pmd',
-        'primePrevisionnelle',
-        'tauxCommissionCedante',
-        'commissionLiquidationArs',
+        'formeCouverture', 'dateEffet', 'dateEcheance', 'pmd',
+        'primePrevisionnelle', 'tauxCommissionCedante', 'commissionLiquidationArs',
       ];
-      const hasRestricted = restrictedFields.some(
-        (f) => (dto as Record<string, unknown>)[f] !== undefined,
-      );
+      const hasRestricted = restrictedFields.some((f) => (dto as Record<string, unknown>)[f] !== undefined);
       if (hasRestricted) {
-        throw new BadRequestException(
-          'Les champs financiers et dates ne peuvent plus être modifiés sur un traité placé',
-        );
+        throw new BadRequestException('Les champs financiers et dates ne peuvent plus être modifiés sur un traité placé');
       }
     }
 
-    // FIX (Traités pass): date order was never re-validated on update —
-    // moving only one of dateEffet/dateEcheance could silently invert the
-    // period. Note this branch is effectively only reachable pre-placement
-    // given the guard above, but validated regardless for defense in depth
-    // (e.g. a future relaxation of the placement guard).
     if (dto.dateEffet !== undefined || dto.dateEcheance !== undefined) {
-      this.assertDateOrder(
-        dto.dateEffet ?? traite.dateEffet.toISOString(),
-        dto.dateEcheance ?? traite.dateEcheance.toISOString(),
-      );
+      this.assertDateOrder(dto.dateEffet ?? traite.dateEffet.toISOString(), dto.dateEcheance ?? traite.dateEcheance.toISOString());
     }
 
-    return this.prisma.traiteAffaire.update({
+    const updatedTraite = await this.prisma.traiteAffaire.update({
       where: { affaireId },
       data: {
-        ...(dto.referenceTraite !== undefined && {
-          referenceTraite: dto.referenceTraite,
-        }),
-        ...(dto.formeCouverture !== undefined && {
-          formeCouverture: dto.formeCouverture,
-        }),
-        ...(dto.dateEffet !== undefined && {
-          dateEffet: new Date(dto.dateEffet),
-        }),
-        ...(dto.dateEcheance !== undefined && {
-          dateEcheance: new Date(dto.dateEcheance),
-        }),
-        ...(dto.modeRenouvellement !== undefined && {
-          modeRenouvellement: dto.modeRenouvellement,
-        }),
-        ...(dto.dateAvisResiliation !== undefined && {
-          dateAvisResiliation: dto.dateAvisResiliation
-            ? new Date(dto.dateAvisResiliation)
-            : null,
-        }),
-        ...(dto.zoneGeographique !== undefined && {
-          zoneGeographique: dto.zoneGeographique,
-        }),
+        ...(dto.referenceTraite !== undefined && { referenceTraite: dto.referenceTraite }),
+        ...(dto.formeCouverture !== undefined && { formeCouverture: dto.formeCouverture }),
+        ...(dto.dateEffet !== undefined && { dateEffet: new Date(dto.dateEffet) }),
+        ...(dto.dateEcheance !== undefined && { dateEcheance: new Date(dto.dateEcheance) }),
+        ...(dto.modeRenouvellement !== undefined && { modeRenouvellement: dto.modeRenouvellement }),
+        ...(dto.dateAvisResiliation !== undefined && { dateAvisResiliation: dto.dateAvisResiliation ? new Date(dto.dateAvisResiliation) : null }),
+        ...(dto.zoneGeographique !== undefined && { zoneGeographique: dto.zoneGeographique }),
         ...(dto.branche !== undefined && { branche: dto.branche }),
         ...(dto.produit !== undefined && { produit: dto.produit }),
         ...(dto.garantie !== undefined && { garantie: dto.garantie }),
-        ...(dto.periodicite !== undefined && {
-          periodicite: dto.periodicite,
-        }),
-        ...(dto.primePrevisionnelle !== undefined && {
-          primePrevisionnelle: dto.primePrevisionnelle,
-        }),
+        ...(dto.periodicite !== undefined && { periodicite: dto.periodicite }),
+        ...(dto.primePrevisionnelle !== undefined && { primePrevisionnelle: dto.primePrevisionnelle }),
         ...(dto.pmd !== undefined && { pmd: dto.pmd }),
-        ...(dto.tauxCommissionCedante !== undefined && {
-          tauxCommissionCedante: dto.tauxCommissionCedante,
-        }),
-        ...(dto.commissionLiquidationArs !== undefined && {
-          commissionLiquidationArs: dto.commissionLiquidationArs,
-        }),
-        ...(dto.seuilNotification !== undefined && {
-          seuilNotification: dto.seuilNotification,
-        }),
+        ...(dto.tauxCommissionCedante !== undefined && { tauxCommissionCedante: dto.tauxCommissionCedante }),
+        ...(dto.commissionLiquidationArs !== undefined && { commissionLiquidationArs: dto.commissionLiquidationArs }),
+        ...(dto.seuilNotification !== undefined && { seuilNotification: dto.seuilNotification }),
       },
       include: {
         accountRubriques: { orderBy: { ordre: 'asc' } },
         pmdInstalments: { orderBy: { numeroTranche: 'asc' } },
       },
     });
+
+    if (dto.primePrevisionnelle !== undefined || dto.tauxCommissionCedante !== undefined) {
+      const primeNette = updatedTraite.primePrevisionnelle
+        ? Number(updatedTraite.primePrevisionnelle) * (1 - Number(updatedTraite.tauxCommissionCedante ?? 0) / 100)
+        : 0;
+      await this.calculateDistribution(affaireId, primeNette);
+    }
+
+    return updatedTraite;
   }
-
-  // ── Account Rubriques ────────────────────────────────────────────
-
-  async replaceAccountRubriques(
-    affaireId: string,
-    rubriques: TreatyAccountRubriqueDto[],
-  ) {
+  async replaceAccountRubriques(affaireId: string, rubriques: TreatyAccountRubriqueDto[]) {
     const traite = await this.prisma.traiteAffaire.findUnique({
       where: { affaireId },
-      select: { id: true },
+      select: { id: true, affaire: { select: { statut: true } } },
     });
     if (!traite) throw new NotFoundException('Traité introuvable');
 
+    if (traite.affaire.statut === AffaireStatut.PLACEMENT_REALISE) {
+      throw new BadRequestException(
+        'Les rubriques comptables ne peuvent plus être modifiées sur un traité placé.',
+      );
+    }
+
     return this.prisma.$transaction(async (tx) => {
-      await tx.treatyAccountRubrique.deleteMany({
-        where: { traiteId: traite.id },
-      });
+      await tx.treatyAccountRubrique.deleteMany({ where: { traiteId: traite.id } });
 
       return tx.traiteAffaire.update({
         where: { affaireId },
         data: {
           accountRubriques: {
-            create: rubriques.map((r, i) => ({
-              rubrique: r.rubrique,
-              compteReference: r.compteReference,
-              ordre: r.ordre ?? i + 1,
-            })),
+            create: rubriques.map((r, i) => ({ rubrique: r.rubrique, compteReference: r.compteReference, ordre: r.ordre ?? i + 1 })),
           },
         },
         include: { accountRubriques: { orderBy: { ordre: 'asc' } } },
@@ -394,49 +259,22 @@ export class TraitesService {
     });
   }
 
-  // ── PMD Instalments ──────────────────────────────────────────────
-
   async getPmdInstalments(affaireId: string) {
-    const traite = await this.prisma.traiteAffaire.findUnique({
-      where: { affaireId },
-      select: { id: true },
-    });
+    const traite = await this.prisma.traiteAffaire.findUnique({ where: { affaireId }, select: { id: true } });
     if (!traite) throw new NotFoundException('Traité introuvable');
-
-    return this.prisma.pmdInstalment.findMany({
-      where: { traiteId: traite.id },
-      orderBy: { numeroTranche: 'asc' },
-    });
+    return this.prisma.pmdInstalment.findMany({ where: { traiteId: traite.id }, orderBy: { numeroTranche: 'asc' } });
   }
 
-  /**
-   * FIX (Traités pass, new): full-array replace for a hand-edited PMD
-   * schedule — mirrors replaceAccountRubriques()/replaceGuaranteeLines()
-   * exactly. Was entirely missing; the only prior write paths were the
-   * initial CreateTraiteDto.pmdInstalments and regeneratePmdInstalments()
-   * (which only knows how to derive an even split from pmd/periodicite).
-   * Blocks the replace if any existing tranche is already paid, since a
-   * delete+recreate would orphan the Encaissement row created by
-   * markInstalmentPaid() for that tranche.
-   */
   async replacePmdInstalments(affaireId: string, instalments: PmdInstalmentDto[]) {
-    const traite = await this.prisma.traiteAffaire.findUnique({
-      where: { affaireId },
-      select: { id: true },
-    });
+    const traite = await this.prisma.traiteAffaire.findUnique({ where: { affaireId }, select: { id: true } });
     if (!traite) throw new NotFoundException('Traité introuvable');
 
-    const existing = await this.prisma.pmdInstalment.findMany({
-      where: { traiteId: traite.id },
-      select: { isPaid: true },
-    });
-    if (existing.some((i) => i.isPaid)) {
-      throw new BadRequestException(
-        'Impossible de remplacer intégralement le calendrier : au moins une tranche est déjà payée.',
-      );
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.pmdInstalment.findMany({ where: { traiteId: traite.id }, select: { isPaid: true } });
+      if (existing.some((i) => i.isPaid)) {
+        throw new BadRequestException('Impossible de remplacer intégralement le calendrier : au moins une tranche est déjà payée.');
+      }
+
       await tx.pmdInstalment.deleteMany({ where: { traiteId: traite.id } });
 
       return tx.traiteAffaire.update({
@@ -458,20 +296,18 @@ export class TraitesService {
 
   async regeneratePmdInstalments(affaireId: string) {
     const traite = await this.findOne(affaireId);
-
     if (!traite.pmd || Number(traite.pmd) <= 0) {
-      throw new BadRequestException(
-        'PMD non renseigné — impossible de générer le calendrier',
-      );
+      throw new BadRequestException('PMD non renseigné — impossible de générer le calendrier');
     }
 
-    const generated = this.calculator.generatePmdInstalments(
-      Number(traite.pmd),
-      traite.periodicite,
-      traite.dateEffet,
-    );
+    const generated = this.calculator.generatePmdInstalments(Number(traite.pmd), traite.periodicite, traite.dateEffet);
 
     return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.pmdInstalment.findMany({ where: { traiteId: traite.id }, select: { isPaid: true } });
+      if (existing.some((i) => i.isPaid)) {
+        throw new BadRequestException('Impossible de régénérer le calendrier : au moins une tranche est déjà payée.');
+      }
+
       await tx.pmdInstalment.deleteMany({ where: { traiteId: traite.id } });
 
       await tx.pmdInstalment.createMany({
@@ -484,66 +320,118 @@ export class TraitesService {
         })),
       });
 
-      return tx.pmdInstalment.findMany({
-        where: { traiteId: traite.id },
-        orderBy: { numeroTranche: 'asc' },
-      });
+      return tx.pmdInstalment.findMany({ where: { traiteId: traite.id }, orderBy: { numeroTranche: 'asc' } });
     });
   }
 
-  async markInstalmentPaid(
-    affaireId: string,
-    instalmentId: string,
-  ) {
+  async markInstalmentPaid(affaireId: string, instalmentId: string) {
     const traite = await this.prisma.traiteAffaire.findUnique({
       where: { affaireId },
-      include: {
-        affaire: {
-          select: {
-            id: true,
-            numero: true,
-            cedanteId: true,
-            currency: true,
-          },
-        },
-      },
+      include: { affaire: { select: { id: true, numero: true, cedanteId: true, currency: true } } },
     });
     if (!traite) throw new NotFoundException('Traité introuvable');
 
-    const instalment = await this.prisma.pmdInstalment.findFirst({
-      where: { id: instalmentId, traiteId: traite.id },
+    const instalment = await this.prisma.pmdInstalment.findFirst({ where: { id: instalmentId, traiteId: traite.id } });
+    if (!instalment) throw new NotFoundException('Tranche PMD introuvable');
+    if (instalment.isPaid) throw new BadRequestException('Tranche déjà marquée comme payée');
+
+    return this.prisma.$transaction(async (tx) => {
+      const claim = await tx.pmdInstalment.updateMany({
+        where: { id: instalmentId, isPaid: false },
+        data: { isPaid: true, paidAt: new Date() },
+      });
+      if (claim.count === 0) {
+        throw new ConflictException('Tranche déjà marquée comme payée (opération concurrente détectée)');
+      }
+
+      await tx.encaissement.create({
+        data: {
+          reference: `PMD-${traite.affaire.numero}-T${instalment.numeroTranche}`,
+          affaireId: traite.affaire.id,
+          partyType: 'CEDANTE',
+          cedanteId: traite.affaire.cedanteId,
+          montant: Number(instalment.montant),
+          currency: traite.affaire.currency,
+          description: `PMD Tranche ${instalment.numeroTranche} — ${traite.affaire.numero}`,
+        },
+      });
+
+      return tx.pmdInstalment.findUniqueOrThrow({ where: { id: instalmentId } });
     });
-    if (!instalment)
-      throw new NotFoundException('Tranche PMD introuvable');
-    if (instalment.isPaid)
-      throw new BadRequestException('Tranche déjà marquée comme payée');
-
-    const updated = await this.prisma.pmdInstalment.update({
-      where: { id: instalmentId },
-      data: { isPaid: true, paidAt: new Date() },
-    });
-
-    // Trigger accounting entry for PMD payment
-    await this.prisma.encaissement.create({
-      data: {
-        reference: `PMD-${traite.affaire.numero}-T${instalment.numeroTranche}`,
-        affaireId: traite.affaire.id,
-        partyType: 'CEDANTE',
-        cedanteId: traite.affaire.cedanteId,
-        montant: Number(instalment.montant),
-        currency: traite.affaire.currency,
-        description: `PMD Tranche ${instalment.numeroTranche} — ${traite.affaire.numero}`,
-      },
-    }).catch((err) => this.logger.error(`PMD payment encaissement failed: ${err.message}`));
-
-    return updated;
   }
 
-  // ── Liquidation calculation ──────────────────────────────────────
+  // ── Liquidation ───────────────────────────────────────────────────
 
+  /** Pure simulation — unchanged behavior, nothing persisted. */
   async calculateLiquidation(affaireId: string, input: LiquidationInput) {
-    await this.findOne(affaireId); // existence check
+    await this.findOne(affaireId);
     return this.calculator.calculateLiquidation(input);
+  }
+
+  /**
+   * NEW: computes AND saves a TraiteLiquidation row (statut SIMULATION).
+   * Does not touch Comptabilité — see class-level note.
+   */
+  async persistLiquidation(affaireId: string, dto: PersistLiquidationDto, userId: string) {
+    const traite = await this.findOne(affaireId);
+
+    if (new Date(dto.periodeDebut) >= new Date(dto.periodeFin)) {
+      throw new BadRequestException('La période de début doit être antérieure à la période de fin');
+    }
+
+    const result = this.calculator.calculateLiquidation(dto);
+
+    return this.prisma.traiteLiquidation.create({
+      data: {
+        traiteId: traite.id,
+        statut: TraiteLiquidationStatut.SIMULATION,
+        periodeDebut: new Date(dto.periodeDebut),
+        periodeFin: new Date(dto.periodeFin),
+        primesCedees: dto.primesCedees,
+        participationsBenefRecues: dto.participationsBenefReçues,
+        interetsSurDepots: dto.interetsSurDepots,
+        sinistresPayes: dto.sinistresPayes,
+        reservesConstituees: dto.reservesConstituees,
+        reservesLibereesAnterieur: dto.reservesLibereesAnterieur,
+        commissionCedante: dto.commissionCedante,
+        commissionLiquidationArs: dto.commissionLiquidationArs,
+        courtage: dto.courtage,
+        taxes: dto.taxes,
+        pmdDeductible: dto.pmdDeductible,
+        totalDebit: result.totalDebit,
+        totalCredit: result.totalCredit,
+        soldeNet: result.soldeNet,
+        soldeDirection: result.soldeDirection,
+        createdByUserId: userId,
+      },
+    });
+  }
+
+  async getLiquidations(affaireId: string) {
+    const traite = await this.prisma.traiteAffaire.findUnique({ where: { affaireId }, select: { id: true } });
+    if (!traite) throw new NotFoundException('Traité introuvable');
+    return this.prisma.traiteLiquidation.findMany({
+      where: { traiteId: traite.id },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async validateLiquidation(affaireId: string, liquidationId: string, userId: string) {
+    const traite = await this.prisma.traiteAffaire.findUnique({ where: { affaireId }, select: { id: true } });
+    if (!traite) throw new NotFoundException('Traité introuvable');
+
+    const liquidation = await this.prisma.traiteLiquidation.findFirst({
+      where: { id: liquidationId, traiteId: traite.id },
+    });
+    if (!liquidation) throw new NotFoundException('Liquidation introuvable');
+    if (liquidation.statut === TraiteLiquidationStatut.VALIDEE) {
+      throw new BadRequestException('Cette liquidation est déjà validée');
+    }
+
+    return this.prisma.traiteLiquidation.update({
+      where: { id: liquidationId },
+      data: { statut: TraiteLiquidationStatut.VALIDEE, validatedAt: new Date(), validatedByUserId: userId },
+    });
   }
 
   // ── Treaty distribution ──────────────────────────────────────────
@@ -556,45 +444,63 @@ export class TraitesService {
       partPct: Number(r.partPct),
       commissionMode: r.commissionMode,
       tauxCommissionArs: Number(r.tauxCommissionArs ?? 0),
-      commissionForfait: r.commissionForfait
-        ? Number(r.commissionForfait)
-        : undefined,
+      commissionForfait: r.commissionForfait ? Number(r.commissionForfait) : undefined,
     }));
 
-    return this.calculator.calculateTreatyDistribution({
-      primeNetteCedante,
-      reassureurs,
-    });
+    const results = this.calculator.calculateTreatyDistribution({ primeNetteCedante, reassureurs });
+
+    await Promise.all(
+      results.map((res) =>
+        this.prisma.affaireReassureur.updateMany({
+          where: { affaireId, reassureurId: res.reassureurId },
+          data: { primeBrute: res.primeBrute, commissionArs: res.commissionArs, primeNetteReassureur: res.primeNetteReassureur },
+        }),
+      ),
+    );
+
+    this.logger.log(`Treaty distribution persisted for affaire ${affaireId} (${results.length} reinsurers)`);
+    return results;
   }
-
-  // ── Renewals ─────────────────────────────────────────────────────
-
   async getRenewalsAlert(daysAhead = 60) {
     const now = new Date();
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() + daysAhead);
 
-    return this.prisma.traiteAffaire.findMany({
+    const dueForRenewal = await this.prisma.traiteAffaire.findMany({
       where: {
         dateEcheance: { gte: now, lte: cutoff },
         modeRenouvellement: { not: ModeRenouvellement.RESILIATION },
-        affaire: {
-          isActive: true,
-          statut: AffaireStatut.PLACEMENT_REALISE,
-        },
+        affaire: { isActive: true, statut: AffaireStatut.PLACEMENT_REALISE },
       },
       include: {
-        affaire: {
-          include: {
-            cedante: { select: { code: true, raisonSociale: true } },
-          },
-        },
+        affaire: { include: { cedante: { select: { code: true, raisonSociale: true } } } },
       },
       orderBy: { dateEcheance: 'asc' },
     });
-  }
 
-  // ── Statistics ───────────────────────────────────────────────────
+    const notYetFlagged = dueForRenewal.filter((t) => !t.renewalReminderSent);
+    if (notYetFlagged.length > 0) {
+      await this.prisma.$transaction([
+        this.prisma.traiteAffaire.updateMany({
+          where: { id: { in: notYetFlagged.map((t) => t.id) } },
+          data: { renewalReminderSent: true },
+        }),
+        ...notYetFlagged.map((t) =>
+          this.prisma.workflowTask.create({
+            data: {
+              type: 'RENOUVELLEMENT_TRAITE',
+              affaireId: t.affaire.id,
+              description: `Renouvellement à préparer — traité ${t.affaire.numero} (${t.affaire.cedante.raisonSociale}), échéance ${t.dateEcheance.toLocaleDateString('fr-FR')}`,
+              dueDate: t.dateEcheance,
+            },
+          }),
+        ),
+      ]);
+      this.logger.log(`Renewal reminders created for ${notYetFlagged.length} treaty(ies)`);
+    }
+
+    return dueForRenewal;
+  }
 
   async getStats(year?: number) {
     const targetYear = year ?? new Date().getFullYear();
@@ -602,23 +508,16 @@ export class TraitesService {
     const dateTo = new Date(`${targetYear}-12-31`);
 
     const [total, byType, pmds] = await Promise.all([
-      this.prisma.traiteAffaire.count({
-        where: { affaire: { isActive: true, statut: AffaireStatut.PLACEMENT_REALISE } },
-      }),
+      this.prisma.traiteAffaire.count({ where: { affaire: { isActive: true, statut: AffaireStatut.PLACEMENT_REALISE } } }),
       this.prisma.traiteAffaire.groupBy({
         by: ['reassuranceType'],
-        where: {
-          dateEffet: { gte: dateFrom, lte: dateTo },
-          affaire: { isActive: true },
-        },
+        where: { dateEffet: { gte: dateFrom, lte: dateTo }, affaire: { isActive: true } },
         _count: { id: true },
         _sum: { pmd: true, primePrevisionnelle: true },
       }),
       this.prisma.pmdInstalment.aggregate({
         where: {
-          traite: {
-            affaire: { isActive: true, statut: AffaireStatut.PLACEMENT_REALISE },
-          },
+          traite: { affaire: { isActive: true, statut: AffaireStatut.PLACEMENT_REALISE } },
           dateEcheance: { gte: dateFrom, lte: dateTo },
         },
         _sum: { montant: true },
@@ -634,53 +533,33 @@ export class TraitesService {
         totalPmd: Number(b._sum.pmd ?? 0),
         totalPrimePrevisionnelle: Number(b._sum.primePrevisionnelle ?? 0),
       })),
-      pmdEcheancesAnnee: {
-        count: pmds._count.id,
-        totalMontant: Number(pmds._sum.montant ?? 0),
-      },
+      pmdEcheancesAnnee: { count: pmds._count.id, totalMontant: Number(pmds._sum.montant ?? 0) },
       year: targetYear,
     };
   }
 
-  // ── PDF ──────────────────────────────────────────────────────────
-
   async generateTreatyStatement(affaireId: string): Promise<Buffer> {
     const traite = await this.findOne(affaireId);
     const company = await this.prisma.companyProfile.findFirst();
-
     const situations = await this.prisma.situation.findMany({
       where: { traiteId: traite.id },
       include: { lines: true, cedante: true },
       orderBy: { createdAt: 'desc' },
       take: 4,
     });
-
     return this.pdf.generateFromTemplate('treaty-statement', {
-      traite,
-      affaire: traite.affaire,
-      company,
-      situations,
-      generatedAt: new Date().toLocaleDateString('fr-TN'),
+      traite, affaire: traite.affaire, company, situations, generatedAt: new Date().toLocaleDateString('fr-TN'),
     });
   }
 
   async generatePmdInvoice(affaireId: string): Promise<Buffer> {
     const traite = await this.findOne(affaireId);
     const company = await this.prisma.companyProfile.findFirst();
-
     return this.pdf.generateFromTemplate('pmd-invoice', {
-      traite,
-      affaire: traite.affaire,
-      company,
-      generatedAt: new Date().toLocaleDateString('fr-TN'),
+      traite, affaire: traite.affaire, company, generatedAt: new Date().toLocaleDateString('fr-TN'),
     });
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────
-
-  /** FIX (Traités pass): mirrors AffairesService/FacultativeService's own
-   * guard — kept local to this service, consistent with how the same
-   * duplication was handled in Pass 2. */
   private assertDateOrder(effet?: string, echeance?: string): void {
     if (!effet || !echeance) return;
     if (new Date(effet) >= new Date(echeance)) {

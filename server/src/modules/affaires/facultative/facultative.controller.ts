@@ -3,7 +3,6 @@ import {
   Get,
   Post,
   Put,
-  Patch,
   Delete,
   Body,
   Param,
@@ -12,6 +11,8 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  DefaultValuePipe,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { Response } from 'express';
 import {
@@ -61,8 +62,8 @@ export class FacultativeController {
     @Query('dateEffetTo') dateEffetTo?: string,
     @Query('modeRenouvellement') modeRenouvellement?: ModeRenouvellement,
     @Query('search') search?: string,
-    @Query('page') page?: number,
-    @Query('limit') limit?: number,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number,
   ) {
     return this.service.findAll({
       cedanteId,
@@ -111,10 +112,7 @@ export class FacultativeController {
   @Put(':affaireId')
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
   @ApiOperation({ summary: 'Mettre à jour les données facultatives' })
-  update(
-    @Param('affaireId') affaireId: string,
-    @Body() dto: UpdateFacultativeDto,
-  ) {
+  update(@Param('affaireId') affaireId: string, @Body() dto: UpdateFacultativeDto) {
     return this.service.update(affaireId, dto);
   }
 
@@ -126,25 +124,17 @@ export class FacultativeController {
     return this.service.recalculateCommissions(affaireId);
   }
 
-  // ── Guarantee lines ──────────────────────────────────────────────
-
   @Put(':affaireId/guarantee-lines')
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
   @ApiOperation({ summary: 'Remplacer toutes les lignes de garantie' })
-  replaceGuaranteeLines(
-    @Param('affaireId') affaireId: string,
-    @Body() lines: GuaranteeLineDto[],
-  ) {
+  replaceGuaranteeLines(@Param('affaireId') affaireId: string, @Body() lines: GuaranteeLineDto[]) {
     return this.service.replaceGuaranteeLines(affaireId, lines);
   }
 
   @Post(':affaireId/guarantee-lines')
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
   @ApiOperation({ summary: 'Ajouter une ligne de garantie' })
-  addGuaranteeLine(
-    @Param('affaireId') affaireId: string,
-    @Body() line: GuaranteeLineDto,
-  ) {
+  addGuaranteeLine(@Param('affaireId') affaireId: string, @Body() line: GuaranteeLineDto) {
     return this.service.addGuaranteeLine(affaireId, line);
   }
 
@@ -152,28 +142,17 @@ export class FacultativeController {
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
   @ApiOperation({ summary: 'Supprimer une ligne de garantie' })
   @HttpCode(HttpStatus.OK)
-  removeGuaranteeLine(
-    @Param('affaireId') affaireId: string,
-    @Param('lineId') lineId: string,
-  ) {
+  removeGuaranteeLine(@Param('affaireId') affaireId: string, @Param('lineId') lineId: string) {
     return this.service.removeGuaranteeLine(affaireId, lineId);
   }
-
-  // ── PDF ──────────────────────────────────────────────────────────
 
   @Get(':affaireId/slip/pdf')
   @RequirePermissions(Permission.AFFAIRES_READ)
   @ApiOperation({ summary: 'Générer le slip de cotation en PDF' })
-  async downloadSlip(
-    @Param('affaireId') affaireId: string,
-    @Res() res: Response,
-  ) {
+  async downloadSlip(@Param('affaireId') affaireId: string, @Res() res: Response) {
     const buffer = await this.service.generateSlip(affaireId);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="slip-facultative-${affaireId}.pdf"`,
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="slip-facultative-${affaireId}.pdf"`);
     res.send(buffer);
   }
 }

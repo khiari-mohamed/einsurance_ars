@@ -8,15 +8,6 @@ import { PmdInstalmentInput } from '../../types/traite.types';
 interface Props {
   affaireId: string;
 }
-
-// FIX (Traités pass): full rewrite. The previous version (and its now-
-// recommended-for-deletion twin, features/affaires/PMDInstalmentSchedule.tsx)
-// invented a data model — pourcentage, statut ('en_attente'/'paye'/'retard'),
-// montantPaye, referencePaiement, datePaiement — none of which exists on the
-// real PmdInstalment model (numeroTranche, dateEcheance, montant,
-// tauxDeduction, isPaid, paidAt only), and called routes/APIs that don't
-// exist on the backend. This uses the real /traites endpoints, including the
-// new PUT replace-all route added in this pass.
 export function PmdInstalmentsManager({ affaireId }: Props) {
   const queryClient = useQueryClient();
   const [rows, setRows] = useState<PmdInstalmentInput[]>([]);

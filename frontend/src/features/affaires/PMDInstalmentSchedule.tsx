@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Plus, Trash2, Calendar, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
+import { traitesApi } from '../../api/traites.api';
+import { extractErrorMessage } from '../../lib/api';
 
 interface PMDInstalment {
   id?: string;
@@ -27,21 +29,10 @@ export default function PMDInstalmentSchedule({
   onSave,
 }: PMDInstalmentScheduleProps) {
   const [instalments, setInstalments] = useState<PMDInstalment[]>([
-    {
-      numero: 1,
-      montant: pmdTotal * 0.5,
-      pourcentage: 50,
-      dateEcheance: '',
-      statut: 'en_attente',
-    },
-    {
-      numero: 2,
-      montant: pmdTotal * 0.5,
-      pourcentage: 50,
-      dateEcheance: '',
-      statut: 'en_attente',
-    },
+    { numero: 1, montant: pmdTotal * 0.5, pourcentage: 50, dateEcheance: '', statut: 'en_attente' },
+    { numero: 2, montant: pmdTotal * 0.5, pourcentage: 50, dateEcheance: '', statut: 'en_attente' },
   ]);
+  const [saving, setSaving] = useState(false);
 
   const addInstalment = () => {
     const newInstalment: PMDInstalment = {
@@ -65,13 +56,9 @@ export default function PMDInstalmentSchedule({
   const updateInstalment = (index: number, field: keyof PMDInstalment, value: any) => {
     const updated = [...instalments];
     updated[index] = { ...updated[index], [field]: value };
-
-    // Auto-calculate percentage when amount changes
     if (field === 'montant') {
-      updated[index].pourcentage = (value / pmdTotal) * 100;
+      updated[index].pourcentage = pmdTotal > 0 ? (value / pmdTotal) * 100 : 0;
     }
-
-    // Auto-calculate amount when percentage changes
     if (field === 'pourcentage') {
       updated[index].montant = (value / 100) * pmdTotal;
     }
@@ -79,13 +66,8 @@ export default function PMDInstalmentSchedule({
     setInstalments(updated);
   };
 
-  const getTotalMontant = () => {
-    return instalments.reduce((sum, inst) => sum + inst.montant, 0);
-  };
-
-  const getTotalPourcentage = () => {
-    return instalments.reduce((sum, inst) => sum + inst.pourcentage, 0);
-  };
+  const getTotalMontant = () => instalments.reduce((sum, inst) => sum + Number(inst.montant || 0), 0);
+  const getTotalPourcentage = () => instalments.reduce((sum, inst) => sum + Number(inst.pourcentage || 0), 0);
 
   const handleSave = async () => {
     const total = getTotalPourcentage();
@@ -93,22 +75,27 @@ export default function PMDInstalmentSchedule({
       toast.error(`Le total doit être 100% (actuellement ${total.toFixed(2)}%)`);
       return;
     }
+    if (instalments.some((i) => !i.dateEcheance)) {
+      toast.error('Chaque échéance doit avoir une date.');
+      return;
+    }
 
+    setSaving(true);
     try {
-      const res = await fetch(`/api/affaires/${affaireId}/pmd-instalments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instalments }),
-      });
-
-      if (res.ok) {
-        toast.success('Échéancier PMD enregistré avec succès');
-        if (onSave) onSave(instalments);
-      } else {
-        toast.error('Erreur lors de l\'enregistrement');
-      }
+      await traitesApi.replacePmdInstalments(
+        affaireId,
+        instalments.map((inst) => ({
+          numeroTranche: inst.numero,
+          dateEcheance: inst.dateEcheance,
+          montant: inst.montant,
+        })),
+      );
+      toast.success('Échéancier PMD enregistré avec succès');
+      if (onSave) onSave(instalments);
     } catch (error) {
-      toast.error('Erreur lors de l\'enregistrement');
+      toast.error(extractErrorMessage(error, 'Erreur lors de l\'enregistrement'));
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -182,7 +169,7 @@ export default function PMDInstalmentSchedule({
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Statut</label>
+                <label className="block text-sm font-medium mb-1">Statut (local — non persisté)</label>
                 <select
                   value={inst.statut}
                   onChange={(e) => updateInstalment(index, 'statut', e.target.value)}
@@ -194,34 +181,10 @@ export default function PMDInstalmentSchedule({
                 </select>
               </div>
             </div>
-
-            {inst.statut === 'paye' && (
-              <div className="grid grid-cols-2 gap-4 mt-3">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Date de Paiement</label>
-                  <input
-                    type="date"
-                    value={inst.datePaiement || ''}
-                    onChange={(e) => updateInstalment(index, 'datePaiement', e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Référence</label>
-                  <input
-                    type="text"
-                    value={inst.reference || ''}
-                    onChange={(e) => updateInstalment(index, 'reference', e.target.value)}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
-                </div>
-              </div>
-            )}
           </div>
         ))}
       </div>
 
-      {/* Summary */}
       <div className="mt-6 p-4 bg-primary/10 rounded-lg border border-primary/30">
         <div className="grid grid-cols-3 gap-4">
           <div>
@@ -230,7 +193,7 @@ export default function PMDInstalmentSchedule({
               {totalMontant.toLocaleString()} {devise}
             </p>
             <p className="text-xs text-gray-600 mt-1">
-              {totalMontant === pmdTotal ? (
+              {Math.abs(totalMontant - pmdTotal) < 0.01 ? (
                 <span className="text-green-600">✓ Correct</span>
               ) : (
                 <span className="text-red-600">⚠ Écart: {(totalMontant - pmdTotal).toFixed(2)}</span>
@@ -241,32 +204,24 @@ export default function PMDInstalmentSchedule({
             <p className="text-sm text-gray-600 mb-1">Total Pourcentage</p>
             <p className="text-xl font-bold text-purple-600">{totalPourcentage.toFixed(2)}%</p>
             <p className="text-xs text-gray-600 mt-1">
-              {isValid ? (
-                <span className="text-green-600">✓ Valide</span>
-              ) : (
-                <span className="text-red-600">⚠ Doit être 100%</span>
-              )}
+              {isValid ? <span className="text-green-600">✓ Valide</span> : <span className="text-red-600">⚠ Doit être 100%</span>}
             </p>
           </div>
           <div>
             <p className="text-sm text-gray-600 mb-1">Nombre d'Échéances</p>
             <p className="text-xl font-bold text-gray-700">{instalments.length}</p>
-            <p className="text-xs text-gray-600 mt-1">
-              {instalments.filter((i) => i.statut === 'paye').length} payée(s)
-            </p>
           </div>
         </div>
       </div>
 
-      {/* Save Button */}
       <div className="flex justify-end mt-6">
         <button
           onClick={handleSave}
-          disabled={!isValid}
+          disabled={!isValid || saving}
           className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <DollarSign size={16} />
-          Enregistrer l'Échéancier
+          {saving ? 'Enregistrement...' : "Enregistrer l'Échéancier"}
         </button>
       </div>
     </div>

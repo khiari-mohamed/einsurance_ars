@@ -13,6 +13,7 @@ export interface FacultativeAffaireHeader {
   type: AffaireType;
   cedanteId: string;
   cedante: PartnerRef;
+  currency?: string;
   reassureurs: AffaireReassureur[];
 }
 
@@ -39,10 +40,6 @@ export interface FacultativeListItem {
   guaranteeLines: GuaranteeLine[];
   affaire: FacultativeAffaireHeader;
 }
-
-// Detail response nests fuller party records (contacts, default bank
-// account) — kept loose on those specific sub-objects since this pass
-// doesn't build a dedicated detail page that consumes them deeply.
 export interface FacultativeDetail extends Omit<FacultativeListItem, 'affaire' | 'assure'> {
   assure: PartnerRef & { contacts?: any[] };
   affaire: FacultativeAffaireHeader & {

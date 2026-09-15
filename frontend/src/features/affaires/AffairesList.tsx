@@ -44,11 +44,6 @@ export default function AffairesList() {
     placeholderData: (prev) => prev,
   });
 
-  // FIX (Affaires pass): there is no /affaires/statistics/summary endpoint on
-  // the backend — the old stats bar called a route that 404'd every time.
-  // Rather than fabricate a backend endpoint that wasn't reviewed/requested,
-  // this derives a lightweight, honest summary from pagination metadata
-  // (total count) plus per-statut counts via three cheap filtered calls.
   const { data: statutCounts } = useQuery({
     queryKey: ['affaires-statut-counts'],
     queryFn: async () => {
@@ -68,14 +63,13 @@ export default function AffairesList() {
   const affaires = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
-
   const commissionTotal = (affaire: Affaire) =>
-    affaire.reassureurs.reduce((sum, r) => sum + (r.commissionArs ?? 0), 0);
+    affaire.reassureurs.reduce((sum, r) => sum + Number(r.commissionArs ?? 0), 0);
 
   const primeAffichee = (affaire: Affaire) =>
     affaire.type === AffaireType.FACULTATIVE
-      ? affaire.facultativeData?.primeCedee ?? 0
-      : affaire.traiteData?.primePrevisionnelle ?? 0;
+      ? Number(affaire.facultativeData?.primeCedee ?? 0)
+      : Number(affaire.traiteData?.primePrevisionnelle ?? 0);
 
   return (
     <div className="p-4 lg:p-6">

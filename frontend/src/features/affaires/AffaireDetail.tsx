@@ -61,10 +61,11 @@ export default function AffaireDetail() {
     return <div className="p-6 flex items-center justify-center h-96 text-sm text-muted-foreground">Affaire non trouvée</div>;
   }
 
-  const commissionArsTotal = affaire.reassureurs.reduce((sum, r) => sum + (r.commissionArs ?? 0), 0);
+  // FIX (Affaires pass — Number() coercion, same rationale as AffairesList).
+  const commissionArsTotal = affaire.reassureurs.reduce((sum, r) => sum + Number(r.commissionArs ?? 0), 0);
   const primeAffichee = affaire.type === AffaireType.FACULTATIVE
-    ? affaire.facultativeData?.primeCedee ?? 0
-    : affaire.traiteData?.primePrevisionnelle ?? 0;
+    ? Number(affaire.facultativeData?.primeCedee ?? 0)
+    : Number(affaire.traiteData?.primePrevisionnelle ?? 0);
 
   return (
     <div className="p-4 lg:p-6">
@@ -240,15 +241,18 @@ export default function AffaireDetail() {
                       <div>
                         <h3 className="text-[14px] font-semibold text-foreground mb-4">Données de Base</h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Prime 100%</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(affaire.facultativeData.prime100Pct, affaire.currency)}</p></div>
+                          <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Prime 100%</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(Number(affaire.facultativeData.prime100Pct), affaire.currency)}</p></div>
                           <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Taux Cession</p><p className="text-[15px] font-semibold text-foreground">{affaire.facultativeData.tauxCession}%</p></div>
-                          <div className="rounded-xl border border-[hsl(var(--chart-4)/0.2)] bg-[hsl(var(--chart-4)/0.10)] p-4"><p className="text-[11px] uppercase font-medium text-[hsl(var(--chart-4))] mb-1">Prime Cédée</p><p className="text-[15px] font-semibold text-[hsl(var(--chart-4))]">{formatCurrency(affaire.facultativeData.primeCedee ?? 0, affaire.currency)}</p></div>
-                          <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Commission Cédante</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(affaire.facultativeData.commissionCedante ?? 0, affaire.currency)}</p></div>
+                          <div className="rounded-xl border border-[hsl(var(--chart-4)/0.2)] bg-[hsl(var(--chart-4)/0.10)] p-4"><p className="text-[11px] uppercase font-medium text-[hsl(var(--chart-4))] mb-1">Prime Cédée</p><p className="text-[15px] font-semibold text-[hsl(var(--chart-4))]">{formatCurrency(Number(affaire.facultativeData.primeCedee ?? 0), affaire.currency)}</p></div>
+                          <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Commission Cédante</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(Number(affaire.facultativeData.commissionCedante ?? 0), affaire.currency)}</p></div>
                         </div>
                       </div>
 
                       <div className="pt-2 border-t border-border">
-                        <GuaranteeLinesManager affaireId={affaire.id} />
+                        {/* FIX (Affaires pass): now passes the affaire's real
+                            currency instead of leaving GuaranteeLinesManager
+                            to hardcode 'TND' internally. */}
+                        <GuaranteeLinesManager affaireId={affaire.id} currency={affaire.currency} />
                       </div>
                     </>
                   ) : affaire.traiteData ? (
@@ -256,10 +260,10 @@ export default function AffaireDetail() {
                       <div>
                         <h3 className="text-[14px] font-semibold text-foreground mb-4">Données de Base</h3>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="rounded-xl border border-[hsl(var(--chart-4)/0.2)] bg-[hsl(var(--chart-4)/0.10)] p-4"><p className="text-[11px] uppercase font-medium text-[hsl(var(--chart-4))] mb-1">Prime Prévisionnelle</p><p className="text-[15px] font-semibold text-[hsl(var(--chart-4))]">{formatCurrency(affaire.traiteData.primePrevisionnelle ?? 0, affaire.currency)}</p></div>
-                          <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">PMD</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(affaire.traiteData.pmd ?? 0, affaire.currency)}</p></div>
+                          <div className="rounded-xl border border-[hsl(var(--chart-4)/0.2)] bg-[hsl(var(--chart-4)/0.10)] p-4"><p className="text-[11px] uppercase font-medium text-[hsl(var(--chart-4))] mb-1">Prime Prévisionnelle</p><p className="text-[15px] font-semibold text-[hsl(var(--chart-4))]">{formatCurrency(Number(affaire.traiteData.primePrevisionnelle ?? 0), affaire.currency)}</p></div>
+                          <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">PMD</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(Number(affaire.traiteData.pmd ?? 0), affaire.currency)}</p></div>
                           <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Commission Cédante</p><p className="text-[15px] font-semibold text-foreground">{affaire.traiteData.tauxCommissionCedante ?? 0}%</p></div>
-                          <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Seuil Notification</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(affaire.traiteData.seuilNotification ?? 0, affaire.currency)}</p></div>
+                          <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Seuil Notification</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(Number(affaire.traiteData.seuilNotification ?? 0), affaire.currency)}</p></div>
                         </div>
                       </div>
 
@@ -298,13 +302,18 @@ export default function AffaireDetail() {
                             </span>
                           </div>
                         </div>
-                        <span className="inline-block rounded-full border border-[hsl(var(--chart-4)/0.3)] bg-[hsl(var(--chart-4)/0.15)] px-3 py-1 text-[13px] font-semibold text-[hsl(var(--chart-4))]">{r.partPct}%</span>
+                        <span className="inline-block rounded-full border border-[hsl(var(--chart-4)/0.3)] bg-[hsl(var(--chart-4)/0.15)] px-3 py-1 text-[13px] font-semibold text-[hsl(var(--chart-4))]">{Number(r.partPct).toFixed(4)}%</span>
                       </div>
-                      <div className="grid grid-cols-4 gap-4 text-[12px]">
-                        <div><p className="text-muted-foreground mb-1">Prime Brute</p><p className="font-medium text-foreground">{formatCurrency(r.primeBrute ?? 0, affaire.currency)}</p></div>
-                        <div><p className="text-muted-foreground mb-1">Commission ARS</p><p className="font-medium text-success">{formatCurrency(r.commissionArs ?? 0, affaire.currency)}</p></div>
-                        <div><p className="text-muted-foreground mb-1">Commission Cédante</p><p className="font-medium text-foreground">{formatCurrency(r.commissionCedante ?? 0, affaire.currency)}</p></div>
-                        <div><p className="text-muted-foreground mb-1">Net Réassureur</p><p className="font-medium text-foreground">{formatCurrency(r.primeNetteReassureur ?? 0, affaire.currency)}</p></div>
+                      <div className={`grid ${affaire.type === AffaireType.FACULTATIVE ? 'grid-cols-5' : 'grid-cols-4'} gap-4 text-[12px]`}>
+                        <div><p className="text-muted-foreground mb-1">Prime Brute</p><p className="font-medium text-foreground">{formatCurrency(Number(r.primeBrute ?? 0), affaire.currency)}</p></div>
+                        <div><p className="text-muted-foreground mb-1">Commission ARS</p><p className="font-medium text-success">{formatCurrency(Number(r.commissionArs ?? 0), affaire.currency)}</p></div>
+                        {affaire.type === AffaireType.FACULTATIVE && (
+                          <div><p className="text-muted-foreground mb-1">Commission Cédante</p><p className="font-medium text-foreground">{formatCurrency(Number(r.commissionCedante ?? 0), affaire.currency)}</p></div>
+                        )}
+                        {affaire.type === AffaireType.FACULTATIVE && (
+                          <div><p className="text-muted-foreground mb-1">Prime Nette Cédante</p><p className="font-medium text-foreground">{formatCurrency(Number(r.primeNetteCedante ?? 0), affaire.currency)}</p></div>
+                        )}
+                        <div><p className="text-muted-foreground mb-1">Net Réassureur</p><p className="font-medium text-foreground">{formatCurrency(Number(r.primeNetteReassureur ?? 0), affaire.currency)}</p></div>
                       </div>
                     </div>
                   ))}

@@ -14,95 +14,104 @@ export class AffaireReassureurDto {
   @ApiProperty() @IsString() reassureurId: string;
   @ApiProperty({ description: 'Participation % — total toutes lignes = 100' })
   @IsNumber() @Min(0.0001) @Max(100) partPct: number;
-  @IsOptional() @IsBoolean() isLeader?: boolean;
-  @IsOptional() @IsEnum(CommissionMode) commissionMode?: CommissionMode;
-  @IsOptional() @IsNumber() @Min(0) @Max(100) tauxCommissionArs?: number;
-  @IsOptional() @IsNumber() commissionForfait?: number;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() isLeader?: boolean;
+  @ApiPropertyOptional({ enum: CommissionMode }) @IsOptional() @IsEnum(CommissionMode) commissionMode?: CommissionMode;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) tauxCommissionArs?: number;
+  // FIX (Affaires pass): had no lower bound at all — a negative forfait
+  // commission is not a meaningful value in any of the source material and
+  // would flow straight into primeNetteReassureur unchecked.
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) commissionForfait?: number;
+}
+
+// ── Shared nested DTOs ───────────────────────────────────────────
+export class GuaranteeLineDto {
+  @ApiProperty() @IsString() garantie: string;
+  @ApiProperty() @IsNumber() @Min(0) capitauxAssures100: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() ordre?: number;
+}
+
+export class TreatyAccountRubriqueDto {
+  @ApiProperty() @IsString() rubrique: string;
+  @ApiProperty() @IsString() compteReference: string;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() ordre?: number;
+}
+
+export class PmdInstalmentDto {
+  @ApiProperty() @IsNumber() @Min(1) numeroTranche: number;
+  @ApiProperty({ example: '2024-03-31' }) @IsDateString() dateEcheance: string;
+  @ApiProperty() @IsNumber() @Min(0) montant: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) tauxDeduction?: number;
 }
 
 // ── Facultative financial data (Tab B) ───────────────────────────
 export class FacultativeDataDto {
-  @IsEnum(ReassuranceType) reassuranceType: ReassuranceType;
-  @IsString() assureId: string;
-  @IsOptional() @IsString() numeroPoliceCedante?: string;
-  @IsDateString() dateEffet: string;
-  @IsDateString() dateEcheance: string;
-  @IsOptional() @IsEnum(ModeRenouvellement) modeRenouvellement?: ModeRenouvellement;
-  @IsOptional() @IsString() paysAssure?: string;
-  @IsOptional() @IsString() branche?: string;
-  @IsOptional() @IsString() produit?: string;
-  @IsOptional() @IsString() garantie?: string;
+  @ApiProperty({ enum: ReassuranceType }) @IsEnum(ReassuranceType) reassuranceType: ReassuranceType;
+  @ApiProperty() @IsString() assureId: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() numeroPoliceCedante?: string;
+  @ApiProperty({ example: '2024-01-01' }) @IsDateString() dateEffet: string;
+  @ApiProperty({ example: '2025-01-01' }) @IsDateString() dateEcheance: string;
+  @ApiPropertyOptional({ enum: ModeRenouvellement }) @IsOptional() @IsEnum(ModeRenouvellement) modeRenouvellement?: ModeRenouvellement;
+  @ApiPropertyOptional() @IsOptional() @IsString() paysAssure?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() branche?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() produit?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() garantie?: string;
 
-  @IsNumber() @Min(0) prime100Pct: number;
-  @IsOptional() @IsNumber() tauxPrime?: number;
-  @IsNumber() @Min(0) @Max(100) tauxCession: number;
-  @IsOptional() @IsNumber() tauxCommissionCedante?: number;
+  @ApiProperty() @IsNumber() @Min(0) prime100Pct: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() tauxPrime?: number;
+  @ApiProperty() @IsNumber() @Min(0) @Max(100) tauxCession: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) tauxCommissionCedante?: number;
 
+  @ApiPropertyOptional({ type: [GuaranteeLineDto] })
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => GuaranteeLineDto)
   guaranteeLines?: GuaranteeLineDto[];
 }
 
-export class GuaranteeLineDto {
-  @IsString() garantie: string;
-  @IsNumber() @Min(0) capitauxAssures100: number;
-  @IsOptional() @IsNumber() ordre?: number;
-}
-
 // ── Treaty financial data (Tab A + B) ────────────────────────────
 export class TraiteDataDto {
-  @IsOptional() @IsString() referenceTraite?: string;
-  @IsEnum(ReassuranceType) reassuranceType: ReassuranceType;
-  @IsOptional() @IsEnum(FormeCouverture) formeCouverture?: FormeCouverture;
-  @IsDateString() dateEffet: string;
-  @IsDateString() dateEcheance: string;
-  @IsOptional() @IsEnum(ModeRenouvellement) modeRenouvellement?: ModeRenouvellement;
-  @IsOptional() @IsDateString() dateAvisResiliation?: string;
-  @IsOptional() @IsString() zoneGeographique?: string;
-  @IsOptional() @IsString() branche?: string;
-  @IsOptional() @IsString() produit?: string;
-  @IsOptional() @IsString() garantie?: string;
-  @IsEnum(Periodicite) periodicite: Periodicite;
+  @ApiPropertyOptional() @IsOptional() @IsString() referenceTraite?: string;
+  @ApiProperty({ enum: ReassuranceType }) @IsEnum(ReassuranceType) reassuranceType: ReassuranceType;
+  @ApiPropertyOptional({ enum: FormeCouverture }) @IsOptional() @IsEnum(FormeCouverture) formeCouverture?: FormeCouverture;
+  @ApiProperty({ example: '2024-01-01' }) @IsDateString() dateEffet: string;
+  @ApiProperty({ example: '2025-01-01' }) @IsDateString() dateEcheance: string;
+  @ApiPropertyOptional({ enum: ModeRenouvellement }) @IsOptional() @IsEnum(ModeRenouvellement) modeRenouvellement?: ModeRenouvellement;
+  @ApiPropertyOptional() @IsOptional() @IsDateString() dateAvisResiliation?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() zoneGeographique?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() branche?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() produit?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() garantie?: string;
+  @ApiProperty({ enum: Periodicite }) @IsEnum(Periodicite) periodicite: Periodicite;
 
-  @IsOptional() @IsNumber() primePrevisionnelle?: number;
-  @IsOptional() @IsNumber() pmd?: number;
-  @IsOptional() @IsNumber() tauxCommissionCedante?: number;
-  @IsOptional() @IsNumber() commissionLiquidationArs?: number;
-  @IsOptional() @IsNumber() seuilNotification?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) primePrevisionnelle?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) pmd?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) tauxCommissionCedante?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) commissionLiquidationArs?: number;
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) seuilNotification?: number;
 
+  @ApiPropertyOptional({ type: [TreatyAccountRubriqueDto] })
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => TreatyAccountRubriqueDto)
   accountRubriques?: TreatyAccountRubriqueDto[];
 
+  @ApiPropertyOptional({ type: [PmdInstalmentDto] })
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => PmdInstalmentDto)
   pmdInstalments?: PmdInstalmentDto[];
-}
-
-export class TreatyAccountRubriqueDto {
-  @IsString() rubrique: string;
-  @IsString() compteReference: string;
-  @IsOptional() @IsNumber() ordre?: number;
-}
-
-export class PmdInstalmentDto {
-  @IsNumber() @Min(1) numeroTranche: number;
-  @IsDateString() dateEcheance: string;
-  @IsNumber() @Min(0) montant: number;
-  @IsOptional() @IsNumber() tauxDeduction?: number;
 }
 
 // ── Main Affaire DTO ──────────────────────────────────────────────
 export class CreateAffaireDto {
   @ApiProperty({ enum: AffaireType }) @IsEnum(AffaireType) type: AffaireType;
   @ApiProperty() @IsString() cedanteId: string;
-  @IsOptional() @IsEnum(ModePaiement) modePaiement?: ModePaiement;
-  @IsOptional() @IsString() currency?: string;
+  @ApiPropertyOptional({ enum: ModePaiement }) @IsOptional() @IsEnum(ModePaiement) modePaiement?: ModePaiement;
+  @ApiPropertyOptional() @IsOptional() @IsString() currency?: string;
 
   @ApiProperty({ type: [AffaireReassureurDto] })
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => AffaireReassureurDto)
   reassureurs: AffaireReassureurDto[];
 
+  @ApiPropertyOptional({ type: FacultativeDataDto })
   @IsOptional() @ValidateNested() @Type(() => FacultativeDataDto)
   facultativeData?: FacultativeDataDto;
 
+  @ApiPropertyOptional({ type: TraiteDataDto })
   @IsOptional() @ValidateNested() @Type(() => TraiteDataDto)
   traiteData?: TraiteDataDto;
 }

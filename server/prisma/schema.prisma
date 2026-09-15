@@ -113,6 +113,11 @@ enum SituationSoldeDirection {
   EQUILIBRE
 }
 
+enum TraiteLiquidationStatut {
+  SIMULATION   // computed and saved, not yet confirmed
+  VALIDEE      // confirmed — treated as the record of what was liquidated
+}
+
 enum OrdreVirementStatut {
   BROUILLON
   VALIDE
@@ -134,6 +139,18 @@ enum JournalEntryType {
   PERTE_DE_CHANGE               // FX difference — negative
   SAP_RECONSTITUTION
   LIQUIDATION_TRAITE
+  // NEW (Comptabilité pass — continued): previously
+  // generateForSinistreRecuperation() reused LIQUIDATION_TRAITE for
+  // individual per-claim recovery bookings — that type's name (and its
+  // schema-adjacent JournalEntryType comment) clearly reserves it for the
+  // periodic treaty liquidation account (compte de liquidation), now
+  // implemented in AccountingEngineService.generateForTraiteLiquidation().
+  // Splitting these apart also fixes a real idempotency bug: reusing one
+  // type for both meant a single claim recovery on an affaire would
+  // permanently block any future claim recovery AND the real periodic
+  // treaty liquidation entry on that same affaire (assertNotAlreadyGenerated
+  // matches on type+affaireId).
+  RECUPERATION_SINISTRE_REASSUREUR
 }
 
 // FIX #11 (item from Low/deferred list): expanded to cover the real
@@ -904,6 +921,7 @@ model TraiteAffaire {
 
   // NEW (Workflow pass): commercial-terms version history — see model below.
   parameterVersions        TreatyParameterVersion[]
+  liquidations             TraiteLiquidation[]   // NEW — see TraiteLiquidation model
 }
 
 // ============================================================
@@ -943,6 +961,54 @@ model TreatyParameterVersion {
 
   @@unique([traiteId, version])
   @@index([traiteId, isActive])
+}
+
+// ============================================================
+// NEW (Affaires pass — continued): persisted treaty liquidation.
+// Closes the "simulation-only, never persisted" gap (audit finding on
+// TraitesService.calculateLiquidation()). Deliberately does NOT link to
+// JournalEntry yet — that wiring belongs to the Comptabilité module, not
+// reviewed in this pass. This model only gives the liquidation a durable,
+// auditable record with a validation step, mirroring the
+// TreatyParameterVersion precedent (compute → persist → allow marking
+// final) already established elsewhere in this schema.
+// ============================================================
+model TraiteLiquidation {
+  id             String                  @id @default(uuid())
+  traiteId       String
+  traite         TraiteAffaire           @relation(fields: [traiteId], references: [id])
+  statut         TraiteLiquidationStatut @default(SIMULATION)
+
+  periodeDebut   DateTime
+  periodeFin     DateTime
+
+  // Inputs — snapshot of what was used, so the computed totals below can
+  // always be reproduced/audited even if source data changes later.
+  primesCedees              Decimal @db.Decimal(20, 3)
+  participationsBenefRecues Decimal @db.Decimal(20, 3)
+  interetsSurDepots         Decimal @db.Decimal(20, 3)
+  sinistresPayes            Decimal @db.Decimal(20, 3)
+  reservesConstituees       Decimal @db.Decimal(20, 3)
+  reservesLibereesAnterieur Decimal @db.Decimal(20, 3)
+  commissionCedante         Decimal @db.Decimal(20, 3)
+  commissionLiquidationArs  Decimal @db.Decimal(20, 3)
+  courtage                  Decimal @db.Decimal(20, 3)
+  taxes                     Decimal @db.Decimal(20, 3)
+  pmdDeductible             Decimal @db.Decimal(20, 3)
+
+  // Outputs
+  totalDebit     Decimal                  @db.Decimal(20, 3)
+  totalCredit    Decimal                  @db.Decimal(20, 3)
+  soldeNet       Decimal                  @db.Decimal(20, 3)
+  soldeDirection SituationSoldeDirection
+
+  createdByUserId    String?
+  validatedAt        DateTime?
+  validatedByUserId  String?
+
+  createdAt      DateTime @default(now())
+
+  @@index([traiteId, statut])
 }
 
 // Each treaty line (Incendie, Vol, Transport…) maps to an account rubrique

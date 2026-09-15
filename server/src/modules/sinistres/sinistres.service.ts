@@ -101,7 +101,6 @@ export class SinistresService {
         reserves: dto.reserves,
         partReassureurs: dto.partReassureurs,
         appelAuComptant: dto.appelAuComptant ?? false,
-        // NEW (Sinistres pass)
         description: dto.description,
         cause: dto.cause,
         lieu: dto.lieu,
@@ -127,6 +126,7 @@ export class SinistresService {
         userId,
       },
     });
+    await this.checkNotificationThreshold(sinistre.id, 0, userId);
 
     return sinistre;
   }
@@ -136,6 +136,8 @@ export class SinistresService {
     if (s.statut === SinistreStatut.CLOS || s.statut === SinistreStatut.REJETE) {
       throw new BadRequestException('Impossible de modifier un sinistre clos ou rejeté');
     }
+    const previousTotal =
+      Number(s.reglementExerciceN ?? 0) + Number(s.cumulReglementAnterieurs ?? 0) + Number(s.reserves ?? 0);
 
     const before = { reserves: s.reserves, partReassureurs: s.partReassureurs };
     const updated = await this.prisma.sinistre.update({
@@ -148,7 +150,6 @@ export class SinistresService {
         ...(dto.periodeCouverture !== undefined && { periodeCouverture: dto.periodeCouverture }),
         ...(dto.numerPolice !== undefined && { numerPolice: dto.numerPolice }),
         ...(dto.recoveryMethod !== undefined && { recoveryMethod: dto.recoveryMethod }),
-        // NEW (Sinistres pass)
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.cause !== undefined && { cause: dto.cause }),
         ...(dto.lieu !== undefined && { lieu: dto.lieu }),
@@ -167,6 +168,9 @@ export class SinistresService {
         data: { sinistreId: id, action: 'UPDATED', before, after: dto as any, userId },
       }),
     ]);
+    if (dto.reglementExerciceN !== undefined || dto.cumulReglementAnterieurs !== undefined || dto.reserves !== undefined) {
+      await this.checkNotificationThreshold(id, previousTotal, userId);
+    }
 
     return updated;
   }
@@ -224,7 +228,6 @@ export class SinistresService {
     return this.cashCallSvc.advanceStatut(id, statut, userId, note);
   }
 
-  // NEW (Sinistres pass)
   recordCashCallPayment(id: string, montantRecu: number, userId: string) {
     return this.cashCallSvc.recordPayment(id, montantRecu, userId);
   }
@@ -234,6 +237,50 @@ export class SinistresService {
       where: { sinistreId },
       include: { actor: { select: { nom: true, prenom: true, role: true } } },
       orderBy: { date: 'asc' },
+    });
+  }
+  private async checkNotificationThreshold(sinistreId: string, previousTotal: number, userId?: string): Promise<void> {
+    const sinistre = await this.prisma.sinistre.findUniqueOrThrow({
+      where: { id: sinistreId },
+      include: { affaire: { include: { traiteData: true } } },
+    });
+
+    if (sinistre.affaire.type !== 'TRAITE' || !sinistre.affaire.traiteData) return;
+    if (sinistre.affaire.traiteData.reassuranceType !== 'PROPORTIONNEL') return;
+
+    const seuil = sinistre.affaire.traiteData.seuilNotification;
+    if (seuil === null || Number(seuil) <= 0) return;
+
+    const threshold = Number(seuil);
+    const currentTotal =
+      Number(sinistre.reglementExerciceN ?? 0) +
+      Number(sinistre.cumulReglementAnterieurs ?? 0) +
+      Number(sinistre.reserves ?? 0);
+
+    const crossedUpward = previousTotal < threshold && currentTotal >= threshold;
+    if (!crossedUpward) return;
+
+    const existingOpenTask = await this.prisma.workflowTask.findFirst({
+      where: {
+        type: 'AVIS_SINISTRE_REASSUREUR',
+        affaireId: sinistre.affaireId,
+        description: { contains: sinistre.numero },
+        statut: { in: ['EN_ATTENTE', 'EN_COURS'] },
+      },
+    });
+    if (existingOpenTask) return;
+
+    await this.prisma.workflowTask.create({
+      data: {
+        type: 'AVIS_SINISTRE_REASSUREUR',
+        affaireId: sinistre.affaireId,
+        createdById: userId,
+        description:
+          `Sinistre ${sinistre.numero} — montant total (${currentTotal.toFixed(3)} ${sinistre.affaire.currency}) ` +
+          `a dépassé le seuil de notification (${threshold.toFixed(3)} ${sinistre.affaire.currency}). ` +
+          `Avis obligatoire aux réassureurs proportionnels.`,
+        dueDate: new Date(),
+      },
     });
   }
 }

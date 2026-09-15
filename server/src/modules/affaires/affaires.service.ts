@@ -5,6 +5,7 @@ import { AffaireStatut, AffaireType, CommissionMode } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../shared/services/sequence.service';
 import { CommissionCalculatorService } from './commission-calculator.service';
+import { TreatyCalculatorService } from './traites/treaty-calculator.service';
 import { AffaireWorkflowService } from './workflow.service';
 import { CreateAffaireDto } from './dto/create-affaire.dto';
 import { UpdateAffaireDto } from './dto/update-affaire.dto';
@@ -15,6 +16,7 @@ export class AffairesService {
     private prisma: PrismaService,
     private sequence: SequenceService,
     private commissionCalc: CommissionCalculatorService,
+    private treatyCalc: TreatyCalculatorService,
     private workflow: AffaireWorkflowService,
   ) {}
 
@@ -38,8 +40,6 @@ export class AffairesService {
       where.OR = [
         { numero: { contains: search, mode: 'insensitive' } },
         { cedante: { raisonSociale: { contains: search, mode: 'insensitive' } } },
-        // FIX (Affaires pass): search previously missed the insured party
-        // entirely — a very natural thing to search an affaire by.
         { facultativeData: { assure: { raisonSociale: { contains: search, mode: 'insensitive' } } } },
         { facultativeData: { numeroPoliceCedante: { contains: search, mode: 'insensitive' } } },
         { traiteData: { referenceTraite: { contains: search, mode: 'insensitive' } } },
@@ -94,11 +94,6 @@ export class AffairesService {
     if (dto.type === AffaireType.TRAITE && !dto.traiteData) {
       throw new BadRequestException('traiteData requis pour type TRAITE');
     }
-    // FIX (Affaires pass): reject ambiguous payloads — sending traiteData on
-    // a FACULTATIVE affaire (or vice versa) was silently accepted and the
-    // extraneous block simply ignored (Prisma's `undefined` branch never
-    // fired), which could mask a client-side bug where the wrong branch was
-    // populated.
     if (dto.type === AffaireType.FACULTATIVE && dto.traiteData) {
       throw new BadRequestException('traiteData ne doit pas être fourni pour type FACULTATIVE');
     }
@@ -128,7 +123,6 @@ export class AffairesService {
 
     const numero = await this.sequence.next('AFFAIRE');
 
-    // Calculate commissions if facultative (needs primeCedee)
     let reassureurData: any[] = dto.reassureurs.map((r) => ({
       reassureurId: r.reassureurId,
       partPct: r.partPct,
@@ -141,7 +135,7 @@ export class AffairesService {
     // Compute commission amounts if facultative
     if (dto.type === AffaireType.FACULTATIVE && dto.facultativeData) {
       const fac = dto.facultativeData;
-      const primeCedee = Number(fac.prime100Pct) * (fac.tauxCession / 100);
+      const primeCedee = this.round3(Number(fac.prime100Pct) * (fac.tauxCession / 100));
       const results = this.commissionCalc.calculate({
         primeCedee,
         tauxCession: fac.tauxCession / 100,
@@ -164,6 +158,33 @@ export class AffairesService {
           commissionArs: calc.commissionArs,
           commissionCedante: calc.commissionCedante,
           primeNetteCedante: calc.primeNetteCedante,
+          primeNetteReassureur: calc.primeNetteReassureur,
+        };
+      });
+    }
+    if (dto.type === AffaireType.TRAITE && dto.traiteData && dto.traiteData.primePrevisionnelle) {
+      const primePrev = Number(dto.traiteData.primePrevisionnelle);
+      const tauxCommCed = Number(dto.traiteData.tauxCommissionCedante ?? 0);
+      const primeNetteCedante = this.round3(primePrev * (1 - tauxCommCed / 100));
+
+      const results = this.treatyCalc.calculateTreatyDistribution({
+        primeNetteCedante,
+        reassureurs: dto.reassureurs.map((r) => ({
+          reassureurId: r.reassureurId,
+          partPct: r.partPct,
+          commissionMode: r.commissionMode ?? CommissionMode.CALCULABLE,
+          tauxCommissionArs: r.tauxCommissionArs ?? 0,
+          commissionForfait: r.commissionForfait,
+        })),
+      });
+
+      reassureurData = reassureurData.map((r) => {
+        const calc = results.find((res) => res.reassureurId === r.reassureurId);
+        if (!calc) return r;
+        return {
+          ...r,
+          primeBrute: calc.primeBrute,
+          commissionArs: calc.commissionArs,
           primeNetteReassureur: calc.primeNetteReassureur,
         };
       });
@@ -195,10 +216,20 @@ export class AffairesService {
                   prime100Pct: dto.facultativeData.prime100Pct,
                   tauxPrime: dto.facultativeData.tauxPrime,
                   tauxCession: dto.facultativeData.tauxCession,
-                  primeCedee: Number(dto.facultativeData.prime100Pct) * (dto.facultativeData.tauxCession / 100),
+                  // FIX (Affaires pass — precision consistency): rounded
+                  // to 3 decimals, matching the rounding applied above and
+                  // in FacultativeService — previously stored raw
+                  // floating-point.
+                  primeCedee: this.round3(
+                    Number(dto.facultativeData.prime100Pct) * (dto.facultativeData.tauxCession / 100),
+                  ),
                   tauxCommissionCedante: dto.facultativeData.tauxCommissionCedante,
                   commissionCedante: dto.facultativeData.tauxCommissionCedante
-                    ? Number(dto.facultativeData.prime100Pct) * (dto.facultativeData.tauxCession / 100) * (dto.facultativeData.tauxCommissionCedante / 100)
+                    ? this.round3(
+                        Number(dto.facultativeData.prime100Pct) *
+                          (dto.facultativeData.tauxCession / 100) *
+                          (dto.facultativeData.tauxCommissionCedante / 100),
+                      )
                     : null,
                   guaranteeLines: dto.facultativeData.guaranteeLines
                     ? { create: dto.facultativeData.guaranteeLines }
@@ -250,11 +281,10 @@ export class AffairesService {
           traiteData: { include: { accountRubriques: true, pmdInstalments: true } },
         },
       });
-
       await tx.documentChecklist.create({
         data: {
           affaireId: affaire.id,
-          items: { create: this.getDefaultChecklistItems(dto.type) },
+          items: { create: this.getDefaultChecklistItems(found) },
         },
       });
 
@@ -275,12 +305,6 @@ export class AffairesService {
       throw new BadRequestException('Une affaire placée ne peut plus être modifiée');
     }
 
-    // FIX (Affaires pass): type was never guarded against being changed post-
-    // creation. Since UpdateAffaireDto is a PartialType of CreateAffaireDto,
-    // `type` could be silently sent and switched, which is meaningless once
-    // facultativeData/traiteData already exist (switching would leave the
-    // wrong nested relation orphaned). Also guard the nested payload against
-    // being sent for the wrong branch.
     if (dto.type && dto.type !== affaire.type) {
       throw new BadRequestException('Le type d\'affaire (Facultative/Traité) ne peut pas être modifié après création');
     }
@@ -307,120 +331,116 @@ export class AffairesService {
     if (dto.reassureurs) {
       this.commissionCalc.validateShares(dto.reassureurs);
       this.assertNoDuplicateReassureurs(dto.reassureurs);
-      // Delete and recreate reinsurer participation table
-      await this.prisma.affaireReassureur.deleteMany({ where: { affaireId: id } });
     }
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (dto.reassureurs) {
+        await tx.affaireReassureur.deleteMany({ where: { affaireId: id } });
+      }
 
-    const updated = await this.prisma.affaire.update({
-      where: { id },
-      data: {
-        ...(dto.modePaiement && { modePaiement: dto.modePaiement }),
-        ...(dto.currency && { currency: dto.currency }),
-        ...(dto.reassureurs && {
-          reassureurs: {
-            create: dto.reassureurs.map((r) => ({
-              reassureurId: r.reassureurId,
-              partPct: r.partPct,
-              isLeader: r.isLeader ?? false,
-              commissionMode: r.commissionMode ?? CommissionMode.CALCULABLE,
-              tauxCommissionArs: r.tauxCommissionArs,
-              commissionForfait: r.commissionForfait,
-            })),
-          },
-        }),
-        ...(dto.facultativeData && {
-          facultativeData: {
-            update: {
-              ...(dto.facultativeData.dateEffet && { dateEffet: new Date(dto.facultativeData.dateEffet) }),
-              ...(dto.facultativeData.dateEcheance && { dateEcheance: new Date(dto.facultativeData.dateEcheance) }),
-              ...(dto.facultativeData.modeRenouvellement !== undefined && { modeRenouvellement: dto.facultativeData.modeRenouvellement }),
-              ...(dto.facultativeData.numeroPoliceCedante !== undefined && { numeroPoliceCedante: dto.facultativeData.numeroPoliceCedante }),
-              ...(dto.facultativeData.paysAssure !== undefined && { paysAssure: dto.facultativeData.paysAssure }),
-              ...(dto.facultativeData.branche !== undefined && { branche: dto.facultativeData.branche }),
-              ...(dto.facultativeData.produit !== undefined && { produit: dto.facultativeData.produit }),
-              ...(dto.facultativeData.garantie !== undefined && { garantie: dto.facultativeData.garantie }),
-              // FIX (Affaires pass): guaranteeLines had no update path at
-              // all — once an affaire was created, guarantee lines were
-              // permanently frozen. Full-array replace, same pattern used
-              // for Cedante/Reassureur/CoCourtier contacts & bank accounts.
-              ...(dto.facultativeData.guaranteeLines !== undefined && {
-                guaranteeLines: { deleteMany: {}, create: dto.facultativeData.guaranteeLines },
-              }),
-              // Recompute derived fields when base financial data changes
-              ...(() => {
-                const needsRecompute =
-                  dto.facultativeData.prime100Pct !== undefined ||
-                  dto.facultativeData.tauxCession !== undefined ||
-                  dto.facultativeData.tauxCommissionCedante !== undefined;
-
-                if (!needsRecompute) return {};
-
-                const prime100 = dto.facultativeData.prime100Pct ?? Number(affaire.facultativeData?.prime100Pct ?? 0);
-                const tauxCession = dto.facultativeData.tauxCession ?? Number(affaire.facultativeData?.tauxCession ?? 0);
-                const tauxComm = dto.facultativeData.tauxCommissionCedante ?? Number(affaire.facultativeData?.tauxCommissionCedante ?? 0);
-                const primeCedee = Math.round(prime100 * (tauxCession / 100) * 1000) / 1000;
-                const commissionCedante = tauxComm ? Math.round(primeCedee * (tauxComm / 100) * 1000) / 1000 : null;
-
-                return {
-                  ...(dto.facultativeData.prime100Pct !== undefined && { prime100Pct: prime100 }),
-                  ...(dto.facultativeData.tauxPrime !== undefined && { tauxPrime: dto.facultativeData.tauxPrime }),
-                  ...(dto.facultativeData.tauxCession !== undefined && { tauxCession }),
-                  ...(dto.facultativeData.tauxCommissionCedante !== undefined && { tauxCommissionCedante: tauxComm }),
-                  primeCedee,
-                  commissionCedante,
-                };
-              })(),
+      return tx.affaire.update({
+        where: { id },
+        data: {
+          ...(dto.modePaiement && { modePaiement: dto.modePaiement }),
+          ...(dto.currency && { currency: dto.currency }),
+          ...(dto.reassureurs && {
+            reassureurs: {
+              create: dto.reassureurs.map((r) => ({
+                reassureurId: r.reassureurId,
+                partPct: r.partPct,
+                isLeader: r.isLeader ?? false,
+                commissionMode: r.commissionMode ?? CommissionMode.CALCULABLE,
+                tauxCommissionArs: r.tauxCommissionArs,
+                commissionForfait: r.commissionForfait,
+              })),
             },
-          },
-        }),
-        ...(dto.traiteData && {
-          traiteData: {
-            update: {
-              ...(dto.traiteData.referenceTraite !== undefined && { referenceTraite: dto.traiteData.referenceTraite }),
-              ...(dto.traiteData.formeCouverture !== undefined && { formeCouverture: dto.traiteData.formeCouverture }),
-              ...(dto.traiteData.dateEffet && { dateEffet: new Date(dto.traiteData.dateEffet) }),
-              ...(dto.traiteData.dateEcheance && { dateEcheance: new Date(dto.traiteData.dateEcheance) }),
-              ...(dto.traiteData.modeRenouvellement !== undefined && { modeRenouvellement: dto.traiteData.modeRenouvellement }),
-              ...(dto.traiteData.dateAvisResiliation !== undefined && {
-                dateAvisResiliation: dto.traiteData.dateAvisResiliation ? new Date(dto.traiteData.dateAvisResiliation) : null,
-              }),
-              ...(dto.traiteData.zoneGeographique !== undefined && { zoneGeographique: dto.traiteData.zoneGeographique }),
-              ...(dto.traiteData.branche !== undefined && { branche: dto.traiteData.branche }),
-              ...(dto.traiteData.produit !== undefined && { produit: dto.traiteData.produit }),
-              ...(dto.traiteData.garantie !== undefined && { garantie: dto.traiteData.garantie }),
-              ...(dto.traiteData.primePrevisionnelle !== undefined && { primePrevisionnelle: dto.traiteData.primePrevisionnelle }),
-              ...(dto.traiteData.pmd !== undefined && { pmd: dto.traiteData.pmd }),
-              ...(dto.traiteData.tauxCommissionCedante !== undefined && { tauxCommissionCedante: dto.traiteData.tauxCommissionCedante }),
-              ...(dto.traiteData.commissionLiquidationArs !== undefined && { commissionLiquidationArs: dto.traiteData.commissionLiquidationArs }),
-              ...(dto.traiteData.seuilNotification !== undefined && { seuilNotification: dto.traiteData.seuilNotification }),
-              ...(dto.traiteData.periodicite && { periodicite: dto.traiteData.periodicite }),
-              // FIX (Affaires pass): same gap as guaranteeLines above —
-              // accountRubriques and pmdInstalments had no update path.
-              ...(dto.traiteData.accountRubriques !== undefined && {
-                accountRubriques: { deleteMany: {}, create: dto.traiteData.accountRubriques },
-              }),
-              ...(dto.traiteData.pmdInstalments !== undefined && {
-                pmdInstalments: {
-                  deleteMany: {},
-                  create: dto.traiteData.pmdInstalments.map((p) => ({
-                    ...p,
-                    dateEcheance: new Date(p.dateEcheance),
-                  })),
-                },
-              }),
+          }),
+          ...(dto.facultativeData && {
+            facultativeData: {
+              update: {
+                ...(dto.facultativeData.dateEffet && { dateEffet: new Date(dto.facultativeData.dateEffet) }),
+                ...(dto.facultativeData.dateEcheance && { dateEcheance: new Date(dto.facultativeData.dateEcheance) }),
+                ...(dto.facultativeData.modeRenouvellement !== undefined && { modeRenouvellement: dto.facultativeData.modeRenouvellement }),
+                ...(dto.facultativeData.numeroPoliceCedante !== undefined && { numeroPoliceCedante: dto.facultativeData.numeroPoliceCedante }),
+                ...(dto.facultativeData.paysAssure !== undefined && { paysAssure: dto.facultativeData.paysAssure }),
+                ...(dto.facultativeData.branche !== undefined && { branche: dto.facultativeData.branche }),
+                ...(dto.facultativeData.produit !== undefined && { produit: dto.facultativeData.produit }),
+                ...(dto.facultativeData.garantie !== undefined && { garantie: dto.facultativeData.garantie }),
+                ...(dto.facultativeData.guaranteeLines !== undefined && {
+                  guaranteeLines: { deleteMany: {}, create: dto.facultativeData.guaranteeLines },
+                }),
+                ...(() => {
+                  const needsRecompute =
+                    dto.facultativeData.prime100Pct !== undefined ||
+                    dto.facultativeData.tauxCession !== undefined ||
+                    dto.facultativeData.tauxCommissionCedante !== undefined;
+
+                  if (!needsRecompute) return {};
+
+                  const prime100 = dto.facultativeData.prime100Pct ?? Number(affaire.facultativeData?.prime100Pct ?? 0);
+                  const tauxCession = dto.facultativeData.tauxCession ?? Number(affaire.facultativeData?.tauxCession ?? 0);
+                  const tauxComm = dto.facultativeData.tauxCommissionCedante ?? Number(affaire.facultativeData?.tauxCommissionCedante ?? 0);
+                  const primeCedee = this.round3(prime100 * (tauxCession / 100));
+                  const commissionCedante = tauxComm ? this.round3(primeCedee * (tauxComm / 100)) : null;
+
+                  return {
+                    ...(dto.facultativeData.prime100Pct !== undefined && { prime100Pct: prime100 }),
+                    ...(dto.facultativeData.tauxPrime !== undefined && { tauxPrime: dto.facultativeData.tauxPrime }),
+                    ...(dto.facultativeData.tauxCession !== undefined && { tauxCession }),
+                    ...(dto.facultativeData.tauxCommissionCedante !== undefined && { tauxCommissionCedante: tauxComm }),
+                    primeCedee,
+                    commissionCedante,
+                  };
+                })(),
+              },
             },
-          },
-        }),
-      },
-      include: {
-        cedante: true,
-        reassureurs: { include: { reassureur: true } },
-        facultativeData: { include: { assure: true, guaranteeLines: true } },
-        traiteData: { include: { accountRubriques: true, pmdInstalments: true } },
-      },
+          }),
+          ...(dto.traiteData && {
+            traiteData: {
+              update: {
+                ...(dto.traiteData.referenceTraite !== undefined && { referenceTraite: dto.traiteData.referenceTraite }),
+                ...(dto.traiteData.formeCouverture !== undefined && { formeCouverture: dto.traiteData.formeCouverture }),
+                ...(dto.traiteData.dateEffet && { dateEffet: new Date(dto.traiteData.dateEffet) }),
+                ...(dto.traiteData.dateEcheance && { dateEcheance: new Date(dto.traiteData.dateEcheance) }),
+                ...(dto.traiteData.modeRenouvellement !== undefined && { modeRenouvellement: dto.traiteData.modeRenouvellement }),
+                ...(dto.traiteData.dateAvisResiliation !== undefined && {
+                  dateAvisResiliation: dto.traiteData.dateAvisResiliation ? new Date(dto.traiteData.dateAvisResiliation) : null,
+                }),
+                ...(dto.traiteData.zoneGeographique !== undefined && { zoneGeographique: dto.traiteData.zoneGeographique }),
+                ...(dto.traiteData.branche !== undefined && { branche: dto.traiteData.branche }),
+                ...(dto.traiteData.produit !== undefined && { produit: dto.traiteData.produit }),
+                ...(dto.traiteData.garantie !== undefined && { garantie: dto.traiteData.garantie }),
+                ...(dto.traiteData.primePrevisionnelle !== undefined && { primePrevisionnelle: dto.traiteData.primePrevisionnelle }),
+                ...(dto.traiteData.pmd !== undefined && { pmd: dto.traiteData.pmd }),
+                ...(dto.traiteData.tauxCommissionCedante !== undefined && { tauxCommissionCedante: dto.traiteData.tauxCommissionCedante }),
+                ...(dto.traiteData.commissionLiquidationArs !== undefined && { commissionLiquidationArs: dto.traiteData.commissionLiquidationArs }),
+                ...(dto.traiteData.seuilNotification !== undefined && { seuilNotification: dto.traiteData.seuilNotification }),
+                ...(dto.traiteData.periodicite && { periodicite: dto.traiteData.periodicite }),
+                ...(dto.traiteData.accountRubriques !== undefined && {
+                  accountRubriques: { deleteMany: {}, create: dto.traiteData.accountRubriques },
+                }),
+                ...(dto.traiteData.pmdInstalments !== undefined && {
+                  pmdInstalments: {
+                    deleteMany: {},
+                    create: dto.traiteData.pmdInstalments.map((p) => ({
+                      ...p,
+                      dateEcheance: new Date(p.dateEcheance),
+                    })),
+                  },
+                }),
+              },
+            },
+          }),
+        },
+        include: {
+          cedante: true,
+          reassureurs: { include: { reassureur: true } },
+          facultativeData: { include: { assure: true, guaranteeLines: true } },
+          traiteData: { include: { accountRubriques: true, pmdInstalments: true } },
+        },
+      });
     });
 
-    // Cascade commission recalculation if financial data changed
+    // Cascade commission recalculation if financial data changed (Facultative)
     if (dto.facultativeData && (
       dto.facultativeData.prime100Pct !== undefined ||
       dto.facultativeData.tauxCession !== undefined ||
@@ -428,6 +448,13 @@ export class AffairesService {
       dto.reassureurs
     )) {
       await this.recalculateCommissions(id);
+    }
+    if (updated.type === AffaireType.TRAITE && (
+      dto.traiteData?.primePrevisionnelle !== undefined ||
+      dto.traiteData?.tauxCommissionCedante !== undefined ||
+      dto.reassureurs
+    )) {
+      await this.recalculateTreatyDistribution(id);
     }
 
     await this.prisma.auditLog.create({
@@ -463,7 +490,7 @@ export class AffairesService {
     if (affaire.type !== AffaireType.FACULTATIVE || !affaire.facultativeData) return;
 
     const fac = affaire.facultativeData;
-    const primeCedee = Number(fac.primeCedee) || Number(fac.prime100Pct) * (Number(fac.tauxCession) / 100);
+    const primeCedee = Number(fac.primeCedee) || this.round3(Number(fac.prime100Pct) * (Number(fac.tauxCession) / 100));
 
     const results = this.commissionCalc.calculate({
       primeCedee,
@@ -493,10 +520,46 @@ export class AffairesService {
       ),
     );
   }
+  private async recalculateTreatyDistribution(affaireId: string): Promise<void> {
+    const affaire = await this.prisma.affaire.findUniqueOrThrow({
+      where: { id: affaireId },
+      include: { traiteData: true, reassureurs: true },
+    });
 
-  /** FIX (Affaires pass): was previously not checked anywhere — the same
-   * reassureurId could be submitted twice with two different partPct values,
-   * both silently accepted since validateShares() only checks the sum. */
+    if (affaire.type !== AffaireType.TRAITE || !affaire.traiteData) return;
+
+    const traite = affaire.traiteData;
+    const primePrevisionnelle = Number(traite.primePrevisionnelle ?? 0);
+    if (primePrevisionnelle <= 0 || affaire.reassureurs.length === 0) return;
+
+    const tauxCommCed = Number(traite.tauxCommissionCedante ?? 0);
+    const primeNetteCedante = this.round3(primePrevisionnelle * (1 - tauxCommCed / 100));
+
+    const results = this.treatyCalc.calculateTreatyDistribution({
+      primeNetteCedante,
+      reassureurs: affaire.reassureurs.map((r) => ({
+        reassureurId: r.reassureurId,
+        partPct: Number(r.partPct),
+        commissionMode: r.commissionMode,
+        tauxCommissionArs: Number(r.tauxCommissionArs ?? 0),
+        commissionForfait: r.commissionForfait ? Number(r.commissionForfait) : undefined,
+      })),
+    });
+
+    await Promise.all(
+      results.map((res) =>
+        this.prisma.affaireReassureur.updateMany({
+          where: { affaireId, reassureurId: res.reassureurId },
+          data: {
+            primeBrute: res.primeBrute,
+            commissionArs: res.commissionArs,
+            primeNetteReassureur: res.primeNetteReassureur,
+          },
+        }),
+      ),
+    );
+  }
+
   private assertNoDuplicateReassureurs(reassureurs: { reassureurId: string }[]): void {
     const ids = reassureurs.map((r) => r.reassureurId);
     if (new Set(ids).size !== ids.length) {
@@ -504,8 +567,6 @@ export class AffairesService {
     }
   }
 
-  /** FIX (Affaires pass): dateEffet < dateEcheance was validated client-side
-   * only (in the old, now-replaced frontend) — never enforced server-side. */
   private assertDateOrder(effet?: string, echeance?: string): void {
     if (!effet || !echeance) return;
     if (new Date(effet) >= new Date(echeance)) {
@@ -513,19 +574,37 @@ export class AffairesService {
     }
   }
 
-  private getDefaultChecklistItems(type: AffaireType) {
-    const common = [
-      { documentType: 'NOTE_DE_SYNTHESE', libelle: 'Note de synthèse', isMandatory: true, ordre: 1 },
+  private getDefaultChecklistItems(
+    reassureurs: { id: string; raisonSociale: string }[],
+  ) {
+    const items: { documentType: string; libelle: string; isMandatory: boolean; ordre: number }[] = [
+      { documentType: 'NOTE_DE_SYNTHESE', libelle: 'Note de Synthèse', isMandatory: true, ordre: 1 },
       { documentType: 'SLIP_COTATION', libelle: 'Slip de cotation', isMandatory: true, ordre: 2 },
+      { documentType: 'ORDRE_ASSURANCE', libelle: "Ordre d'assurance (signé)", isMandatory: true, ordre: 3 },
+      { documentType: 'SLIP_COUVERTURE', libelle: 'Slip de couverture (signé + approuvé)', isMandatory: true, ordre: 4 },
+      { documentType: 'BORDEREAU_CESSION_CEDANTE', libelle: 'Bordereau de cession cédante', isMandatory: true, ordre: 5 },
+      { documentType: 'CONVENTION_CEDANTE', libelle: 'Convention cédante', isMandatory: true, ordre: 6 },
     ];
-    const facultative = [
-      { documentType: 'CONVENTION', libelle: 'Convention de réassurance', isMandatory: true, ordre: 3 },
-      { documentType: 'POLICE', libelle: 'Police d\'assurance', isMandatory: false, ordre: 4 },
-    ];
-    const traite = [
-      { documentType: 'CONTRAT', libelle: 'Contrat de traité', isMandatory: true, ordre: 3 },
-      { documentType: 'BORDEREAU_MODELE', libelle: 'Modèle de bordereau', isMandatory: false, ordre: 4 },
-    ];
-    return [...common, ...(type === AffaireType.FACULTATIVE ? facultative : traite)];
+
+    let ordre = items.length + 1;
+    for (const r of reassureurs) {
+      items.push({
+        documentType: `BORDEREAU_CESSION_REASSUREUR_${r.id}`,
+        libelle: `Bordereau de cession — ${r.raisonSociale}`,
+        isMandatory: true,
+        ordre: ordre++,
+      });
+      items.push({
+        documentType: `CONVENTION_REASSUREUR_${r.id}`,
+        libelle: `Convention réassureur — ${r.raisonSociale}`,
+        isMandatory: true,
+        ordre: ordre++,
+      });
+    }
+    return items;
+  }
+
+  private round3(n: number): number {
+    return Math.round(n * 1000) / 1000;
   }
 }

@@ -36,8 +36,9 @@ export class AccountingEngineService {
 
     if (!affaire.facultativeData) throw new BadRequestException('Données facultatives manquantes');
 
-    // FIX (Comptabilité pass): no idempotency guard existed — calling this
-    // twice created two full entries for the same affaire.
+    // Scoped by affaireId — correct here: a Facultative affaire has
+    // exactly ONE premium passation event ever (a one-off deal, not
+    // recurring), so per-affaire idempotency is the right granularity.
     await this.assertNotAlreadyGenerated(JournalEntryType.PASSATION_CA_FACULTATIVE, affaireId, affaire.numero);
 
     const fac = affaire.facultativeData;
@@ -54,13 +55,6 @@ export class AccountingEngineService {
     const totalArsComm = affaire.reassureurs.reduce((s, r) => s + Number(r.commissionArs ?? 0), 0);
     const commissionCedante = Number(fac.commissionCedante ?? 0);
 
-    // FIX (Comptabilité pass): previously only cedanteAccount was checked —
-    // a missing arsCommAccount/cedanteCommAccount/reassureurAccount
-    // silently dropped that line (filtered out by planComptableId), which
-    // could produce a BROUILLON entry with a debit and NO matching credit
-    // lines — an unbalanced entry stuck forever failing validate(), with no
-    // clear error explaining why. All required accounts are validated up
-    // front now; a missing one is a hard, actionable error instead.
     const missing: string[] = [];
     if (!cedanteAccount) missing.push('411xxxxx (cédantes)');
     if (totalArsComm > 0 && !arsCommAccount) missing.push('705xxxxx (commission courtage ARS)');
@@ -140,26 +134,8 @@ export class AccountingEngineService {
   }
 
   /**
-   * NEW (Comptabilité pass): CDC §VI.b explicitly documents this ("1-
-   * Passation du chiffre d'affaires (Bordereaux de Cession) par
-   * trimestre") — JournalEntryType.PASSATION_CA_TRAITE existed with zero
-   * implementation.
-   *
-   * SCOPE NOTE: this books the PRIME side only (matching the CDC section's
-   * literal title — "passation du chiffre d'affaires"). Sinistres/SAP
-   * booking for treaties has its own dedicated JournalEntryTypes
-   * (SAP_RECONSTITUTION, LIQUIDATION_TRAITE) and is a separate feature,
-   * not implemented here — flagging as a follow-up rather than
-   * approximating it.
-   *
-   * Commission split is computed LIVE via TreatyCalculatorService rather
-   * than read from AffaireReassureur.commissionArs, because — unlike
-   * facultative affaires — nothing in TraitesService currently persists a
-   * treaty's commission distribution back onto AffaireReassureur (verified
-   * against the Traités module reviewed earlier); those fields stay null
-   * for every treaty. Reading them here would silently generate a
-   * zero-commission entry. This computes the real split from the
-   * compiled Situation's totalDebit instead.
+   * CDC §VI.b — "1. Passation du chiffre d'affaires (Bordereaux de
+   * Cession) par trimestre".
    */
   async generateForTraiteSituation(situationId: string): Promise<string> {
     const situation = await this.prisma.situation.findUnique({
@@ -175,7 +151,12 @@ export class AccountingEngineService {
     }
 
     const traiteAffaire = situation.traite.affaire;
-    await this.assertNotAlreadyGenerated(JournalEntryType.PASSATION_CA_TRAITE, traiteAffaire.id, situation.reference);
+    const existing = await this.prisma.journalEntry.findFirst({
+      where: { type: JournalEntryType.PASSATION_CA_TRAITE, affaireId: traiteAffaire.id, description: { contains: situation.reference } },
+    });
+    if (existing) {
+      throw new ConflictException(`Une écriture existe déjà pour la situation ${situation.reference} (${existing.numero})`);
+    }
 
     const totalDebit = Number(situation.totalDebit ?? 0);
     if (totalDebit <= 0) {
@@ -267,6 +248,7 @@ export class AccountingEngineService {
     this.logger.log(`Journal entry created: ${entry.numero} for situation ${situation.reference}`);
     return entry.id;
   }
+
   // ── ENCAISSEMENT / DECAISSEMENT — cash movements ──────────────────
 
   async generateForEncaissement(encaissementId: string): Promise<string> {
@@ -275,8 +257,6 @@ export class AccountingEngineService {
       include: { cedante: true, affaire: { select: { numero: true } } },
     });
 
-    // FIX (Comptabilité pass): no idempotency guard — same call twice
-    // duplicated the entry.
     const existing = await this.prisma.journalEntry.findFirst({
       where: { description: { contains: enc.reference } },
     });
@@ -313,10 +293,6 @@ export class AccountingEngineService {
         debit: null, credit: montant, libelle: `Encaissement ${enc.reference} — ${enc.cedante!.raisonSociale}`, ordre: 2,
       });
     } else {
-      // No party to credit against a specific tiers account — book to the
-      // bank's own counterpart placeholder isn't correct double-entry, so
-      // this case (e.g. BANQUE_ARS/ASSURE party types) is intentionally
-      // left for manual completion rather than guessed.
       throw new BadRequestException(
         'Génération automatique non supportée pour ce type de partie versante — complétez l\'écriture manuellement.',
       );
@@ -392,23 +368,13 @@ export class AccountingEngineService {
 
   /**
    * Books the current-year settlement paid by the cédante on a sinistre.
-   * CONFIRMED against server/src/modules/sinistres/sinistres.service.ts:
-   * Sinistre.reglementExerciceN is the current-year règlement — there is no
-   * `montantPaye` field (that was an incorrect guess in an earlier pass).
-   * cumulReglementAnterieurs is prior years' cumulative and is intentionally
-   * NOT included here — those were already booked in their own fiscal
-   * periods; re-including them would double-count. sap (Sinistres à Payer)
-   * is a reserve/provision, not a payment, and is out of scope for this
-   * method — it's adjusted via SinistresService.adjustSap() and would need
-   * its own reserve-constitution entry type if/when that's requested.
    */
   async generateForSinistrePaiement(sinistreId: string): Promise<string> {
     const sinistre = await this.prisma.sinistre.findUniqueOrThrow({
       where: { id: sinistreId },
       include: { affaire: { include: { cedante: true } } },
     });
-
-    await this.assertNotAlreadyGenerated(JournalEntryType.SAP_RECONSTITUTION, sinistre.affaireId, sinistre.numero ?? sinistreId);
+    await this.assertNotAlreadyGeneratedForSinistre(JournalEntryType.SAP_RECONSTITUTION, sinistreId, sinistre.numero);
 
     const montantRegle = Number(sinistre.reglementExerciceN ?? 0);
     if (montantRegle <= 0) {
@@ -445,18 +411,6 @@ export class AccountingEngineService {
 
     return entry.id;
   }
-
-  /**
-   * Books recovery of the reinsurers' share of a sinistre.
-   * CONFIRMED: Sinistre.partReassureurs is the correct field name.
-   * INFERRED (not schema-confirmed): SinistreStatut's exact enum values
-   * weren't in what I reviewed, but SinistresService's real transition
-   * methods (markInRecovery, close — no method exists producing a
-   * "RECUPERE" state, unlike an earlier incorrect guess) show
-   * EN_RECUPERATION and CLOS are real values. Gating recovery generation on
-   * those two rather than the invented EN_RECUPERATION/RECUPERE pair from
-   * before.
-   */
   async generateForSinistreRecuperation(sinistreId: string): Promise<string> {
     const sinistre = await this.prisma.sinistre.findUniqueOrThrow({
       where: { id: sinistreId },
@@ -467,7 +421,7 @@ export class AccountingEngineService {
       throw new BadRequestException(`Le sinistre doit être en cours de récupération ou clos pour générer cette écriture (statut actuel: ${sinistre.statut})`);
     }
 
-    await this.assertNotAlreadyGenerated(JournalEntryType.LIQUIDATION_TRAITE, sinistre.affaireId, `récup-${sinistre.numero ?? sinistreId}`);
+    await this.assertNotAlreadyGeneratedForSinistre(JournalEntryType.RECUPERATION_SINISTRE_REASSUREUR, sinistreId, sinistre.numero);
 
     const partReassureurs = Number(sinistre.partReassureurs ?? 0);
     if (partReassureurs <= 0) {
@@ -504,7 +458,7 @@ export class AccountingEngineService {
       data: {
         numero,
         statut: 'BROUILLON',
-        type: JournalEntryType.LIQUIDATION_TRAITE,
+        type: JournalEntryType.RECUPERATION_SINISTRE_REASSUREUR,
         affaireId: sinistre.affaireId,
         sinistreId,
         fiscalPeriodId: period.id,
@@ -516,13 +470,130 @@ export class AccountingEngineService {
 
     return entry.id;
   }
+  async generateForTraiteLiquidation(liquidationId: string): Promise<string> {
+    const liquidation = await this.prisma.traiteLiquidation.findUniqueOrThrow({
+      where: { id: liquidationId },
+      include: {
+        traite: {
+          include: {
+            affaire: { include: { cedante: true, reassureurs: { include: { reassureur: true } } } },
+          },
+        },
+      },
+    });
 
-  // ── Shared helper ────────────────────────────────────────────────
+    if (liquidation.statut !== 'VALIDEE') {
+      throw new BadRequestException('Seule une liquidation validée peut être comptabilisée.');
+    }
 
+    const affaire = liquidation.traite.affaire;
+    const reference = `LIQ-${affaire.numero}-${liquidation.periodeDebut.toISOString().slice(0, 10)}`;
+
+    const existing = await this.prisma.journalEntry.findFirst({
+      where: { type: JournalEntryType.LIQUIDATION_TRAITE, affaireId: affaire.id, description: { contains: reference } },
+    });
+    if (existing) {
+      throw new ConflictException(`Une écriture existe déjà pour cette liquidation (${existing.numero})`);
+    }
+
+    const soldeNet = Number(liquidation.soldeNet);
+    if (Math.abs(soldeNet) < 0.001) {
+      throw new BadRequestException('Le solde net de cette liquidation est nul — rien à comptabiliser.');
+    }
+    if (liquidation.soldeDirection !== 'CEDANTE_DOIT') {
+      throw new BadRequestException(
+        `Comptabilisation automatique non supportée pour le sens "${liquidation.soldeDirection}" — complétez manuellement.`,
+      );
+    }
+    const unmapped: string[] = [];
+    if (Number(liquidation.reservesConstituees) > 0) unmapped.push('Réserves constituées (SAP)');
+    if (Number(liquidation.reservesLibereesAnterieur) > 0) unmapped.push('Réserves libérées antérieures');
+    if (Number(liquidation.participationsBenefRecues) > 0) unmapped.push('Participations bénéficiaires reçues');
+    if (Number(liquidation.interetsSurDepots) > 0) unmapped.push('Intérêts sur dépôts');
+    if (Number(liquidation.courtage) > 0) unmapped.push('Courtage (distinct de la commission ARS)');
+    if (Number(liquidation.taxes) > 0) unmapped.push('Taxes');
+    if (Number(liquidation.pmdDeductible) > 0) unmapped.push('PMD déductible');
+    if (unmapped.length > 0) {
+      throw new BadRequestException(
+        `Cette liquidation comporte des montants sur des postes sans compte comptable confirmé dans ce module ` +
+        `(${unmapped.join(', ')}). Comptabilisez-les manuellement, ou complétez le mapping de comptes avant ` +
+        `de régénérer.`,
+      );
+    }
+
+    const [cedanteAccount, reassureurAccount] = await Promise.all([
+      this.prisma.planComptable.findFirst({ where: { compte: { startsWith: '411' } } }),
+      this.prisma.planComptable.findFirst({ where: { compte: { startsWith: '401' } } }),
+    ]);
+
+    const missing: string[] = [];
+    if (!cedanteAccount) missing.push('411xxxxx (cédantes)');
+    if (!reassureurAccount) missing.push('401xxxxx (réassureurs)');
+    if (missing.length > 0) {
+      throw new BadRequestException(`Comptes manquants dans le plan comptable: ${missing.join(', ')}`);
+    }
+
+    const period = await this.fiscalPeriod.getOrCreateCurrent();
+    const numero = await this.sequence.next('JOURNAL_ENTRY');
+    const auxCedante = await this.auxiliary.createForCedante(affaire.cedanteId, affaire.cedante.compteComptable, affaire.cedante.raisonSociale);
+
+    const lines: any[] = [
+      {
+        planComptableId: cedanteAccount!.id,
+        auxiliaryId: auxCedante?.id,
+        cedanteId: affaire.cedanteId,
+        debit: soldeNet,
+        credit: null,
+        libelle: `Solde liquidation traité (cédante doit) — ${reference}`,
+        ordre: 1,
+      },
+    ];
+    let ordre = 2;
+
+    const totalParts = affaire.reassureurs.reduce((s, r) => s + Number(r.partPct), 0) || 100;
+    for (const r of affaire.reassureurs) {
+      const share = Math.round(soldeNet * (Number(r.partPct) / totalParts) * 1000) / 1000;
+      if (share <= 0) continue;
+      const auxRea = await this.auxiliary.createForReassureur(r.reassureurId, r.reassureur.compteComptable, r.reassureur.raisonSociale);
+      lines.push({
+        planComptableId: reassureurAccount!.id,
+        auxiliaryId: auxRea?.id,
+        reassureurId: r.reassureurId,
+        debit: null,
+        credit: share,
+        libelle: `Solde liquidation traité ${r.reassureur.code} — ${reference}`,
+        ordre: ordre++,
+      });
+    }
+
+    const entry = await this.prisma.journalEntry.create({
+      data: {
+        numero,
+        statut: 'BROUILLON',
+        type: JournalEntryType.LIQUIDATION_TRAITE,
+        affaireId: affaire.id,
+        fiscalPeriodId: period.id,
+        currency: affaire.currency,
+        description: `Liquidation traité — ${reference}`,
+        lines: { create: lines },
+      },
+    });
+
+    this.logger.log(`Journal entry created: ${entry.numero} for treaty liquidation ${liquidationId}`);
+    return entry.id;
+  }
+
+  // ── Shared helpers ───────────────────────────────────────────────
   private async assertNotAlreadyGenerated(type: JournalEntryType, affaireId: string, refLabel: string) {
     const existing = await this.prisma.journalEntry.findFirst({ where: { type, affaireId } });
     if (existing) {
       throw new ConflictException(`Une écriture ${type} existe déjà pour ${refLabel} (${existing.numero})`);
+    }
+  }
+  private async assertNotAlreadyGeneratedForSinistre(type: JournalEntryType, sinistreId: string, refLabel: string) {
+    const existing = await this.prisma.journalEntry.findFirst({ where: { type, sinistreId } });
+    if (existing) {
+      throw new ConflictException(`Une écriture ${type} existe déjà pour le sinistre ${refLabel} (${existing.numero})`);
     }
   }
 }

@@ -26,8 +26,6 @@ export class AffaireWorkflowService {
       include: { reassureurs: true, facultativeData: true, traiteData: true, cedante: true },
     });
 
-    // FIX (Workflow pass): findUniqueOrThrow doesn't filter isActive — a
-    // soft-deleted affaire could previously still have its statut changed.
     if (!affaire.isActive) {
       throw new NotFoundException('Affaire introuvable');
     }
@@ -39,7 +37,6 @@ export class AffaireWorkflowService {
       );
     }
 
-    // Business rules per transition
     if (targetStatus === AffaireStatut.PREVISION) {
       this.validateForPrevision(affaire);
     }
@@ -52,7 +49,6 @@ export class AffaireWorkflowService {
       data: { statut: targetStatus },
     });
 
-    // Audit log
     await this.prisma.auditLog.create({
       data: {
         userId,
@@ -64,7 +60,6 @@ export class AffaireWorkflowService {
       },
     });
 
-    // Notify direction réassurance on placement
     if (targetStatus === AffaireStatut.PLACEMENT_REALISE) {
       this.notification.notifyRole(
         'DIRECTION_REASSURANCE',
@@ -97,11 +92,9 @@ export class AffaireWorkflowService {
     } else {
       if (!affaire.traiteData) throw new BadRequestException('Données du traité manquantes');
     }
-
-    // Check document checklist completeness
     const checklist = await this.prisma.documentChecklist.findUnique({ where: { affaireId: affaire.id } });
     if (checklist && checklist.completionPct < 100) {
-      const enforceChecklist = this.config.get<boolean>('app.enforceChecklistBeforePlacement', false);
+      const enforceChecklist = this.config.get<boolean>('app.enforceChecklistBeforePlacement', true);
       const incompletePct = 100 - checklist.completionPct;
 
       if (enforceChecklist) {
@@ -110,8 +103,8 @@ export class AffaireWorkflowService {
         );
       } else {
         this.logger.warn(
-          `Affaire ${affaire.numero} placée avec dossier incomplet (${incompletePct.toFixed(0)}% manquant). ` +
-          `Activer ENFORCE_CHECKLIST_BEFORE_PLACEMENT=true pour bloquer.`,
+          `Affaire ${affaire.numero} placée avec dossier incomplet (${incompletePct.toFixed(0)}% manquant) — ` +
+          `enforcement explicitement désactivé via ENFORCE_CHECKLIST_BEFORE_PLACEMENT=false.`,
         );
       }
     }

@@ -259,13 +259,22 @@ export default function AffaireCreateModal({ onClose }: Props) {
                   </select>
                 </div>
                 <div>
-                  <label className={labelClass}>N° Police cédante</label>
+                  <label className={labelClass}>
+                    N° Police cédante
+                    <span className="ml-1 font-normal text-muted-foreground/60" title="Numéro de police interne de la cédante — distinct du numéro d'affaire ARS (attribué automatiquement au format AFF-xxxx). Facultatif.">
+                      (référence cédante)
+                    </span>
+                  </label>
                   <input
                     type="text"
                     value={fac.numeroPoliceCedante || ''}
                     onChange={(e) => setFac({ ...fac, numeroPoliceCedante: e.target.value })}
+                    placeholder="Ex: POL-2026-00123"
                     className={fieldClass}
                   />
+                  <p className="mt-1 text-[11px] text-muted-foreground/70">
+                    Le numéro de police propre à la cédante (pas le numéro d'affaire ARS, généré automatiquement).
+                  </p>
                 </div>
                 <div>
                   <label className={labelClass}>Mode de renouvellement</label>
@@ -422,9 +431,15 @@ export default function AffaireCreateModal({ onClose }: Props) {
                   <label className={labelClass}>Taux Commission Cédante (%)</label>
                   <input type="number" step="0.0001" value={traite.tauxCommissionCedante || 0} onChange={(e) => setTraite({ ...traite, tauxCommissionCedante: parseFloat(e.target.value) || 0 })} className={fieldClass} />
                 </div>
-                <div>
-                  <label className={labelClass}>Commission Liquidation ARS</label>
+                                <div>
+                  <label className={labelClass}>
+                    Commission Liquidation ARS
+                    <span className="ml-1 font-normal text-muted-foreground/60">(saisie manuelle)</span>
+                  </label>
                   <input type="number" step="0.001" value={traite.commissionLiquidationArs || 0} onChange={(e) => setTraite({ ...traite, commissionLiquidationArs: parseFloat(e.target.value) || 0 })} className={fieldClass} />
+                  <p className="mt-1 text-[11px] text-muted-foreground/70">
+                    Montant fixe saisi manuellement — non calculé automatiquement (distinct de la commission de courtage par réassureur, définie à l'étape 3).
+                  </p>
                 </div>
                 <div className="col-span-2">
                   <label className={labelClass}>Seuil de notification sinistre</label>

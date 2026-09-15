@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { CommissionMode } from '@prisma/client';
 
 export interface CommissionInput {
@@ -68,7 +68,9 @@ export class CommissionCalculatorService {
     const total = reassureurs.reduce((sum, r) => sum + r.partPct, 0);
     const diff = Math.abs(total - 100);
     if (diff > 0.001) {
-      throw new Error(`La somme des participations doit être 100% (actuel: ${total.toFixed(4)}%)`);
+      throw new BadRequestException(
+        `La somme des participations doit être 100% (actuel: ${total.toFixed(4)}%)`,
+      );
     }
   }
 
