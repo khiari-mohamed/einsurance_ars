@@ -53,6 +53,7 @@ export class CreateCedanteDto {
   @ApiPropertyOptional() @IsOptional() @IsString() adresse?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() pays?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() capital?: number;
+  @ApiPropertyOptional({ example: 'TND' }) @IsOptional() @IsString() deviseParDefaut?: string;
   @ApiPropertyOptional() @IsOptional() freeFields?: Record<string, any>;
 
   @ApiPropertyOptional({ type: [CreateContactDto] })

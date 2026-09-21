@@ -4,7 +4,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, Eye, Clock, X } from 'lucide-react';
 import { facultativeApi } from '../../api/facultative.api';
 import { formatCurrency } from '../../lib/currency';
-import { statutColors, statutLabels, AffaireStatut } from '../../types/affaire.types';
+import { statutColors, statutLabels, AffaireStatut, AffaireType } from '../../types/affaire.types';
 import { FacultativeListItem } from '../../types/facultative.types';
 import AffaireCreateModal from './AffaireCreateModal';
 
@@ -254,7 +254,11 @@ export default function FacultativesList() {
       </div>
 
       {isCreateModalOpen && (
-        <AffaireCreateModal onClose={() => setIsCreateModalOpen(false)} />
+        <AffaireCreateModal
+          initialType={AffaireType.FACULTATIVE}
+          lockType
+          onClose={() => setIsCreateModalOpen(false)}
+        />
       )}
     </div>
   );

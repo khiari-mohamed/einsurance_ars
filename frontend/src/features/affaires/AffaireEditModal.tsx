@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Save, AlertCircle, Plus, Trash2 } from 'lucide-react';
-import masterDataApi from '../../api/master-data.api';
 import CountrySelect from '../../components/ui/CountrySelect';
+import ReferenceSelect from '../../components/ui/ReferenceSelect';
 import { affairesApi } from '../../api/affaires.api';
 import {
   Affaire, AffaireType, UpdateAffaireDto, AffaireReassureurInput, CommissionMode,
-  GuaranteeLineInput, ReassuranceType, ModeRenouvellement,
-  reassuranceTypeLabels, modeRenouvellementLabels,
+  GuaranteeLineInput, ReassuranceType, ModeRenouvellement, FormeCouverture, Periodicite,
+  reassuranceTypeLabels, modeRenouvellementLabels, formeCouvertureLabels, periodiciteLabels,
 } from '../../types/affaire.types';
 
 interface Props {
@@ -39,15 +39,6 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
       commissionForfait: r.commissionForfait,
     }))
   );
-
-  const { data: assuresOptions = [] } = useQuery({
-    queryKey: ['assures'],
-    queryFn: async () => (await masterDataApi.assures.getAll({ limit: 500 })).data.data,
-  });
-  const { data: reassureursOptions = [] } = useQuery({
-    queryKey: ['reassureurs'],
-    queryFn: async () => (await masterDataApi.reassureurs.getAll({ limit: 500 })).data.data,
-  });
 
   const mutation = useMutation({
     mutationFn: (data: UpdateAffaireDto) => affairesApi.update(affaire.id, data),
@@ -190,10 +181,17 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Assuré</label>
-                  <select value={fac.assureId || ''} onChange={(e) => setFac({ ...fac, assureId: e.target.value })} className="w-full px-3 py-2 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2">
-                    <option value="">Sélectionner</option>
-                    {assuresOptions.map((a: any) => <option key={a.id} value={a.id}>{a.raisonSociale} ({a.code})</option>)}
-                  </select>
+                  {/*
+                    FIX (bug #7): this modal had no inline create at all — a
+                    user editing an affaire hit the exact empty-dropdown wall
+                    this whole feature exists to remove.
+                  */}
+                  <ReferenceSelect
+                    kind="assure"
+                    value={fac.assureId || ''}
+                    onChange={(id) => setFac({ ...fac, assureId: id })}
+                    className="w-full px-3 py-2 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
+                  />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Type de réassurance</label>
@@ -247,12 +245,20 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                   <input type="number" step="0.001" value={fac.prime100Pct} onChange={(e) => setFac({ ...fac, prime100Pct: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Prime (%)</label>
+                  <input type="number" step="0.0001" min="0" value={fac.tauxPrime || 0} onChange={(e) => setFac({ ...fac, tauxPrime: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Cession (%)</label>
                   <input type="number" step="0.0001" value={fac.tauxCession} onChange={(e) => setFac({ ...fac, tauxCession: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission Cédante (%)</label>
                   <input type="number" step="0.0001" value={fac.tauxCommissionCedante || 0} onChange={(e) => setFac({ ...fac, tauxCommissionCedante: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime Cédée (calculée)</label>
+                  <input type="text" value={(Number(fac.prime100Pct || 0) * Number(fac.tauxCession || 0) / 100).toFixed(3)} disabled className="w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-lg text-[13px] text-gray-500" />
                 </div>
               </div>
 
@@ -283,12 +289,58 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                   <input type="text" value={traite.referenceTraite || ''} onChange={(e) => setTraite({ ...traite, referenceTraite: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Type de réassurance</label>
+                  <select value={traite.reassuranceType || ''} onChange={(e) => setTraite({ ...traite, reassuranceType: e.target.value as ReassuranceType })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {Object.entries(reassuranceTypeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Forme de couverture</label>
+                  <select value={traite.formeCouverture || ''} onChange={(e) => setTraite({ ...traite, formeCouverture: (e.target.value || undefined) as FormeCouverture })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">—</option>
+                    {Object.entries(formeCouvertureLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Effet</label>
                   <input type="date" value={traite.dateEffet.split('T')[0]} onChange={(e) => setTraite({ ...traite, dateEffet: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Échéance</label>
                   <input type="date" value={traite.dateEcheance.split('T')[0]} onChange={(e) => setTraite({ ...traite, dateEcheance: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de renouvellement</label>
+                  <select value={traite.modeRenouvellement || ''} onChange={(e) => setTraite({ ...traite, modeRenouvellement: (e.target.value || undefined) as ModeRenouvellement })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">—</option>
+                    {Object.entries(modeRenouvellementLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Périodicité</label>
+                  <select value={traite.periodicite || ''} onChange={(e) => setTraite({ ...traite, periodicite: e.target.value as Periodicite })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {Object.entries(periodiciteLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date avis résiliation</label>
+                  <input type="date" value={traite.dateAvisResiliation?.split('T')[0] || ''} onChange={(e) => setTraite({ ...traite, dateAvisResiliation: e.target.value || undefined })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Zone géographique</label>
+                  <input type="text" value={traite.zoneGeographique || ''} onChange={(e) => setTraite({ ...traite, zoneGeographique: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Branche</label>
+                  <input type="text" value={traite.branche || ''} onChange={(e) => setTraite({ ...traite, branche: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Produit</label>
+                  <input type="text" value={traite.produit || ''} onChange={(e) => setTraite({ ...traite, produit: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Garantie</label>
+                  <input type="text" value={traite.garantie || ''} onChange={(e) => setTraite({ ...traite, garantie: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime Prévisionnelle</label>
@@ -307,6 +359,11 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                   <input type="number" step="0.001" value={traite.commissionLiquidationArs || 0} onChange={(e) => setTraite({ ...traite, commissionLiquidationArs: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   <p className="mt-1 text-[11px] text-gray-400">Montant fixe saisi manuellement — non calculé automatiquement (distinct de la commission de courtage par réassureur, définie à l'étape 3).</p>
                 </div>
+                <div>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Seuil de notification sinistre</label>
+                  <input type="number" min="0" step="0.001" value={traite.seuilNotification || 0} onChange={(e) => setTraite({ ...traite, seuilNotification: parseFloat(e.target.value) || 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <p className="mt-1 text-[11px] text-gray-400">Seuil au-delà duquel les réassureurs doivent être notifiés.</p>
+                </div>
               </div>
               <p className="text-[11px] text-gray-400">
                 Rubriques comptables et échéancier PMD se gèrent depuis les gestionnaires dédiés (onglet Traité de la fiche détail).
@@ -323,10 +380,13 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
               <div key={idx} className="p-3 border border-gray-200 rounded-lg mb-2 space-y-2">
                 <div className="grid grid-cols-4 gap-3">
                   <div className="col-span-2">
-                    <select value={r.reassureurId} onChange={(e) => updateReassureur(idx, { reassureurId: e.target.value })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
-                      <option value="">Sélectionner</option>
-                      {reassureursOptions.map((ro: any) => <option key={ro.id} value={ro.id}>{ro.raisonSociale}</option>)}
-                    </select>
+                    <ReferenceSelect
+                      kind="reassureur"
+                      value={r.reassureurId}
+                      onChange={(id) => updateReassureur(idx, { reassureurId: id })}
+                      required
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
                   </div>
                   <input type="number" step="0.0001" placeholder="Part %" value={r.partPct} onChange={(e) => updateReassureur(idx, { partPct: parseFloat(e.target.value) || 0 })} required className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   <button type="button" onClick={() => removeReassureur(idx)} className="px-2 text-red-600 hover:bg-red-50 rounded">×</button>

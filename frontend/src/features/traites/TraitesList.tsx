@@ -9,6 +9,7 @@ import {
   formeCouvertureLabels, periodiciteLabels, Periodicite,
 } from '../../types/affaire.types';
 import AffaireCreateModal from '../affaires/AffaireCreateModal';
+import { AffaireType } from '../../types/affaire.types';
 
 const LIMIT = 20;
 
@@ -260,7 +261,11 @@ export default function TraitesList() {
       </div>
 
       {isCreateModalOpen && (
-        <AffaireCreateModal onClose={() => setIsCreateModalOpen(false)} />
+        <AffaireCreateModal
+          initialType={AffaireType.TRAITE}
+          lockType
+          onClose={() => setIsCreateModalOpen(false)}
+        />
       )}
     </div>
   );

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { X, ChevronRight, ChevronLeft, AlertCircle, Plus, Trash2, CheckCircle2 } from 'lucide-react';
-import masterDataApi from '../../api/master-data.api';
 import { affairesApi } from '../../api/affaires.api';
 import CountrySelect from '../../components/ui/CountrySelect';
 import CurrencySelect from '../../components/ui/CurrencySelect';
+import ReferenceSelect from '../../components/ui/ReferenceSelect';
 import {
   CreateAffaireDto, AffaireType, ModePaiement, ReassuranceType, FormeCouverture,
   ModeRenouvellement, Periodicite, CommissionMode, AffaireReassureurInput,
@@ -16,6 +16,8 @@ import {
 
 interface Props {
   onClose: () => void;
+  initialType?: AffaireType;
+  lockType?: boolean;
 }
 
 const emptyReassureur = (): AffaireReassureurInput => ({
@@ -30,13 +32,13 @@ const fieldClass =
   'w-full rounded-xl border border-border bg-secondary px-3 py-2 text-[13px] text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background';
 const labelClass = 'block text-[12px] font-medium text-muted-foreground mb-1.5';
 
-export default function AffaireCreateModal({ onClose }: Props) {
+export default function AffaireCreateModal({ onClose, initialType = AffaireType.FACULTATIVE, lockType = false }: Props) {
   const [step, setStep] = useState(1);
   const [errors, setErrors] = useState<string[]>([]);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  const [type, setType] = useState<AffaireType>(AffaireType.FACULTATIVE);
+  const [type, setType] = useState<AffaireType>(initialType);
   const [cedanteId, setCedanteId] = useState('');
   const [modePaiement, setModePaiement] = useState<ModePaiement>(ModePaiement.PAR_AFFAIRE);
   const [currency, setCurrency] = useState('TND');
@@ -63,18 +65,7 @@ export default function AffaireCreateModal({ onClose }: Props) {
 
   const [reassureurs, setReassureurs] = useState<AffaireReassureurInput[]>([emptyReassureur()]);
 
-  const { data: assures = [] } = useQuery({
-    queryKey: ['assures'],
-    queryFn: async () => (await masterDataApi.assures.getAll({ limit: 500 })).data.data,
-  });
-  const { data: cedantes = [] } = useQuery({
-    queryKey: ['cedantes'],
-    queryFn: async () => (await masterDataApi.cedantes.getAll({ limit: 500 })).data.data,
-  });
-  const { data: reassureursOptions = [] } = useQuery({
-    queryKey: ['reassureurs'],
-    queryFn: async () => (await masterDataApi.reassureurs.getAll({ limit: 500 })).data.data,
-  });
+
 
   const mutation = useMutation({
     mutationFn: (data: CreateAffaireDto) => affairesApi.create(data),
@@ -204,29 +195,29 @@ export default function AffaireCreateModal({ onClose }: Props) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={labelClass}>Type d'affaire *</label>
-                  <select value={type} onChange={(e) => setType(e.target.value as AffaireType)} className={fieldClass}>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value as AffaireType)}
+                    disabled={lockType}
+                    className={`${fieldClass} ${lockType ? 'cursor-not-allowed bg-muted text-muted-foreground opacity-80' : ''}`}
+                  >
                     {Object.entries(typeLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
+                  {lockType && <p className="mt-1 text-[11px] text-muted-foreground">Type fixé par le parcours sélectionné.</p>}
                 </div>
                 <div>
                   <label className={labelClass}>Cédante *</label>
-                  <select value={cedanteId} onChange={(e) => setCedanteId(e.target.value)} required className={fieldClass}>
-                    <option value="">Sélectionner une cédante</option>
-                    {cedantes.map((c: any) => <option key={c.id} value={c.id}>{c.raisonSociale}</option>)}
-                  </select>
+                  <ReferenceSelect kind="cedante" value={cedanteId} onChange={setCedanteId} required />
                 </div>
                 {type === AffaireType.FACULTATIVE && (
                   <div>
                     <label className={labelClass}>Assuré *</label>
-                    <select
+                    <ReferenceSelect
+                      kind="assure"
                       value={fac.assureId || ''}
-                      onChange={(e) => setFac({ ...fac, assureId: e.target.value })}
+                      onChange={(id) => setFac({ ...fac, assureId: id })}
                       required
-                      className={fieldClass}
-                    >
-                      <option value="">Sélectionner un assuré</option>
-                      {assures.map((a: any) => <option key={a.id} value={a.id}>{a.raisonSociale} ({a.code})</option>)}
-                    </select>
+                    />
                   </div>
                 )}
                 <div>
@@ -247,6 +238,9 @@ export default function AffaireCreateModal({ onClose }: Props) {
           {step === 2 && type === AffaireType.FACULTATIVE && (
             <div className="space-y-4">
               <h3 className="text-[15px] font-semibold text-foreground mb-4">Facultative — Données Contractuelles &amp; Financières</h3>
+              <p className="rounded-xl border border-[hsl(var(--chart-4)/0.25)] bg-[hsl(var(--chart-4)/0.08)] px-3 py-2 text-[12px] text-foreground">
+                Parcours Facultative : la prime cédée est calculée à partir de la prime 100% et du taux de cession.
+              </p>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={labelClass}>Type de réassurance</label>
@@ -357,6 +351,9 @@ export default function AffaireCreateModal({ onClose }: Props) {
           {step === 2 && type === AffaireType.TRAITE && (
             <div className="space-y-4">
               <h3 className="text-[15px] font-semibold text-foreground mb-4">Traité — Données Contractuelles &amp; Financières</h3>
+              <p className="rounded-xl border border-[hsl(var(--chart-5)/0.25)] bg-[hsl(var(--chart-5)/0.08)] px-3 py-2 text-[12px] text-foreground">
+                Parcours Traité : la périodicité pilote les situations et le seuil de notification concerne les sinistres.
+              </p>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className={labelClass}>Référence traité</label>
@@ -487,7 +484,14 @@ export default function AffaireCreateModal({ onClose }: Props) {
           {step === 3 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[15px] font-semibold text-foreground">Table de participation des Réassureurs</h3>
+                <div>
+                  <h3 className="text-[15px] font-semibold text-foreground">Table de participation des Réassureurs</h3>
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    {type === AffaireType.FACULTATIVE
+                      ? 'Commission calculée sur la prime cédée.'
+                      : 'Commission calculée sur la prime nette cédante du traité.'}
+                  </p>
+                </div>
                 <button type="button" onClick={addReassureur} className="text-[13px] font-medium text-primary hover:text-primary/80">
                   + Ajouter un réassureur
                 </button>
@@ -501,15 +505,12 @@ export default function AffaireCreateModal({ onClose }: Props) {
                   </div>
                   <div className="grid grid-cols-4 gap-3">
                     <div className="col-span-2">
-                      <select
+                      <ReferenceSelect
+                        kind="reassureur"
                         value={r.reassureurId}
-                        onChange={(e) => updateReassureur(idx, { reassureurId: e.target.value })}
+                        onChange={(id) => updateReassureur(idx, { reassureurId: id })}
                         required
-                        className={fieldClass}
-                      >
-                        <option value="">Sélectionner un réassureur</option>
-                        {reassureursOptions.map((ro: any) => <option key={ro.id} value={ro.id}>{ro.raisonSociale}</option>)}
-                      </select>
+                      />
                     </div>
                     <div>
                       <input

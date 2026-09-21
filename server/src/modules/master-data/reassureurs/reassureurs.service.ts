@@ -150,6 +150,7 @@ export class ReassureursService {
         adresse: dto.adresse,
         pays: dto.pays,
         capital: dto.capital,
+        deviseParDefaut: dto.deviseParDefaut,
         freeFields: dto.freeFields ?? {},
         contacts: dto.contacts ? { create: dto.contacts } : undefined,
         bankAccounts: dto.bankAccounts ? { create: dto.bankAccounts } : undefined,
@@ -408,6 +409,7 @@ export class ReassureursService {
         ...(dto.adresse !== undefined && { adresse: dto.adresse }),
         ...(dto.pays !== undefined && { pays: dto.pays }),
         ...(dto.capital !== undefined && { capital: dto.capital }),
+        ...(dto.deviseParDefaut !== undefined && { deviseParDefaut: dto.deviseParDefaut }),
         ...(dto.freeFields !== undefined && { freeFields: dto.freeFields }),
         ...(dto.contacts !== undefined && {
           contacts: { deleteMany: {}, create: dto.contacts },

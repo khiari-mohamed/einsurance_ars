@@ -357,6 +357,8 @@ export class AffairesService {
           ...(dto.facultativeData && {
             facultativeData: {
               update: {
+                ...(dto.facultativeData.reassuranceType !== undefined && { reassuranceType: dto.facultativeData.reassuranceType }),
+                ...(dto.facultativeData.assureId !== undefined && { assure: { connect: { id: dto.facultativeData.assureId } } }),
                 ...(dto.facultativeData.dateEffet && { dateEffet: new Date(dto.facultativeData.dateEffet) }),
                 ...(dto.facultativeData.dateEcheance && { dateEcheance: new Date(dto.facultativeData.dateEcheance) }),
                 ...(dto.facultativeData.modeRenouvellement !== undefined && { modeRenouvellement: dto.facultativeData.modeRenouvellement }),
@@ -398,6 +400,7 @@ export class AffairesService {
             traiteData: {
               update: {
                 ...(dto.traiteData.referenceTraite !== undefined && { referenceTraite: dto.traiteData.referenceTraite }),
+                ...(dto.traiteData.reassuranceType !== undefined && { reassuranceType: dto.traiteData.reassuranceType }),
                 ...(dto.traiteData.formeCouverture !== undefined && { formeCouverture: dto.traiteData.formeCouverture }),
                 ...(dto.traiteData.dateEffet && { dateEffet: new Date(dto.traiteData.dateEffet) }),
                 ...(dto.traiteData.dateEcheance && { dateEcheance: new Date(dto.traiteData.dateEcheance) }),

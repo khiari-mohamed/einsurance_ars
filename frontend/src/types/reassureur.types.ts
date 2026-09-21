@@ -49,6 +49,7 @@ export interface Reassureur {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
   freeFields?: Record<string, any>;
 
   codeModifiedBy?: string;
@@ -171,6 +172,7 @@ export interface CreateReassureurDto {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
   freeFields?: Record<string, any>;
   contacts?: CreateReassureurContactDto[];
   bankAccounts?: CreateReassureurBankAccountDto[];
@@ -185,6 +187,7 @@ export interface UpdateReassureurDto {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
   freeFields?: Record<string, any>;
   contacts?: CreateReassureurContactDto[];
   bankAccounts?: CreateReassureurBankAccountDto[];

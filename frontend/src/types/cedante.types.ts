@@ -33,6 +33,7 @@ export interface Cedante {
   // data typed into them.
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
   freeFields?: Record<string, any>;
   contacts?: CedanteContact[];
   bankAccounts?: CedanteBankAccount[];
@@ -103,6 +104,7 @@ export interface CreateCedanteDto {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
   freeFields?: Record<string, any>;
   contacts?: CreateCedanteContactDto[];
   bankAccounts?: CreateCedanteBankAccountDto[];
@@ -117,6 +119,7 @@ export interface UpdateCedanteDto {
   adresse?: string;
   pays?: string;
   capital?: number;
+  deviseParDefaut?: string;
   freeFields?: Record<string, any>;
   contacts?: CreateCedanteContactDto[];
   bankAccounts?: CreateCedanteBankAccountDto[];
