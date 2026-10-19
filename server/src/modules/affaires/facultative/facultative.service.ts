@@ -203,7 +203,7 @@ export class FacultativeService {
 
     const primeCedee = this.round3(dto.prime100Pct * (dto.tauxCession / 100));
     const commissionCedante = dto.tauxCommissionCedante
-      ? this.round3(primeCedee * (dto.tauxCommissionCedante / 100))
+      ? this.round3(dto.prime100Pct * (dto.tauxCession / 100) * (dto.tauxCommissionCedante / 100))
       : null;
 
     const fac = await this.prisma.facultativeAffaire.create({
@@ -281,6 +281,13 @@ export class FacultativeService {
       );
     }
 
+    if (dto.tauxCession !== undefined && fac.affaire.reassureurs.length > 0) {
+      this.commissionCalc.validateShares(
+        fac.affaire.reassureurs.map((r) => ({ partPct: Number(r.partPct) })),
+        dto.tauxCession,
+      );
+    }
+
     const prime100 =
       dto.prime100Pct !== undefined ? dto.prime100Pct : Number(fac.prime100Pct);
     const tauxCession =
@@ -294,7 +301,7 @@ export class FacultativeService {
 
     const primeCedee = this.round3(prime100 * (tauxCession / 100));
     const commissionCedante = tauxCommCed
-      ? this.round3(primeCedee * (tauxCommCed / 100))
+      ? this.round3(prime100 * (tauxCession / 100) * (tauxCommCed / 100))
       : null;
 
     const updated = await this.prisma.facultativeAffaire.update({
@@ -435,17 +442,12 @@ export class FacultativeService {
     }
 
     const fac = affaire.facultativeData;
-    const primeCedee =
-      Number(fac.primeCedee) ||
-      this.round3(
-        Number(fac.prime100Pct) * (Number(fac.tauxCession) / 100),
-      );
+    const prime100Pct = Number(fac.prime100Pct);
 
-    if (primeCedee <= 0) return { recalculated: 0 };
+    if (prime100Pct <= 0 || Number(fac.tauxCession) <= 0) return { recalculated: 0 };
 
     const results = this.commissionCalc.calculate({
-      primeCedee,
-      tauxCession: Number(fac.tauxCession) / 100,
+      prime100Pct,
       tauxCommissionCedante: Number(fac.tauxCommissionCedante ?? 0),
       reassureurs: affaire.reassureurs.map((r) => ({
         reassureurId: r.reassureurId,

@@ -2,17 +2,19 @@ import {
   IsString, IsEnum, IsOptional, IsNumber, IsBoolean, IsArray,
   ValidateNested, IsDateString, Min, Max, ArrayMinSize,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   AffaireType, ModePaiement, ReassuranceType, FormeCouverture,
   ModeRenouvellement, Periodicite, CommissionMode,
 } from '@prisma/client';
 
+const emptyToNull = ({ value }: { value: unknown }) => (value === '' ? null : value);
+
 // ── Reinsurer participation line ──────────────────────────────────
 export class AffaireReassureurDto {
   @ApiProperty() @IsString() reassureurId: string;
-  @ApiProperty({ description: 'Participation % — total toutes lignes = 100' })
+  @ApiProperty({ description: 'Participation % — total = taux de cession en facultative, 100% en traité' })
   @IsNumber() @Min(0.0001) @Max(100) partPct: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isLeader?: boolean;
   @ApiPropertyOptional({ enum: CommissionMode }) @IsOptional() @IsEnum(CommissionMode) commissionMode?: CommissionMode;
@@ -48,8 +50,12 @@ export class FacultativeDataDto {
   @ApiProperty({ enum: ReassuranceType }) @IsEnum(ReassuranceType) reassuranceType: ReassuranceType;
   @ApiProperty() @IsString() assureId: string;
   @ApiPropertyOptional() @IsOptional() @IsString() numeroPoliceCedante?: string;
-  @ApiProperty({ example: '2024-01-01' }) @IsDateString() dateEffet: string;
-  @ApiProperty({ example: '2025-01-01' }) @IsDateString() dateEcheance: string;
+  @ApiProperty({ example: '2024-01-01' })
+  @IsDateString({}, { message: "La date d'effet est obligatoire et doit être une date valide (AAAA-MM-JJ)" })
+  dateEffet: string;
+  @ApiProperty({ example: '2025-01-01' })
+  @IsDateString({}, { message: "La date d'échéance est obligatoire et doit être une date valide (AAAA-MM-JJ)" })
+  dateEcheance: string;
   @ApiPropertyOptional({ enum: ModeRenouvellement }) @IsOptional() @IsEnum(ModeRenouvellement) modeRenouvellement?: ModeRenouvellement;
   @ApiPropertyOptional() @IsOptional() @IsString() paysAssure?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() branche?: string;
@@ -71,10 +77,18 @@ export class TraiteDataDto {
   @ApiPropertyOptional() @IsOptional() @IsString() referenceTraite?: string;
   @ApiProperty({ enum: ReassuranceType }) @IsEnum(ReassuranceType) reassuranceType: ReassuranceType;
   @ApiPropertyOptional({ enum: FormeCouverture }) @IsOptional() @IsEnum(FormeCouverture) formeCouverture?: FormeCouverture;
-  @ApiProperty({ example: '2024-01-01' }) @IsDateString() dateEffet: string;
-  @ApiProperty({ example: '2025-01-01' }) @IsDateString() dateEcheance: string;
+  @ApiProperty({ example: '2024-01-01' })
+  @IsDateString({}, { message: "La date d'effet est obligatoire et doit être une date valide (AAAA-MM-JJ)" })
+  dateEffet: string;
+  @ApiProperty({ example: '2025-01-01' })
+  @IsDateString({}, { message: "La date d'échéance est obligatoire et doit être une date valide (AAAA-MM-JJ)" })
+  dateEcheance: string;
   @ApiPropertyOptional({ enum: ModeRenouvellement }) @IsOptional() @IsEnum(ModeRenouvellement) modeRenouvellement?: ModeRenouvellement;
-  @ApiPropertyOptional() @IsOptional() @IsDateString() dateAvisResiliation?: string;
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @Transform(emptyToNull)
+  @IsDateString({}, { message: "La date d'avis de résiliation doit être une date valide (AAAA-MM-JJ)" })
+  dateAvisResiliation?: string | null;
   @ApiPropertyOptional() @IsOptional() @IsString() zoneGeographique?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() branche?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() produit?: string;
@@ -102,6 +116,10 @@ export class CreateAffaireDto {
   @ApiProperty() @IsString() cedanteId: string;
   @ApiPropertyOptional({ enum: ModePaiement }) @IsOptional() @IsEnum(ModePaiement) modePaiement?: ModePaiement;
   @ApiPropertyOptional() @IsOptional() @IsString() currency?: string;
+  @ApiPropertyOptional({ description: 'Taux de change appliqué (ROE) — devise → TND' })
+  @IsOptional() @IsNumber() @Min(0.000001) roe?: number;
+  @ApiPropertyOptional({ description: 'Chargé de dossier affiché sur les tableaux de l’affaire' })
+  @IsOptional() @IsString() chargeDossier?: string;
 
   @ApiProperty({ type: [AffaireReassureurDto] })
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => AffaireReassureurDto)

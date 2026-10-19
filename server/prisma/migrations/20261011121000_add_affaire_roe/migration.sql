@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Affaire" ADD COLUMN IF NOT EXISTS "roe" DECIMAL(15,6);

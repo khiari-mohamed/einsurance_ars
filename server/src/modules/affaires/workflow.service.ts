@@ -76,8 +76,14 @@ export class AffaireWorkflowService {
       throw new BadRequestException('Au moins un réassureur doit être renseigné avant passage en prévision');
     }
     const totalParts = affaire.reassureurs.reduce((sum: number, r: any) => sum + Number(r.partPct), 0);
-    if (Math.abs(totalParts - 100) > 0.001) {
-      throw new BadRequestException(`Total des participations doit être 100% (actuel: ${totalParts.toFixed(4)}%)`);
+    const expectedTotal =
+      affaire.type === AffaireType.FACULTATIVE
+        ? Number(affaire.facultativeData?.tauxCession ?? 100)
+        : 100;
+    if (Math.abs(totalParts - expectedTotal) > 0.001) {
+      throw new BadRequestException(
+        `Total des participations doit être ${expectedTotal.toFixed(4)}% (actuel: ${totalParts.toFixed(4)}%)`,
+      );
     }
   }
 

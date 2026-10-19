@@ -656,6 +656,8 @@ model Affaire {
   type           AffaireType
   modePaiement   ModePaiement        @default(PAR_AFFAIRE)
   currency       String              @default("TND")
+  roe            Decimal?            @db.Decimal(15, 6)   // taux de change devise → TND (null = TND)
+  chargeDossier  String?
 
   cedanteId      String
   cedante        Cedante             @relation(fields: [cedanteId], references: [id])

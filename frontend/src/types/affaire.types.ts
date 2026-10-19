@@ -175,6 +175,8 @@ export interface Affaire {
   cedante: PartnerRef;
   modePaiement: ModePaiement;
   currency: string;
+  roe?: number | string | null;   // Prisma Decimal arrives as a string
+  chargeDossier?: string | null;
   reassureurs: AffaireReassureur[];
   facultativeData?: FacultativeAffaire;
   traiteData?: TraiteAffaire;
@@ -273,6 +275,8 @@ export interface CreateAffaireDto {
   cedanteId: string;
   modePaiement?: ModePaiement;
   currency?: string;
+  roe?: number;
+  chargeDossier?: string;
   reassureurs: AffaireReassureurInput[];
   facultativeData?: FacultativeDataInput;
   traiteData?: TraiteDataInput;

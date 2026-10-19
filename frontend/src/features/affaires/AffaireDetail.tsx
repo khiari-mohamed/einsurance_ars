@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { affairesApi } from '../../api/affaires.api';
 import { formatCurrency } from '../../lib/currency';
+import { computeFacRubriques, effectiveRoe } from '../../lib/affaire-calc';
+import ReassureurRubriquesTable, { previewRows } from '../../components/affaires/ReassureurRubriquesTable';
 import {
   Affaire, AffaireStatut, AffaireType, statutColors, statutLabels, typeLabels,
   reassuranceTypeLabels, formeCouvertureLabels, periodiciteLabels, modeRenouvellementLabels,
@@ -63,9 +65,54 @@ export default function AffaireDetail() {
 
   // FIX (Affaires pass — Number() coercion, same rationale as AffairesList).
   const commissionArsTotal = affaire.reassureurs.reduce((sum, r) => sum + Number(r.commissionArs ?? 0), 0);
+  const capitauxAssuresTotal =
+    affaire.facultativeData?.guaranteeLines.reduce(
+      (sum, line) => sum + Number(line.capitauxAssures100 ?? 0),
+      0,
+    ) ?? 0;
   const primeAffichee = affaire.type === AffaireType.FACULTATIVE
     ? Number(affaire.facultativeData?.primeCedee ?? 0)
     : Number(affaire.traiteData?.primePrevisionnelle ?? 0);
+  const facRubriques =
+    affaire.type === AffaireType.FACULTATIVE && affaire.facultativeData
+      ? computeFacRubriques(
+          Number(affaire.facultativeData.prime100Pct),
+          Number(affaire.facultativeData.tauxCommissionCedante ?? 0),
+          affaire.reassureurs.map((r, index) => ({
+            key: r.id || `row-${index}`,
+            partPct: Number(r.partPct),
+            commissionMode: r.commissionMode,
+            tauxCommissionArs: r.tauxCommissionArs == null ? undefined : Number(r.tauxCommissionArs),
+            commissionForfait: r.commissionForfait == null ? undefined : Number(r.commissionForfait),
+          })),
+        )
+      : null;
+  const staleFacCalculations =
+    facRubriques !== null &&
+    affaire.facultativeData !== undefined &&
+    (affaire.reassureurs.some((r, index) => {
+      const calculated = facRubriques.lines[index];
+      return (
+        !calculated ||
+        [
+          [r.primeBrute, calculated.primeCedee],
+          [r.commissionCedante, calculated.commissionCedante],
+          [r.commissionArs, calculated.commissionArs],
+          [r.primeNetteCedante, calculated.primeNetteCedante],
+          [r.primeNetteReassureur, calculated.primeNetteReassureur],
+        ].some(([stored, expected]) => {
+          const value = stored == null ? Number.NaN : Number(stored);
+          return !Number.isFinite(value) || Math.abs(value - Number(expected)) > 0.001;
+        })
+      );
+    }) ||
+      [
+        [affaire.facultativeData.primeCedee, facRubriques.totals.primeCedee],
+        [affaire.facultativeData.commissionCedante, facRubriques.totals.commissionCedante],
+      ].some(([stored, expected]) => {
+        const value = stored == null ? Number.NaN : Number(stored);
+        return !Number.isFinite(value) || Math.abs(value - Number(expected)) > 0.001;
+      }));
 
   return (
     <div className="p-4 lg:p-6">
@@ -131,7 +178,7 @@ export default function AffaireDetail() {
               <TrendingUp size={20} className="text-success" />
             </div>
             <div>
-              <p className="text-[11px] uppercase font-medium text-muted-foreground">Commission ARS (total)</p>
+              <p className="text-[11px] uppercase font-medium text-muted-foreground">Commission courtage (total)</p>
               <p className="text-[20px] font-semibold text-success">{formatCurrency(commissionArsTotal, affaire.currency)}</p>
             </div>
           </div>
@@ -245,6 +292,13 @@ export default function AffaireDetail() {
                           <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Taux Cession</p><p className="text-[15px] font-semibold text-foreground">{affaire.facultativeData.tauxCession}%</p></div>
                           <div className="rounded-xl border border-[hsl(var(--chart-4)/0.2)] bg-[hsl(var(--chart-4)/0.10)] p-4"><p className="text-[11px] uppercase font-medium text-[hsl(var(--chart-4))] mb-1">Prime Cédée</p><p className="text-[15px] font-semibold text-[hsl(var(--chart-4))]">{formatCurrency(Number(affaire.facultativeData.primeCedee ?? 0), affaire.currency)}</p></div>
                           <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Commission Cédante</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(Number(affaire.facultativeData.commissionCedante ?? 0), affaire.currency)}</p></div>
+                          <div className="rounded-xl border border-border bg-secondary/40 p-4"><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Capitaux assurés</p><p className="text-[15px] font-semibold text-foreground">{formatCurrency(capitauxAssuresTotal, affaire.currency)}</p></div>
+                          {affaire.currency !== 'TND' && (
+                            <div className="rounded-xl border border-border bg-secondary/40 p-4">
+                              <p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">ROE vers TND</p>
+                              <p className="text-[15px] font-semibold text-foreground">{effectiveRoe(affaire.currency, affaire.roe == null ? null : Number(affaire.roe)) ?? 'Non renseigné'}</p>
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -285,7 +339,39 @@ export default function AffaireDetail() {
 
               {activeTab === 'reinsurers' && (
                 <div className="space-y-3">
-                  {affaire.reassureurs.map((r) => (
+                  {affaire.type === AffaireType.FACULTATIVE && facRubriques && affaire.facultativeData ? (
+                    <>
+                      {staleFacCalculations && (
+                        <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-[12px] text-warning">
+                          <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                          <span>Les montants enregistrés ne correspondent pas aux calculs actuels. Modifiez puis enregistrez l'affaire pour recalculer les rubriques.</span>
+                        </div>
+                      )}
+                      <ReassureurRubriquesTable
+                        rows={previewRows(
+                          facRubriques.lines,
+                          affaire.reassureurs.map((r) => ({
+                            label: r.reassureur?.raisonSociale || '—',
+                            code: r.reassureur?.code,
+                            isLeader: r.isLeader,
+                            commissionMode: r.commissionMode,
+                            tauxCommissionArs: r.tauxCommissionArs == null ? undefined : Number(r.tauxCommissionArs),
+                          })),
+                        )}
+                        totals={facRubriques.totals}
+                        compagnie={affaire.cedante?.raisonSociale ?? ''}
+                        type={typeLabels[affaire.type]}
+                        cover={affaire.facultativeData.garantie || ''}
+                        dateEffet={affaire.facultativeData.dateEffet}
+                        dateExpiration={affaire.facultativeData.dateEcheance}
+                        chargeDossier={affaire.chargeDossier}
+                        currency={affaire.currency}
+                        roe={effectiveRoe(affaire.currency, affaire.roe == null ? null : Number(affaire.roe))}
+                        prime100Pct={Number(affaire.facultativeData.prime100Pct)}
+                        tauxCommissionCedante={Number(affaire.facultativeData.tauxCommissionCedante ?? 0)}
+                      />
+                    </>
+                  ) : affaire.reassureurs.map((r) => (
                     <div key={r.id} className="rounded-xl border border-border p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div>

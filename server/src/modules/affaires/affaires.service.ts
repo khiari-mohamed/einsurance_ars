@@ -101,8 +101,11 @@ export class AffairesService {
       throw new BadRequestException('facultativeData ne doit pas être fourni pour type TRAITE');
     }
 
-    // Validate reinsurer shares
-    this.commissionCalc.validateShares(dto.reassureurs);
+      // Validate reinsurer shares — facultative: total = tauxCession; treaty: 100
+    // (facultativeData presence is guaranteed by the type checks above)
+    const expectedShareTotal =
+      dto.type === AffaireType.FACULTATIVE ? Number(dto.facultativeData!.tauxCession) : 100;
+    this.commissionCalc.validateShares(dto.reassureurs, expectedShareTotal);
     this.assertNoDuplicateReassureurs(dto.reassureurs);
 
     // Validate reassureurs exist
@@ -135,10 +138,8 @@ export class AffairesService {
     // Compute commission amounts if facultative
     if (dto.type === AffaireType.FACULTATIVE && dto.facultativeData) {
       const fac = dto.facultativeData;
-      const primeCedee = this.round3(Number(fac.prime100Pct) * (fac.tauxCession / 100));
       const results = this.commissionCalc.calculate({
-        primeCedee,
-        tauxCession: fac.tauxCession / 100,
+        prime100Pct: Number(fac.prime100Pct),
         tauxCommissionCedante: fac.tauxCommissionCedante ?? 0,
         reassureurs: dto.reassureurs.map((r) => ({
           reassureurId: r.reassureurId,
@@ -199,6 +200,8 @@ export class AffairesService {
           cedanteId: dto.cedanteId,
           modePaiement: dto.modePaiement ?? 'PAR_AFFAIRE',
           currency: dto.currency ?? 'TND',
+          roe: dto.roe,
+          chargeDossier: dto.chargeDossier,
           reassureurs: { create: reassureurData },
           facultativeData: dto.facultativeData
             ? {
@@ -328,8 +331,20 @@ export class AffairesService {
       );
     }
 
+    // Facultative: shares total tauxCession (also re-checked when only the rate changes); treaty: 100
+    const effectiveTauxCession =
+      dto.facultativeData?.tauxCession ?? Number(affaire.facultativeData?.tauxCession ?? 0);
+    const expectedShareTotal =
+      affaire.type === AffaireType.FACULTATIVE ? effectiveTauxCession : 100;
+    const sharesToCheck =
+      dto.reassureurs ??
+      (affaire.type === AffaireType.FACULTATIVE && dto.facultativeData?.tauxCession !== undefined
+        ? affaire.reassureurs.map((r) => ({ partPct: Number(r.partPct) }))
+        : undefined);
+    if (sharesToCheck) {
+      this.commissionCalc.validateShares(sharesToCheck, expectedShareTotal);
+    }
     if (dto.reassureurs) {
-      this.commissionCalc.validateShares(dto.reassureurs);
       this.assertNoDuplicateReassureurs(dto.reassureurs);
     }
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -342,6 +357,8 @@ export class AffairesService {
         data: {
           ...(dto.modePaiement && { modePaiement: dto.modePaiement }),
           ...(dto.currency && { currency: dto.currency }),
+          ...(dto.roe !== undefined && { roe: dto.roe }),
+          ...(dto.chargeDossier !== undefined && { chargeDossier: dto.chargeDossier }),
           ...(dto.reassureurs && {
             reassureurs: {
               create: dto.reassureurs.map((r) => ({
@@ -382,7 +399,9 @@ export class AffairesService {
                   const tauxCession = dto.facultativeData.tauxCession ?? Number(affaire.facultativeData?.tauxCession ?? 0);
                   const tauxComm = dto.facultativeData.tauxCommissionCedante ?? Number(affaire.facultativeData?.tauxCommissionCedante ?? 0);
                   const primeCedee = this.round3(prime100 * (tauxCession / 100));
-                  const commissionCedante = tauxComm ? this.round3(primeCedee * (tauxComm / 100)) : null;
+                  const commissionCedante = tauxComm
+                    ? this.round3(prime100 * (tauxCession / 100) * (tauxComm / 100))
+                    : null;
 
                   return {
                     ...(dto.facultativeData.prime100Pct !== undefined && { prime100Pct: prime100 }),
@@ -444,10 +463,10 @@ export class AffairesService {
     });
 
     // Cascade commission recalculation if financial data changed (Facultative)
-    if (dto.facultativeData && (
-      dto.facultativeData.prime100Pct !== undefined ||
-      dto.facultativeData.tauxCession !== undefined ||
-      dto.facultativeData.tauxCommissionCedante !== undefined ||
+    if (updated.type === AffaireType.FACULTATIVE && (
+      dto.facultativeData?.prime100Pct !== undefined ||
+      dto.facultativeData?.tauxCession !== undefined ||
+      dto.facultativeData?.tauxCommissionCedante !== undefined ||
       dto.reassureurs
     )) {
       await this.recalculateCommissions(id);
@@ -493,11 +512,9 @@ export class AffairesService {
     if (affaire.type !== AffaireType.FACULTATIVE || !affaire.facultativeData) return;
 
     const fac = affaire.facultativeData;
-    const primeCedee = Number(fac.primeCedee) || this.round3(Number(fac.prime100Pct) * (Number(fac.tauxCession) / 100));
 
     const results = this.commissionCalc.calculate({
-      primeCedee,
-      tauxCession: Number(fac.tauxCession) / 100,
+      prime100Pct: Number(fac.prime100Pct),
       tauxCommissionCedante: Number(fac.tauxCommissionCedante ?? 0),
       reassureurs: affaire.reassureurs.map((r) => ({
         reassureurId: r.reassureurId,

@@ -94,7 +94,7 @@ export default function AffaireWorkflowActions({ affaire }: Props) {
       )}
 
       <p className="text-[11px] text-muted-foreground pt-2 border-t border-border">
-        Le passage en <strong>Prévision</strong> exige que les participations réassureurs totalisent 100%.
+        Le passage en <strong>Prévision</strong> exige que les participations réassureurs totalisent {affaire.type === AffaireType.FACULTATIVE ? 'le taux de cession' : '100%'}.
         Le passage en <strong>Placement Réalisé</strong> exige en plus des dates d'effet/échéance complètes
         et verrouille définitivement l'affaire.
       </p>

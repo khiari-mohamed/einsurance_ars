@@ -438,8 +438,10 @@ export class AccountingEngineService {
     const lines: any[] = [];
     let ordre = 1;
 
+    const totalParts =
+      sinistre.affaire.reassureurs.reduce((sum, r) => sum + Number(r.partPct), 0) || 100;
     for (const r of sinistre.affaire.reassureurs) {
-      const part = Math.round(partReassureurs * (Number(r.partPct) / 100) * 1000) / 1000;
+      const part = Math.round(partReassureurs * (Number(r.partPct) / totalParts) * 1000) / 1000;
       if (part <= 0) continue;
       const aux = await this.auxiliary.createForReassureur(r.reassureurId, r.reassureur.compteComptable, r.reassureur.raisonSociale);
       lines.push({

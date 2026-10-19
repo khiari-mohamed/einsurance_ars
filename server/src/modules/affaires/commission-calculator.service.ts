@@ -2,74 +2,70 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { CommissionMode } from '@prisma/client';
 
 export interface CommissionInput {
-  primeCedee: number;          // total ceded premium (100% before reinsurer split)
-  tauxCession: number;         // cession rate (% as decimal 0–1)
-  tauxCommissionCedante: number; // cedante commission rate
+  /** Prime à 100% — NOT rounded. Base for every per-reinsurer figure. */
+  prime100Pct: number;
+  /** Cedante commission rate, % (0–100) */
+  tauxCommissionCedante: number;
   reassureurs: {
     reassureurId: string;
-    partPct: number;           // reinsurer share % as decimal 0–100
+    /** Part placée — % of the 100% premium (facultative) */
+    partPct: number;
     commissionMode: CommissionMode;
-    tauxCommissionArs?: number; // % as decimal 0–100
+    /** ARS commission (courtage) rate, % (0–100) */
+    tauxCommissionArs?: number;
     commissionForfait?: number;
   }[];
 }
 
 export interface CommissionResult {
   reassureurId: string;
-  primeBrute: number;          // partPct × primeCedee / 100
-  commissionArs: number;       // ARS brokerage on this share
-  commissionCedante: number;   // cedante commission on this share
-  primeNetteCedante: number;   // primeBrute - commissionCedante
-  primeNetteReassureur: number; // primeBrute - commissionArs - commissionCedante
+  primeBrute: number;            // prime cédée share = prime100 × part%
+  commissionArs: number;         // rému ARS (courtage)
+  commissionCedante: number;     // rému cédante
+  primeNetteCedante: number;     // primeBrute − commissionCedante
+  primeNetteReassureur: number;  // primeBrute − commissionCedante − commissionArs
 }
 
 @Injectable()
 export class CommissionCalculatorService {
+  /**
+   * Client definitions (email "Avancement App Réass"):
+   *  prime cédée        = part × prime@100%
+   *  rému cédante       = prime cédée × taux com cédante
+   *  rému ARS           = prime cédée × taux com ARS
+   *  prime nette cédante    = prime cédée − com cédante
+   *  prime nette réassureur = prime cédée − com cédante − com courtage
+   * Intermediates stay unrounded; each output is rounded to 3 decimals once.
+   */
   calculate(input: CommissionInput): CommissionResult[] {
-    const results: CommissionResult[] = [];
+    return input.reassureurs.map((r) => {
+      const prime = input.prime100Pct * (r.partPct / 100);
+      const commissionCedante = prime * (input.tauxCommissionCedante / 100);
+      const commissionArs =
+        r.commissionMode === CommissionMode.FORFAITAIRE
+          ? r.commissionForfait ?? 0
+          : prime * ((r.tauxCommissionArs ?? 0) / 100);
 
-    for (const r of input.reassureurs) {
-      // Reinsurer's share of the ceded premium
-      const primeBrute = this.round3(input.primeCedee * (r.partPct / 100));
-
-      // ARS commission (brokerage)
-      let commissionArs: number;
-      if (r.commissionMode === CommissionMode.FORFAITAIRE) {
-        commissionArs = r.commissionForfait ?? 0;
-      } else {
-        // CALCULABLE: tauxCommissionArs × primeBrute
-        commissionArs = this.round3(primeBrute * ((r.tauxCommissionArs ?? 0) / 100));
-      }
-
-      // Cedante commission on this reinsurer's share
-      const commissionCedante = this.round3(primeBrute * (input.tauxCommissionCedante / 100));
-
-      // Net receivable from cedante on this share (= what cedante actually pays ARS net)
-      const primeNetteCedante = this.round3(primeBrute - commissionCedante);
-
-      // Net payable to reinsurer (= what ARS wires to reinsurer)
-      const primeNetteReassureur = this.round3(primeBrute - commissionArs - commissionCedante);
-
-      results.push({
+      return {
         reassureurId: r.reassureurId,
-        primeBrute,
-        commissionArs,
-        commissionCedante,
-        primeNetteCedante,
-        primeNetteReassureur,
-      });
-    }
-
-    return results;
+        primeBrute: this.round3(prime),
+        commissionArs: this.round3(commissionArs),
+        commissionCedante: this.round3(commissionCedante),
+        primeNetteCedante: this.round3(prime - commissionCedante),
+        primeNetteReassureur: this.round3(prime - commissionCedante - commissionArs),
+      };
+    });
   }
 
-  /** Validate reinsurer shares sum to 100% */
-  validateShares(reassureurs: { partPct: number }[]): void {
-    const total = reassureurs.reduce((sum, r) => sum + r.partPct, 0);
-    const diff = Math.abs(total - 100);
-    if (diff > 0.001) {
+  /**
+   * Validate that the shares total `expectedTotal`.
+   * Facultative: expectedTotal = tauxCession. Treaty: 100 (default).
+   */
+  validateShares(reassureurs: { partPct: number }[], expectedTotal = 100): void {
+    const total = reassureurs.reduce((sum, r) => sum + Number(r.partPct), 0);
+    if (Math.abs(total - expectedTotal) > 0.001) {
       throw new BadRequestException(
-        `La somme des participations doit être 100% (actuel: ${total.toFixed(4)}%)`,
+        `La somme des participations doit être égale à ${expectedTotal.toFixed(4)}% (actuel: ${total.toFixed(4)}%)`,
       );
     }
   }

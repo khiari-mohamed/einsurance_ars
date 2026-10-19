@@ -42,6 +42,8 @@ backend/uploads/*
 backend/backups/
 backups/
 *.sql
+!server/prisma/migrations/20261011121000_add_affaire_roe/migration.sql
+!server/prisma/migrations/20261011124500_add_affaire_charge_dossier/migration.sql
 *.dump
 
 # Testing
@@ -76,4 +78,5 @@ docs/_build/
 .parcel-cache/
 
 # Documentation folder (contains PDFs and internal docs)
-md/
+md/*
+!md/AFFAIRES_SCHEMA_MIGRATION_RUNBOOK.md

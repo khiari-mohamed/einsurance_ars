@@ -102,6 +102,10 @@ export default function QuickReferenceCreateModal({ kind, onClose, onCreated }: 
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
+    // This form is rendered through a portal, but React still bubbles its events
+    // to the React parent — inside AffaireEditModal's <form> that triggered the
+    // affaire's own submit.
+    event.stopPropagation();
     setError('');
     if (!raisonSociale.trim()) {
       setError('La raison sociale est obligatoire.');

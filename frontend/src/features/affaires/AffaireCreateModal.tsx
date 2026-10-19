@@ -6,6 +6,10 @@ import { affairesApi } from '../../api/affaires.api';
 import CountrySelect from '../../components/ui/CountrySelect';
 import CurrencySelect from '../../components/ui/CurrencySelect';
 import ReferenceSelect from '../../components/ui/ReferenceSelect';
+import DecimalInput from '../../components/ui/DecimalInput';
+import ReassureurRubriquesTable, { previewRows } from '../../components/affaires/ReassureurRubriquesTable';
+import { extractApiErrors } from '../../lib/api-errors';
+import { computeFacRubriques, effectiveRoe, round3 } from '../../lib/affaire-calc';
 import {
   CreateAffaireDto, AffaireType, ModePaiement, ReassuranceType, FormeCouverture,
   ModeRenouvellement, Periodicite, CommissionMode, AffaireReassureurInput,
@@ -42,15 +46,14 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
   const [cedanteId, setCedanteId] = useState('');
   const [modePaiement, setModePaiement] = useState<ModePaiement>(ModePaiement.PAR_AFFAIRE);
   const [currency, setCurrency] = useState('TND');
+  const [roe, setRoe] = useState<number | undefined>(undefined);
+  const [chargeDossier, setChargeDossier] = useState('');
 
   const [fac, setFac] = useState<Partial<import('../../types/affaire.types').FacultativeDataInput>>({
     reassuranceType: ReassuranceType.PROPORTIONNEL,
     assureId: '',
     dateEffet: '',
     dateEcheance: '',
-    prime100Pct: 0,
-    tauxCession: 0,
-    tauxCommissionCedante: 0,
   });
   const [guaranteeLines, setGuaranteeLines] = useState<GuaranteeLineInput[]>([]);
 
@@ -75,10 +78,7 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
       const newId = (res as any)?.data?.id;
       if (newId) navigate(`/affaires/${newId}`);
     },
-    onError: (error: any) => {
-      const message = error.response?.data?.message || 'Erreur lors de la création';
-      setErrors([Array.isArray(message) ? message.join(', ') : message]);
-    },
+    onError: (error: any) => setErrors(extractApiErrors(error, 'Erreur lors de la création')),
   });
 
   const primeCedeeCalc =
@@ -87,22 +87,70 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
       : Number(traite.primePrevisionnelle || 0);
 
   const totalShare = reassureurs.reduce((sum, r) => sum + (r.partPct || 0), 0);
+  const expectedShareTotal = type === AffaireType.FACULTATIVE ? Number(fac.tauxCession || 0) : 100;
+  const shareOk = Math.abs(totalShare - expectedShareTotal) <= 0.001;
+  const capitauxTotal = guaranteeLines.reduce((sum, line) => sum + Number(line.capitauxAssures100 || 0), 0);
+  const commissionCedanteCalc = round3(
+    Number(fac.prime100Pct || 0) *
+      (Number(fac.tauxCession || 0) / 100) *
+      (Number(fac.tauxCommissionCedante || 0) / 100),
+  );
+  const reassureurOptions =
+    queryClient.getQueryData<{ id: string; raisonSociale: string; code?: string }[]>(['reassureurs']) ?? [];
+  const cedanteOptions =
+    queryClient.getQueryData<{ id: string; raisonSociale: string }[]>(['cedantes']) ?? [];
+  const rubriques =
+    type === AffaireType.FACULTATIVE
+      ? computeFacRubriques(
+          Number(fac.prime100Pct || 0),
+          Number(fac.tauxCommissionCedante || 0),
+          reassureurs.map((r, i) => ({
+            key: `row-${i}`,
+            partPct: r.partPct,
+            commissionMode: r.commissionMode,
+            tauxCommissionArs: r.tauxCommissionArs,
+            commissionForfait: r.commissionForfait,
+          })),
+        )
+      : null;
 
   const validateStep1 = () => {
     if (!cedanteId) return false;
     if (type === AffaireType.FACULTATIVE && !fac.assureId) return false;
     return true;
   };
-  const validateStep2 = () => {
-    if (type === AffaireType.FACULTATIVE) {
-      return !!fac.assureId && !!fac.dateEffet && !!fac.dateEcheance && (fac.prime100Pct ?? 0) > 0 && (fac.tauxCession ?? 0) > 0;
+  const step2Issues = (): string[] => {
+    const issues: string[] = [];
+    const dateEffet = type === AffaireType.FACULTATIVE ? fac.dateEffet : traite.dateEffet;
+    const dateEcheance = type === AffaireType.FACULTATIVE ? fac.dateEcheance : traite.dateEcheance;
+    if (!dateEffet) issues.push("La date d'effet est obligatoire");
+    if (!dateEcheance) issues.push("La date d'échéance est obligatoire");
+    if (dateEffet && dateEcheance && new Date(dateEffet) >= new Date(dateEcheance)) {
+      issues.push("La date d'effet doit être antérieure à la date d'échéance");
     }
-    return !!traite.dateEffet && !!traite.dateEcheance && !!traite.periodicite;
+    if (type === AffaireType.FACULTATIVE) {
+      if (!fac.assureId) issues.push("L'assuré est obligatoire");
+      if (!(Number(fac.prime100Pct) > 0)) issues.push('La prime à 100% doit être supérieure à 0');
+      const tauxCession = Number(fac.tauxCession ?? 0);
+      if (!(tauxCession > 0 && tauxCession <= 100)) {
+        issues.push('Le taux de cession doit être compris entre 0 et 100');
+      }
+    } else if (!traite.periodicite) {
+      issues.push('La périodicité est obligatoire');
+    }
+    return issues;
   };
+  const validateStep2 = () => step2Issues().length === 0;
 
   const validateFinal = (): boolean => {
     const errs: string[] = [];
-    if (Math.abs(totalShare - 100) > 0.001) errs.push('La somme des participations des réassureurs doit être 100%');
+    if (!shareOk) {
+      errs.push(
+        type === AffaireType.FACULTATIVE
+          ? `La somme des parts placées doit être égale au taux de cession (${expectedShareTotal}%)`
+          : 'La somme des participations des réassureurs doit être 100%',
+      );
+    }
     const seen = new Set<string>();
     for (const r of reassureurs) {
       if (!r.reassureurId) errs.push('Chaque ligne doit avoir un réassureur sélectionné');
@@ -132,6 +180,8 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
       cedanteId,
       modePaiement,
       currency,
+      ...(currency !== 'TND' && roe !== undefined ? { roe } : {}),
+      ...(chargeDossier.trim() ? { chargeDossier: chargeDossier.trim() } : {}),
       reassureurs,
       ...(type === AffaireType.FACULTATIVE
         ? {
@@ -224,12 +274,31 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
                   <label className={labelClass}>Devise</label>
                   <CurrencySelect value={currency} onChange={setCurrency} placeholder="Sélectionner une devise..." />
                 </div>
+                {currency !== 'TND' && (
+                  <div>
+                    <label className={labelClass}>ROE — taux de change vers TND</label>
+                    <DecimalInput value={roe} onChange={setRoe} placeholder="Ex: 3,350000" className={fieldClass} />
+                    <p className="mt-1 text-[11px] text-muted-foreground/70">
+                      Sert au calcul des montants en DT. Sans ROE, les colonnes DT restent vides.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className={labelClass}>Mode de paiement</label>
                   <select value={modePaiement} onChange={(e) => setModePaiement(e.target.value as ModePaiement)} className={fieldClass}>
                     <option value={ModePaiement.PAR_AFFAIRE}>Par Affaire (hors situation)</option>
                     <option value={ModePaiement.PAR_SITUATION}>Par Situation (inclus)</option>
                   </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Chargé de dossier</label>
+                  <input
+                    type="text"
+                    value={chargeDossier}
+                    onChange={(event) => setChargeDossier(event.target.value)}
+                    placeholder="Ex: Manel"
+                    className={fieldClass}
+                  />
                 </div>
               </div>
             </div>
@@ -310,15 +379,15 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border mt-2">
                 <div>
                   <label className={labelClass}>Prime 100% *</label>
-                  <input type="number" step="0.001" value={fac.prime100Pct || 0} onChange={(e) => setFac({ ...fac, prime100Pct: parseFloat(e.target.value) || 0 })} required className={fieldClass} />
+                  <DecimalInput value={fac.prime100Pct} onChange={(value) => setFac({ ...fac, prime100Pct: value })} placeholder="0,000" className={fieldClass} required />
                 </div>
                 <div>
                   <label className={labelClass}>Taux Prime (%)</label>
-                  <input type="number" step="0.0001" value={fac.tauxPrime || 0} onChange={(e) => setFac({ ...fac, tauxPrime: parseFloat(e.target.value) || 0 })} className={fieldClass} />
+                  <DecimalInput value={fac.tauxPrime} onChange={(value) => setFac({ ...fac, tauxPrime: value })} className={fieldClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Taux Cession (%) *</label>
-                  <input type="number" step="0.0001" min="0" max="100" value={fac.tauxCession || 0} onChange={(e) => setFac({ ...fac, tauxCession: parseFloat(e.target.value) || 0 })} required className={fieldClass} />
+                  <DecimalInput value={fac.tauxCession} onChange={(value) => setFac({ ...fac, tauxCession: value })} placeholder="Ex: 15" className={fieldClass} required />
                 </div>
                 <div>
                   <label className={labelClass}>Prime Cédée (calculée)</label>
@@ -326,8 +395,23 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
                 </div>
                 <div>
                   <label className={labelClass}>Taux Commission Cédante (%)</label>
-                  <input type="number" step="0.0001" value={fac.tauxCommissionCedante || 0} onChange={(e) => setFac({ ...fac, tauxCommissionCedante: parseFloat(e.target.value) || 0 })} className={fieldClass} />
+                  <DecimalInput value={fac.tauxCommissionCedante} onChange={(value) => setFac({ ...fac, tauxCommissionCedante: value })} className={fieldClass} />
                 </div>
+                <div>
+                  <label className={labelClass}>Commission Cédante (calculée)</label>
+                  <input type="text" value={commissionCedanteCalc.toFixed(3)} disabled className="w-full rounded-xl border border-border bg-muted px-3 py-2 text-[13px] text-muted-foreground" />
+                </div>
+                <div>
+                  <label className={labelClass}>Capitaux assurés (total des garanties)</label>
+                  <input type="text" value={capitauxTotal.toFixed(3)} disabled className="w-full rounded-xl border border-border bg-muted px-3 py-2 text-[13px] text-muted-foreground" />
+                </div>
+                <div>
+                  <label className={labelClass}>Commission de courtage (total)</label>
+                  <input type="text" value={(rubriques?.totals.commissionArs ?? 0).toFixed(3)} disabled className="w-full rounded-xl border border-border bg-muted px-3 py-2 text-[13px] text-muted-foreground" />
+                </div>
+                <p className="col-span-2 text-[11px] text-muted-foreground/70">
+                  Le taux et le montant de courtage se saisissent par réassureur à l'étape 3.
+                </p>
               </div>
 
               <div className="pt-4 border-t border-border">
@@ -340,7 +424,7 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
                 {guaranteeLines.map((g, idx) => (
                   <div key={idx} className="flex items-center gap-2 mb-2">
                     <input placeholder="Garantie" value={g.garantie} onChange={(e) => updateGuaranteeLine(idx, { garantie: e.target.value })} className={`flex-1 ${fieldClass}`} />
-                    <input type="number" step="0.001" placeholder="Capitaux 100%" value={g.capitauxAssures100} onChange={(e) => updateGuaranteeLine(idx, { capitauxAssures100: parseFloat(e.target.value) || 0 })} className={`w-40 ${fieldClass}`} />
+                    <DecimalInput value={g.capitauxAssures100 || undefined} onChange={(value) => updateGuaranteeLine(idx, { capitauxAssures100: value ?? 0 })} placeholder="Capitaux 100%" className={`w-40 ${fieldClass}`} />
                     <button type="button" onClick={() => removeGuaranteeLine(idx)} className="rounded-lg p-2 text-destructive hover:bg-destructive/10"><Trash2 size={14} /></button>
                   </div>
                 ))}
@@ -418,29 +502,29 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
               <div className="grid grid-cols-2 gap-4 pt-2 border-t border-border mt-2">
                 <div>
                   <label className={labelClass}>Prime Prévisionnelle</label>
-                  <input type="number" step="0.001" value={traite.primePrevisionnelle || 0} onChange={(e) => setTraite({ ...traite, primePrevisionnelle: parseFloat(e.target.value) || 0 })} className={fieldClass} />
+                  <DecimalInput value={traite.primePrevisionnelle} onChange={(value) => setTraite({ ...traite, primePrevisionnelle: value })} className={fieldClass} />
                 </div>
                 <div>
                   <label className={labelClass}>PMD (Prime Minimum et Dépôt)</label>
-                  <input type="number" step="0.001" value={traite.pmd || 0} onChange={(e) => setTraite({ ...traite, pmd: parseFloat(e.target.value) || 0 })} className={fieldClass} />
+                  <DecimalInput value={traite.pmd} onChange={(value) => setTraite({ ...traite, pmd: value })} className={fieldClass} />
                 </div>
                 <div>
                   <label className={labelClass}>Taux Commission Cédante (%)</label>
-                  <input type="number" step="0.0001" value={traite.tauxCommissionCedante || 0} onChange={(e) => setTraite({ ...traite, tauxCommissionCedante: parseFloat(e.target.value) || 0 })} className={fieldClass} />
+                  <DecimalInput value={traite.tauxCommissionCedante} onChange={(value) => setTraite({ ...traite, tauxCommissionCedante: value })} className={fieldClass} />
                 </div>
                                 <div>
                   <label className={labelClass}>
                     Commission Liquidation ARS
                     <span className="ml-1 font-normal text-muted-foreground/60">(saisie manuelle)</span>
                   </label>
-                  <input type="number" step="0.001" value={traite.commissionLiquidationArs || 0} onChange={(e) => setTraite({ ...traite, commissionLiquidationArs: parseFloat(e.target.value) || 0 })} className={fieldClass} />
+                  <DecimalInput value={traite.commissionLiquidationArs} onChange={(value) => setTraite({ ...traite, commissionLiquidationArs: value })} className={fieldClass} />
                   <p className="mt-1 text-[11px] text-muted-foreground/70">
                     Montant fixe saisi manuellement — non calculé automatiquement (distinct de la commission de courtage par réassureur, définie à l'étape 3).
                   </p>
                 </div>
                 <div className="col-span-2">
                   <label className={labelClass}>Seuil de notification sinistre</label>
-                  <input type="number" step="0.001" value={traite.seuilNotification || 0} onChange={(e) => setTraite({ ...traite, seuilNotification: parseFloat(e.target.value) || 0 })} className={fieldClass} />
+                  <DecimalInput value={traite.seuilNotification} onChange={(value) => setTraite({ ...traite, seuilNotification: value })} className={fieldClass} />
                   <p className="mt-1 text-[11px] text-muted-foreground/70">Montant au-delà duquel les réassureurs proportionnels doivent être notifiés (avis de sinistre)</p>
                 </div>
               </div>
@@ -472,13 +556,20 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
                   <div key={idx} className="flex items-center gap-2 mb-2">
                     <input type="number" placeholder="N° tranche" value={p.numeroTranche} onChange={(e) => updateInstalment(idx, { numeroTranche: parseInt(e.target.value) || 1 })} className={`w-24 ${fieldClass}`} />
                     <input type="date" value={p.dateEcheance} onChange={(e) => updateInstalment(idx, { dateEcheance: e.target.value })} className={`flex-1 ${fieldClass}`} />
-                    <input type="number" step="0.001" placeholder="Montant" value={p.montant} onChange={(e) => updateInstalment(idx, { montant: parseFloat(e.target.value) || 0 })} className={`flex-1 ${fieldClass}`} />
-                    <input type="number" step="0.0001" placeholder="Taux déduction %" value={p.tauxDeduction || ''} onChange={(e) => updateInstalment(idx, { tauxDeduction: parseFloat(e.target.value) || undefined })} className={`w-32 ${fieldClass}`} />
+                    <DecimalInput value={p.montant || undefined} onChange={(value) => updateInstalment(idx, { montant: value ?? 0 })} placeholder="Montant" className={`flex-1 ${fieldClass}`} />
+                    <DecimalInput value={p.tauxDeduction} onChange={(value) => updateInstalment(idx, { tauxDeduction: value })} placeholder="Taux déduction %" className={`w-32 ${fieldClass}`} />
                     <button type="button" onClick={() => removeInstalment(idx)} className="rounded-lg p-2 text-destructive hover:bg-destructive/10"><Trash2 size={14} /></button>
                   </div>
                 ))}
               </div>
             </div>
+          )}
+
+          {step === 2 && step2Issues().length > 0 && (
+            <ul className="mt-4 space-y-1 rounded-xl border border-warning/25 bg-warning/10 p-3 text-[12px] text-foreground">
+              <li className="font-medium">Pour continuer :</li>
+              {step2Issues().map((issue) => <li key={issue}>· {issue}</li>)}
+            </ul>
           )}
 
           {step === 3 && (
@@ -513,11 +604,10 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
                       />
                     </div>
                     <div>
-                      <input
-                        type="number" step="0.0001" min="0" max="100" placeholder="Part %"
-                        value={r.partPct}
-                        onChange={(e) => updateReassureur(idx, { partPct: parseFloat(e.target.value) || 0 })}
-                        required
+                      <DecimalInput
+                        value={r.partPct || undefined}
+                        onChange={(value) => updateReassureur(idx, { partPct: value ?? 0 })}
+                        placeholder={type === AffaireType.FACULTATIVE ? 'Part placée %' : 'Part %'}
                         className={fieldClass}
                       />
                     </div>
@@ -545,23 +635,13 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
                     </div>
                     {r.commissionMode === CommissionMode.CALCULABLE ? (
                       <div className="col-span-2">
-                        <label className="block text-[11px] text-muted-foreground mb-1">Taux commission ARS (%)</label>
-                        <input
-                          type="number" step="0.0001" min="0" max="100"
-                          value={r.tauxCommissionArs || 0}
-                          onChange={(e) => updateReassureur(idx, { tauxCommissionArs: parseFloat(e.target.value) || 0 })}
-                          className={fieldClass}
-                        />
+                        <label className="block text-[11px] text-muted-foreground mb-1">Taux commission courtage (%)</label>
+                        <DecimalInput value={r.tauxCommissionArs || undefined} onChange={(value) => updateReassureur(idx, { tauxCommissionArs: value ?? 0 })} className={fieldClass} />
                       </div>
                     ) : (
                       <div className="col-span-2">
                         <label className="block text-[11px] text-muted-foreground mb-1">Commission forfaitaire (montant)</label>
-                        <input
-                          type="number" step="0.001"
-                          value={r.commissionForfait || 0}
-                          onChange={(e) => updateReassureur(idx, { commissionForfait: parseFloat(e.target.value) || 0 })}
-                          className={fieldClass}
-                        />
+                        <DecimalInput value={r.commissionForfait || undefined} onChange={(value) => updateReassureur(idx, { commissionForfait: value ?? 0 })} className={fieldClass} />
                       </div>
                     )}
                   </div>
@@ -569,15 +649,44 @@ export default function AffaireCreateModal({ onClose, initialType = AffaireType.
               ))}
 
               <div className={`flex items-center gap-2 rounded-xl border p-3 ${
-                Math.abs(totalShare - 100) < 0.001
+                shareOk
                   ? 'border-success/20 bg-success/10'
                   : 'border-warning/20 bg-warning/10'
               }`}>
-                {Math.abs(totalShare - 100) < 0.001 && <CheckCircle2 size={15} className="text-success flex-shrink-0" />}
-                <p className={`text-[13px] font-medium ${Math.abs(totalShare - 100) < 0.001 ? 'text-success' : 'text-warning'}`}>
-                  Total des parts: {totalShare.toFixed(4)}% {Math.abs(totalShare - 100) >= 0.001 && '(doit être 100%)'}
+                {shareOk && <CheckCircle2 size={15} className="text-success flex-shrink-0" />}
+                <p className={`text-[13px] font-medium ${shareOk ? 'text-success' : 'text-warning'}`}>
+                  Total des parts: {totalShare.toFixed(4)}% {!shareOk && `(doit être ${expectedShareTotal}%)`}
                 </p>
               </div>
+
+              {type === AffaireType.FACULTATIVE && rubriques && Number(fac.prime100Pct) > 0 && (
+                <ReassureurRubriquesTable
+                  rows={previewRows(
+                    rubriques.lines,
+                    reassureurs.map((r) => {
+                      const option = reassureurOptions.find((item) => item.id === r.reassureurId);
+                      return {
+                        label: option?.raisonSociale ?? '—',
+                        code: option?.code,
+                        isLeader: r.isLeader,
+                        commissionMode: r.commissionMode,
+                        tauxCommissionArs: r.tauxCommissionArs,
+                      };
+                    }),
+                  )}
+                  totals={rubriques.totals}
+                  compagnie={cedanteOptions.find((option) => option.id === cedanteId)?.raisonSociale ?? ''}
+                  type={typeLabels[AffaireType.FACULTATIVE]}
+                  cover={fac.garantie || ''}
+                  dateEffet={fac.dateEffet}
+                  dateExpiration={fac.dateEcheance}
+                  chargeDossier={chargeDossier}
+                  currency={currency}
+                  roe={effectiveRoe(currency, roe)}
+                  prime100Pct={Number(fac.prime100Pct || 0)}
+                  tauxCommissionCedante={Number(fac.tauxCommissionCedante || 0)}
+                />
+              )}
 
               {errors.length > 0 && (
                 <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-4">

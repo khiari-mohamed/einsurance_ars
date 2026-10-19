@@ -41,12 +41,16 @@ export class SinistreNotificationService {
     }
 
     // Create per-reinsurer participation records
+    const totalParts = sinistre.affaire.reassureurs.reduce(
+      (sum, r) => sum + Number(r.partPct),
+      0,
+    );
     const participations = sinistre.affaire.reassureurs.map((r) => ({
       sinistreId,
       reassureurCode: r.reassureur.code,
       partPct: Number(r.partPct),
       montantPart: sinistre.partReassureurs
-        ? Math.round(Number(sinistre.partReassureurs) * (Number(r.partPct) / 100) * 1000) / 1000
+        ? Math.round(Number(sinistre.partReassureurs) * (Number(r.partPct) / (totalParts || 100)) * 1000) / 1000
         : null,
       isNotified: false,
     }));
