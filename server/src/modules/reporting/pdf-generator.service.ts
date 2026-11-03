@@ -21,11 +21,9 @@ export type ReportTemplate =
 @Injectable()
 export class PdfGeneratorService {
   private readonly logger = new Logger(PdfGeneratorService.name);
-  private readonly templatesDir = path.join(
-    process.cwd(),
-    'src',
-    'templates',
-  );
+  private readonly templatesDir = fs.existsSync(path.join(process.cwd(), 'src', 'templates'))
+    ? path.join(process.cwd(), 'src', 'templates')
+    : path.join(process.cwd(), 'dist', 'templates');
   private readonly compiledCache = new Map<string, HandlebarsTemplateDelegate>();
 
   constructor() {

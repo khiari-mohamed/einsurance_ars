@@ -52,6 +52,45 @@ export class SinistresService {
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
+  async findEligibleAffaires(search?: string) {
+    return this.prisma.affaire.findMany({
+      where: {
+        isActive: true,
+        statut: 'PLACEMENT_REALISE',
+        ...(search && {
+          OR: [
+            { numero: { contains: search, mode: 'insensitive' } },
+            { nom: { contains: search, mode: 'insensitive' } },
+            { cedante: { raisonSociale: { contains: search, mode: 'insensitive' } } },
+            { facultativeData: { assure: { raisonSociale: { contains: search, mode: 'insensitive' } } } },
+          ],
+        }),
+      },
+      select: {
+        id: true,
+        numero: true,
+        nom: true,
+        type: true,
+        currency: true,
+        cedante: { select: { id: true, code: true, raisonSociale: true } },
+        reassureurs: {
+          select: {
+            reassureurId: true,
+            partPct: true,
+            reassureur: { select: { id: true, code: true, raisonSociale: true } },
+          },
+        },
+        facultativeData: {
+          select: { numeroPoliceCedante: true, dateEffet: true, dateEcheance: true, branche: true, produit: true, garantie: true, assure: { select: { raisonSociale: true } } },
+        },
+        traiteData: {
+          select: { dateEffet: true, dateEcheance: true, branche: true, referenceTraite: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async findOne(id: string) {
     const s = await this.prisma.sinistre.findUnique({
       where: { id },
@@ -85,8 +124,18 @@ export class SinistresService {
     if (affaire.statut !== 'PLACEMENT_REALISE') {
       throw new BadRequestException('Impossible d\'enregistrer un sinistre sur une affaire non placée');
     }
+    const coverage = affaire.type === 'FACULTATIVE'
+      ? await this.prisma.facultativeAffaire.findUnique({ where: { affaireId: affaire.id }, select: { dateEffet: true, dateEcheance: true } })
+      : await this.prisma.traiteAffaire.findUnique({ where: { affaireId: affaire.id }, select: { dateEffet: true, dateEcheance: true } });
+    const lossDate = new Date(dto.dateSurvenance);
+    if (coverage && (lossDate < coverage.dateEffet || lossDate > coverage.dateEcheance)) {
+      throw new BadRequestException('La date du sinistre doit être comprise dans la période de couverture');
+    }
 
     const numero = await this.sequence.next('SINISTRE');
+    const paid100 = Number(dto.reglementExerciceN ?? 0) + Number(dto.cumulReglementAnterieurs ?? 0);
+    const totalParts = affaire.reassureurs.reduce((sum, item) => sum + Number(item.partPct), 0);
+    const derivedReinsurersShare = paid100 * (totalParts / 100);
 
     const sinistre = await this.prisma.sinistre.create({
       data: {
@@ -94,12 +143,13 @@ export class SinistresService {
         affaireId: dto.affaireId,
         statut: SinistreStatut.DECLARE,
         numerPolice: dto.numerPolice,
+        numeroSinistreCedante: dto.numeroSinistreCedante,
         periodeCouverture: dto.periodeCouverture,
         dateSurvenance: new Date(dto.dateSurvenance),
         reglementExerciceN: dto.reglementExerciceN,
         cumulReglementAnterieurs: dto.cumulReglementAnterieurs,
         reserves: dto.reserves,
-        partReassureurs: dto.partReassureurs,
+        partReassureurs: dto.partReassureurs ?? derivedReinsurersShare,
         appelAuComptant: dto.appelAuComptant ?? false,
         description: dto.description,
         cause: dto.cause,
@@ -107,6 +157,18 @@ export class SinistresService {
       },
       include: { affaire: { include: { cedante: true } } },
     });
+
+    const total = Number(dto.partReassureurs ?? derivedReinsurersShare);
+    if (affaire.reassureurs.length > 0) {
+      await this.prisma.sinistreParticipation.createMany({
+        data: affaire.reassureurs.map((reassureur) => ({
+          sinistreId: sinistre.id,
+          reassureurCode: reassureur.reassureur.code,
+          partPct: reassureur.partPct,
+          montantPart: Math.round(total * Number(reassureur.partPct) / 100 * 1000) / 1000,
+        })),
+      });
+    }
 
     await this.prisma.sinistreEvent.create({
       data: {
@@ -149,6 +211,7 @@ export class SinistresService {
         ...(dto.partReassureurs !== undefined && { partReassureurs: dto.partReassureurs }),
         ...(dto.periodeCouverture !== undefined && { periodeCouverture: dto.periodeCouverture }),
         ...(dto.numerPolice !== undefined && { numerPolice: dto.numerPolice }),
+        ...(dto.numeroSinistreCedante !== undefined && { numeroSinistreCedante: dto.numeroSinistreCedante }),
         ...(dto.recoveryMethod !== undefined && { recoveryMethod: dto.recoveryMethod }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.cause !== undefined && { cause: dto.cause }),

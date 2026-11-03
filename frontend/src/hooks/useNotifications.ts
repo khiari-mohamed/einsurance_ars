@@ -31,7 +31,6 @@ export function useNotifications() {
     });
 
     newSocket.on('connect', () => {
-      console.log('WebSocket connected');
     });
 
     newSocket.on('notification', (notification: Notification) => {

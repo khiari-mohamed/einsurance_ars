@@ -6,6 +6,13 @@ import { BordereauType } from '@prisma/client';
 
 export class BordereauLineDto {
   @IsString() libelle: string;
+  @IsOptional() @IsString() numeroSinistre?: string;
+  @IsOptional() @IsString() assure?: string;
+  @IsOptional() @IsString() branche?: string;
+  @IsOptional() @IsDateString() dateSinistre?: string;
+  @IsOptional() @IsNumber() montantPaye100?: number;
+  @IsOptional() @IsNumber() partPct?: number;
+  @IsOptional() @IsNumber() montantPart?: number;
   @IsOptional() @IsString() couverture?: string;
   @IsOptional() @IsDateString() periodeDebut?: string;
   @IsOptional() @IsDateString() periodeFin?: string;

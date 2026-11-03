@@ -1,19 +1,20 @@
 # Affaires schema migration runbook
 
-This runbook covers the two Affaire schema migrations currently in the repository:
+This runbook covers the Affaire schema migrations currently in the repository:
 
 | Migration | Change | Data impact |
 |---|---|---|
 | `20261011121000_add_affaire_roe` | Adds nullable `Affaire.roe DECIMAL(15,6)` | Adds a nullable column; existing rows are unchanged |
 | `20261011124500_add_affaire_charge_dossier` | Adds nullable `Affaire.chargeDossier TEXT` | Adds a nullable column; existing rows are unchanged |
+| `20261031191500_add_affaire_nom` | Adds nullable `Affaire.nom TEXT` | Adds a nullable column; existing rows are unchanged |
 
-Both migration scripts use `ADD COLUMN IF NOT EXISTS`. They are safe to run when the corresponding column already exists with the expected type. The Prisma migration ledger still needs to record each migration as applied.
+All migration scripts use `ADD COLUMN IF NOT EXISTS`. They are safe to run when the corresponding column already exists with the expected type. The Prisma migration ledger still needs to record each migration as applied.
 
 ## Current status and important distinction
 
-- Both migration folders are present under `server/prisma/migrations`.
+- All three migration folders are present under `server/prisma/migrations`.
 - The `roe` SQL was previously run manually by the user against a database, but the target environment and Prisma migration-ledger status have not been verified here.
-- The `chargeDossier` migration has **not** been applied by the assistant.
+- The `chargeDossier` and `nom` migrations have **not** been applied by the assistant.
 - No production database was inspected or changed while preparing this runbook.
 - Prisma Client generation was previously completed. This runbook does not run a build or tests.
 
@@ -37,7 +38,7 @@ Set-Location D:\house_md\reinsurance_ars\server
 # Check which repository migrations Prisma considers pending.
 npx prisma migrate status
 
-# Apply all pending migrations in order, including the ROE and chargeDossier migrations.
+# Apply all pending migrations in order, including ROE, chargeDossier, and nom.
 npx prisma migrate deploy
 
 # Confirm that the migration history is now up to date.
@@ -58,7 +59,7 @@ Perform this during the approved deployment window, using the production host's 
 
 ### 1. Prepare and back up
 
-- Confirm that the release contains both migration folders listed above.
+- Confirm that the release contains all three migration folders listed above.
 - Confirm through the production secret/environment configuration that `DATABASE_URL` points to the intended production database. Do not display the URL in terminal output, logs, screenshots, or chat.
 - Take and verify a database backup using the organization's normal backup procedure before applying schema changes.
 
@@ -82,7 +83,7 @@ cd /path/to/reinsurance_ars/server
 npx prisma migrate status
 ```
 
-Before continuing, confirm that this is the intended production database and that the two Affaire migrations are the expected pending changes. If the status reports unrelated migration drift or unexpected pending migrations, stop and investigate rather than proceeding.
+Before continuing, confirm that this is the intended production database and that the expected Affaire migrations are the pending changes. If the status reports unrelated migration drift or unexpected pending migrations, stop and investigate rather than proceeding.
 
 ### 3. Apply and verify
 
@@ -101,11 +102,11 @@ SELECT column_name, data_type, numeric_precision, numeric_scale, is_nullable
 FROM information_schema.columns
 WHERE table_schema = 'public'
   AND table_name = 'Affaire'
-  AND column_name IN ('roe', 'chargeDossier')
+  AND column_name IN ('roe', 'chargeDossier', 'nom')
 ORDER BY column_name;
 ```
 
-Expected results: `chargeDossier` is nullable text; `roe` is nullable numeric with precision 15 and scale 6. Also confirm both migration names appear in the Prisma `_prisma_migrations` table with a non-null `finished_at`.
+Expected results: `chargeDossier` and `nom` are nullable text; `roe` is nullable numeric with precision 15 and scale 6. Also confirm all three migration names appear in the Prisma `_prisma_migrations` table with a non-null `finished_at`.
 
 ### 4. Deploy the application code
 
@@ -117,7 +118,7 @@ The repository migration for ROE is also idempotent. If `roe` already exists as 
 
 ## What must be applied where?
 
-For **each** target database, run the status check and then `npx prisma migrate deploy` once. Prisma applies whichever repository migrations are pending in that database. In a fresh or not-yet-migrated database this includes both `roe` and `chargeDossier`; if one is already recorded in that database's Prisma ledger, Prisma skips it and applies only the remaining pending migration(s).
+For **each** target database, run the status check and then `npx prisma migrate deploy` once. Prisma applies whichever repository migrations are pending in that database. In a fresh or not-yet-migrated database this includes `roe`, `chargeDossier`, and `nom`; if one is already recorded in that database's Prisma ledger, Prisma skips it and applies only the remaining pending migration(s).
 
 Do not run the migrations against production just because they were applied locally, or assume production has them because the `roe` SQL was run manually in an unspecified database.
 

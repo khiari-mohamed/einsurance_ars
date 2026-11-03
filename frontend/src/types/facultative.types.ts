@@ -23,7 +23,6 @@ export interface FacultativeListItem {
   reassuranceType: ReassuranceType;
   assureId: string;
   assure: PartnerRef;
-  numeroPoliceCedante?: string;
   dateEffet: string;
   dateEcheance: string;
   modeRenouvellement?: ModeRenouvellement;
@@ -98,7 +97,6 @@ export interface CreateFacultativeDto {
   affaireId: string;
   reassuranceType: ReassuranceType;
   assureId: string;
-  numeroPoliceCedante?: string;
   dateEffet: string;
   dateEcheance: string;
   modeRenouvellement?: ModeRenouvellement;

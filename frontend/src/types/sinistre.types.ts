@@ -58,8 +58,20 @@ export interface SinistreAffaireRef {
     partPct: number;
     reassureur: { id: string; code: string; raisonSociale: string };
   }>;
-  facultativeData?: { branche?: string; produit?: string; garantie?: string } | null;
-  traiteData?: { branche?: string; referenceTraite?: string } | null;
+  facultativeData?: {
+    numeroPoliceCedante?: string | null;
+    dateEffet: string;
+    dateEcheance: string;
+    branche?: string;
+    produit?: string;
+    garantie?: string;
+  } | null;
+  traiteData?: {
+    dateEffet: string;
+    dateEcheance: string;
+    branche?: string;
+    referenceTraite?: string;
+  } | null;
 }
 
 export interface Sinistre {

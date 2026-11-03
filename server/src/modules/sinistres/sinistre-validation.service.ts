@@ -77,7 +77,12 @@ export class SinistreValidationService {
         },
       }),
       this.prisma.workflowTask.updateMany({
-        where: { type: 'VALIDATION_SINISTRE', affaireId: sinistre.affaireId, statut: 'EN_ATTENTE' },
+        where: {
+          type: 'VALIDATION_SINISTRE',
+          affaireId: sinistre.affaireId,
+          statut: 'EN_ATTENTE',
+          description: { contains: sinistre.numero },
+        },
         data: { statut: 'COMPLETE', completedAt: new Date() },
       }),
     ]);

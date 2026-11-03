@@ -4,6 +4,7 @@ import type {
   SinistreKpis, LossRatio, EvolutionPoint, ByCedantePoint, ByStatusPoint, AgingReport,
   SinistreEvent, SinistreStatut,
 } from '../types/sinistre.types';
+import type { SinistreAffaireRef } from '../types/sinistre.types';
 import type { CashCall, CreateCashCallDto, RecordCashCallPaymentDto } from '../types/cash-call.types';
 
 export interface SinistreFilters {
@@ -24,6 +25,7 @@ export interface SinistresListResponse {
 
 export const sinistresApi = {
   getAll: (filters?: SinistreFilters) => api.get<SinistresListResponse>('/sinistres', { params: filters }),
+  getEligibleAffaires: () => api.get<SinistreAffaireRef[]>('/sinistres/eligible-affaires'),
   getOne: (id: string) => api.get<Sinistre>(`/sinistres/${id}`),
   create: (data: CreateSinistreDto) => api.post<Sinistre>('/sinistres', data),
   update: (id: string, data: UpdateSinistreDto) => api.put<Sinistre>(`/sinistres/${id}`, data),

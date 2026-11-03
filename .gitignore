@@ -44,6 +44,8 @@ backups/
 *.sql
 !server/prisma/migrations/20261011121000_add_affaire_roe/migration.sql
 !server/prisma/migrations/20261011124500_add_affaire_charge_dossier/migration.sql
+!server/prisma/migrations/20261031191500_add_affaire_nom/migration.sql
+!server/prisma/migrations/20261031194500_add_affaire_renewal_negotiations/migration.sql
 *.dump
 
 # Testing

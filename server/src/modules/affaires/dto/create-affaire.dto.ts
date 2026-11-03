@@ -16,6 +16,10 @@ export class AffaireReassureurDto {
   @ApiProperty() @IsString() reassureurId: string;
   @ApiProperty({ description: 'Participation % — total = taux de cession en facultative, 100% en traité' })
   @IsNumber() @Min(0.0001) @Max(100) partPct: number;
+  @ApiPropertyOptional({ description: 'Prime 100% propre à ce réassureur' })
+  @IsOptional() @IsNumber() @Min(0) prime100Pct?: number;
+  @ApiPropertyOptional({ description: 'Taux de commission cédante propre à ce réassureur' })
+  @IsOptional() @IsNumber() @Min(0) @Max(100) tauxCommissionCedante?: number;
   @ApiPropertyOptional() @IsOptional() @IsBoolean() isLeader?: boolean;
   @ApiPropertyOptional({ enum: CommissionMode }) @IsOptional() @IsEnum(CommissionMode) commissionMode?: CommissionMode;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) tauxCommissionArs?: number;
@@ -49,7 +53,6 @@ export class PmdInstalmentDto {
 export class FacultativeDataDto {
   @ApiProperty({ enum: ReassuranceType }) @IsEnum(ReassuranceType) reassuranceType: ReassuranceType;
   @ApiProperty() @IsString() assureId: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() numeroPoliceCedante?: string;
   @ApiProperty({ example: '2024-01-01' })
   @IsDateString({}, { message: "La date d'effet est obligatoire et doit être une date valide (AAAA-MM-JJ)" })
   dateEffet: string;
@@ -60,10 +63,12 @@ export class FacultativeDataDto {
   @ApiPropertyOptional() @IsOptional() @IsString() paysAssure?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() branche?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() produit?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() garantie?: string;
+  @ApiPropertyOptional({ description: 'Garantie/couverture unique de l’affaire' })
+  @IsOptional() @IsString() garantie?: string;
 
-  @ApiProperty() @IsNumber() @Min(0) prime100Pct: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() tauxPrime?: number;
+  @ApiPropertyOptional({ description: 'Ancienne valeur affaire, conservée pour compatibilité des affaires existantes' })
+  @IsOptional() @IsNumber() @Min(0) prime100Pct?: number;
+  @ApiPropertyOptional({ nullable: true }) @IsOptional() @Transform(emptyToNull) @IsNumber() @Min(0) @Max(999.9999) tauxPrime?: number | null;
   @ApiProperty() @IsNumber() @Min(0) @Max(100) tauxCession: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) @Max(100) tauxCommissionCedante?: number;
 
@@ -92,7 +97,8 @@ export class TraiteDataDto {
   @ApiPropertyOptional() @IsOptional() @IsString() zoneGeographique?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() branche?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() produit?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() garantie?: string;
+  @ApiPropertyOptional({ description: 'Garantie/couverture unique de l’affaire' })
+  @IsOptional() @IsString() garantie?: string;
   @ApiProperty({ enum: Periodicite }) @IsEnum(Periodicite) periodicite: Periodicite;
 
   @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0) primePrevisionnelle?: number;
@@ -120,6 +126,10 @@ export class CreateAffaireDto {
   @IsOptional() @IsNumber() @Min(0.000001) roe?: number;
   @ApiPropertyOptional({ description: 'Chargé de dossier affiché sur les tableaux de l’affaire' })
   @IsOptional() @IsString() chargeDossier?: string;
+  @ApiPropertyOptional({ description: 'Nom métier libre de l’affaire' })
+  @IsOptional() @IsString() nom?: string;
+  @ApiPropertyOptional({ description: 'Détails libres du renouvellement ou de la négociation' })
+  @IsOptional() @IsString() renouvellementDetails?: string;
 
   @ApiProperty({ type: [AffaireReassureurDto] })
   @IsArray() @ArrayMinSize(1) @ValidateNested({ each: true }) @Type(() => AffaireReassureurDto)

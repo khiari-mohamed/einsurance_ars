@@ -13,6 +13,7 @@ import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Permission } from '../../config/permissions.config';
+import { CreateNegotiationDto, UpdateNegotiationDto } from './dto/negotiation.dto';
 
 @ApiTags('Affaires')
 @ApiBearerAuth()
@@ -56,6 +57,30 @@ export class AffairesController {
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
   update(@Param('id') id: string, @Body() dto: UpdateAffaireDto, @CurrentUser() user: any) {
     return this.service.update(id, dto, user.id);
+  }
+
+  @Patch(':id/renewal-details')
+  @RequirePermissions(Permission.AFFAIRES_UPDATE)
+  updateRenewalDetails(@Param('id') id: string, @Body('details') details: string) {
+    return this.service.updateRenewalDetails(id, details);
+  }
+
+  @Post(':id/negotiations')
+  @RequirePermissions(Permission.AFFAIRES_UPDATE)
+  createNegotiation(@Param('id') id: string, @Body() dto: CreateNegotiationDto, @CurrentUser() user: any) {
+    return this.service.createNegotiation(id, dto, user.id);
+  }
+
+  @Put(':id/negotiations/:negotiationId')
+  @RequirePermissions(Permission.AFFAIRES_UPDATE)
+  updateNegotiation(@Param('id') id: string, @Param('negotiationId') negotiationId: string, @Body() dto: UpdateNegotiationDto, @CurrentUser() user: any) {
+    return this.service.updateNegotiation(id, negotiationId, dto, user.id);
+  }
+
+  @Delete(':id/negotiations/:negotiationId')
+  @RequirePermissions(Permission.AFFAIRES_UPDATE)
+  deleteNegotiation(@Param('id') id: string, @Param('negotiationId') negotiationId: string, @CurrentUser() user: any) {
+    return this.service.deleteNegotiation(id, negotiationId, user.id);
   }
 
   @Patch(':id/status')

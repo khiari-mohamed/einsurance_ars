@@ -9,9 +9,11 @@ import {
   Min,
   Max,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ReassuranceType, ModeRenouvellement } from '@prisma/client';
+
+const emptyToNull = ({ value }: { value: unknown }) => (value === '' ? null : value);
 
 export class GuaranteeLineDto {
   @ApiProperty({ description: 'Libellé de la garantie' })
@@ -42,10 +44,6 @@ export class CreateFacultativeDto {
   @IsString()
   assureId: string;
 
-  @ApiPropertyOptional({ description: 'Numéro de police cédante' })
-  @IsOptional()
-  @IsString()
-  numeroPoliceCedante?: string;
 
   @ApiProperty({ example: '2024-01-01' })
   @IsDateString()
@@ -75,22 +73,18 @@ export class CreateFacultativeDto {
   @IsString()
   produit?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  garantie?: string;
-
   @ApiProperty({ description: 'Prime 100% — base de calcul avant cession' })
   @IsNumber()
   @Min(0)
   prime100Pct: number;
 
-  @ApiPropertyOptional({ description: 'Taux de prime (%)' })
+  @ApiPropertyOptional({ description: 'Taux de prime (%)', nullable: true })
   @IsOptional()
+  @Transform(emptyToNull)
   @IsNumber()
   @Min(0)
   @Max(100)
-  tauxPrime?: number;
+  tauxPrime?: number | null;
 
   @ApiProperty({ description: 'Taux de cession 0–100' })
   @IsNumber()

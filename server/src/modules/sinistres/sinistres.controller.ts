@@ -84,6 +84,13 @@ export class SinistresController {
     return this.analytics.getAging();
   }
 
+  @Get('eligible-affaires')
+  @RequirePermissions(Permission.SINISTRES_CREATE)
+  @ApiOperation({ summary: 'Affaires placées disponibles pour une déclaration de sinistre' })
+  eligibleAffaires(@Query('search') search?: string) {
+    return this.service.findEligibleAffaires(search);
+  }
+
   @Get(':id')
   @RequirePermissions(Permission.SINISTRES_READ)
   findOne(@Param('id') id: string) { return this.service.findOne(id); }

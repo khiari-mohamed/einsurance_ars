@@ -118,7 +118,7 @@ export default function FacultativesList() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
               <input
                 type="text"
-                placeholder="Rechercher par numéro, assuré, cédante, branche, garantie..."
+                placeholder="Rechercher par numéro, assuré, cédante ou branche..."
                 value={searchTerm}
                 onChange={(e) => updateFilter('search', e.target.value)}
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -189,7 +189,6 @@ export default function FacultativesList() {
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">N° Affaire</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Assuré</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Cédante</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Police</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Branche</th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Prime Cédée</th>
                   <th className="px-4 py-3 text-right text-[11px] font-semibold text-gray-600 uppercase tracking-wider">Commission ARS</th>
@@ -203,7 +202,6 @@ export default function FacultativesList() {
                     <td className="px-4 py-3 text-[13px] font-medium text-gray-900 font-mono">{item.affaire.numero}</td>
                     <td className="px-4 py-3 text-[13px] text-gray-900">{item.assure?.raisonSociale || '-'}</td>
                     <td className="px-4 py-3 text-[13px] text-gray-900">{item.affaire.cedante?.raisonSociale || '-'}</td>
-                    <td className="px-4 py-3 text-[13px] text-gray-600 font-mono">{item.numeroPoliceCedante || '-'}</td>
                     <td className="px-4 py-3 text-[13px] text-gray-600">{item.branche || '-'}</td>
                     <td className="px-4 py-3 text-[13px] text-right font-medium text-gray-900">
                       {formatCurrency(Number(item.primeCedee ?? 0), item.affaire?.currency ?? 'TND')}

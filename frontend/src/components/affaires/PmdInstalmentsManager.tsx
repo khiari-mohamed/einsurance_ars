@@ -87,6 +87,10 @@ export function PmdInstalmentsManager({ affaireId }: Props) {
       setError('Chaque tranche doit avoir une date d\'échéance et un montant ≥ 0.');
       return;
     }
+    if (pmdTotal > 0 && Math.abs(totalMontant - pmdTotal) > 0.001) {
+      setError(`Le total des tranches doit être égal au PMD (${formatCurrency(pmdTotal, traite?.affaire.currency || 'TND')}).`);
+      return;
+    }
     saveMutation.mutate(rows.map((r, i) => ({ ...r, numeroTranche: i + 1 })));
   };
 

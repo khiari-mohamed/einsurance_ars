@@ -13,6 +13,7 @@ import {
   HttpStatus,
   DefaultValuePipe,
   ParseIntPipe,
+  ParseArrayPipe,
 } from '@nestjs/common';
 import { Response } from 'express';
 import {
@@ -32,6 +33,7 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { Permission } from '../../../config/permissions.config';
+import { NonProportionalLineDto } from '../traites/dto/non-proportional-line.dto';
 
 @ApiTags('Facultatives')
 @ApiBearerAuth()
@@ -144,6 +146,21 @@ export class FacultativeController {
   @HttpCode(HttpStatus.OK)
   removeGuaranteeLine(@Param('affaireId') affaireId: string, @Param('lineId') lineId: string) {
     return this.service.removeGuaranteeLine(affaireId, lineId);
+  }
+
+  @Get(':affaireId/non-proportional-lines')
+  @RequirePermissions(Permission.AFFAIRES_READ)
+  getNonProportionalLines(@Param('affaireId') affaireId: string) {
+    return this.service.getNonProportionalLines(affaireId);
+  }
+
+  @Put(':affaireId/non-proportional-lines')
+  @RequirePermissions(Permission.AFFAIRES_UPDATE)
+  replaceNonProportionalLines(
+    @Param('affaireId') affaireId: string,
+    @Body(new ParseArrayPipe({ items: NonProportionalLineDto })) lines: NonProportionalLineDto[],
+  ) {
+    return this.service.replaceNonProportionalLines(affaireId, lines);
   }
 
   @Get(':affaireId/slip/pdf')

@@ -169,7 +169,10 @@ export default function AffairesList() {
               <tbody className="divide-y divide-border/50">
                 {affaires.map((affaire: Affaire) => (
                   <tr key={affaire.id} className="transition-colors hover:bg-secondary/40">
-                    <td className="px-4 py-3 text-[13px] font-medium text-foreground font-mono">{affaire.numero}</td>
+                    <td className="px-4 py-3 text-[13px] text-foreground">
+                      <div className="font-medium font-mono">{affaire.numero}</div>
+                      {affaire.nom && <div className="text-muted-foreground mt-0.5">{affaire.nom}</div>}
+                    </td>
                     <td className="px-4 py-3 text-[13px]">
                       <span className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-medium ${
                         affaire.type === AffaireType.FACULTATIVE

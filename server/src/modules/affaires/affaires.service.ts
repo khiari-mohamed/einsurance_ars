@@ -1,14 +1,16 @@
 import {
   Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
-import { AffaireStatut, AffaireType, CommissionMode } from '@prisma/client';
+import { AffaireStatut, AffaireType, CommissionMode, NegotiationStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SequenceService } from '../../shared/services/sequence.service';
 import { CommissionCalculatorService } from './commission-calculator.service';
 import { TreatyCalculatorService } from './traites/treaty-calculator.service';
+import { ExchangeRatesService } from '../exchange-rates/exchange-rates.service';
 import { AffaireWorkflowService } from './workflow.service';
 import { CreateAffaireDto } from './dto/create-affaire.dto';
 import { UpdateAffaireDto } from './dto/update-affaire.dto';
+import { CreateNegotiationDto, UpdateNegotiationDto } from './dto/negotiation.dto';
 
 @Injectable()
 export class AffairesService {
@@ -18,6 +20,7 @@ export class AffairesService {
     private commissionCalc: CommissionCalculatorService,
     private treatyCalc: TreatyCalculatorService,
     private workflow: AffaireWorkflowService,
+    private exchangeRates: ExchangeRatesService,
   ) {}
 
   async findAll(filters: {
@@ -39,9 +42,9 @@ export class AffairesService {
     if (search) {
       where.OR = [
         { numero: { contains: search, mode: 'insensitive' } },
+        { nom: { contains: search, mode: 'insensitive' } },
         { cedante: { raisonSociale: { contains: search, mode: 'insensitive' } } },
         { facultativeData: { assure: { raisonSociale: { contains: search, mode: 'insensitive' } } } },
-        { facultativeData: { numeroPoliceCedante: { contains: search, mode: 'insensitive' } } },
         { traiteData: { referenceTraite: { contains: search, mode: 'insensitive' } } },
       ];
     }
@@ -80,6 +83,7 @@ export class AffairesService {
         bordereaux: { orderBy: { createdAt: 'desc' }, take: 5 },
         workflowTasks: { where: { statut: 'EN_ATTENTE' } },
         documents: { include: { document: true } },
+        negotiations: { orderBy: [{ date: 'desc' }, { round: 'desc' }] },
       },
     });
     if (!a || !a.isActive) throw new NotFoundException('Affaire introuvable');
@@ -87,6 +91,9 @@ export class AffairesService {
   }
 
   async create(dto: CreateAffaireDto, userId: string) {
+    const roe = dto.roe ?? (dto.currency && dto.currency !== 'TND'
+      ? (await this.exchangeRates.getLatestRate(dto.currency)).taux
+      : dto.roe);
     // Validate type ↔ data consistency
     if (dto.type === AffaireType.FACULTATIVE && !dto.facultativeData) {
       throw new BadRequestException('facultativeData requis pour type FACULTATIVE');
@@ -107,6 +114,10 @@ export class AffairesService {
       dto.type === AffaireType.FACULTATIVE ? Number(dto.facultativeData!.tauxCession) : 100;
     this.commissionCalc.validateShares(dto.reassureurs, expectedShareTotal);
     this.assertNoDuplicateReassureurs(dto.reassureurs);
+
+    if (dto.type === AffaireType.FACULTATIVE) {
+      this.validateFacultativeReinsurerInputs(dto.reassureurs);
+    }
 
     // Validate reassureurs exist
     const reassureurIds = dto.reassureurs.map((r) => r.reassureurId);
@@ -129,6 +140,8 @@ export class AffairesService {
     let reassureurData: any[] = dto.reassureurs.map((r) => ({
       reassureurId: r.reassureurId,
       partPct: r.partPct,
+      prime100Pct: r.prime100Pct,
+      tauxCommissionCedante: r.tauxCommissionCedante,
       isLeader: r.isLeader ?? false,
       commissionMode: r.commissionMode ?? CommissionMode.CALCULABLE,
       tauxCommissionArs: r.tauxCommissionArs,
@@ -138,12 +151,17 @@ export class AffairesService {
     // Compute commission amounts if facultative
     if (dto.type === AffaireType.FACULTATIVE && dto.facultativeData) {
       const fac = dto.facultativeData;
+      const legacyPrime100 = Number(fac.prime100Pct ?? dto.reassureurs[0]?.prime100Pct ?? 0);
+      const legacyTauxCedante = Number(
+        fac.tauxCommissionCedante ?? dto.reassureurs[0]?.tauxCommissionCedante ?? 0,
+      );
       const results = this.commissionCalc.calculate({
-        prime100Pct: Number(fac.prime100Pct),
-        tauxCommissionCedante: fac.tauxCommissionCedante ?? 0,
+        prime100Pct: legacyPrime100,
         reassureurs: dto.reassureurs.map((r) => ({
           reassureurId: r.reassureurId,
           partPct: r.partPct,
+          prime100Pct: r.prime100Pct,
+          tauxCommissionCedante: r.tauxCommissionCedante ?? legacyTauxCedante,
           commissionMode: r.commissionMode ?? CommissionMode.CALCULABLE,
           tauxCommissionArs: r.tauxCommissionArs,
           commissionForfait: r.commissionForfait,
@@ -200,15 +218,16 @@ export class AffairesService {
           cedanteId: dto.cedanteId,
           modePaiement: dto.modePaiement ?? 'PAR_AFFAIRE',
           currency: dto.currency ?? 'TND',
-          roe: dto.roe,
+          roe,
           chargeDossier: dto.chargeDossier,
+          nom: dto.nom,
+          renouvellementDetails: dto.renouvellementDetails,
           reassureurs: { create: reassureurData },
           facultativeData: dto.facultativeData
             ? {
                 create: {
                   reassuranceType: dto.facultativeData.reassuranceType,
                   assureId: dto.facultativeData.assureId,
-                  numeroPoliceCedante: dto.facultativeData.numeroPoliceCedante,
                   dateEffet: new Date(dto.facultativeData.dateEffet),
                   dateEcheance: new Date(dto.facultativeData.dateEcheance),
                   modeRenouvellement: dto.facultativeData.modeRenouvellement,
@@ -216,7 +235,9 @@ export class AffairesService {
                   branche: dto.facultativeData.branche,
                   produit: dto.facultativeData.produit,
                   garantie: dto.facultativeData.garantie,
-                  prime100Pct: dto.facultativeData.prime100Pct,
+                  prime100Pct: dto.facultativeData.prime100Pct
+                    ?? dto.reassureurs[0]?.prime100Pct
+                    ?? 0,
                   tauxPrime: dto.facultativeData.tauxPrime,
                   tauxCession: dto.facultativeData.tauxCession,
                   // FIX (Affaires pass — precision consistency): rounded
@@ -224,14 +245,17 @@ export class AffairesService {
                   // in FacultativeService — previously stored raw
                   // floating-point.
                   primeCedee: this.round3(
-                    Number(dto.facultativeData.prime100Pct) * (dto.facultativeData.tauxCession / 100),
+                    Number(dto.facultativeData.prime100Pct ?? dto.reassureurs[0]?.prime100Pct ?? 0)
+                      * (dto.facultativeData.tauxCession / 100),
                   ),
                   tauxCommissionCedante: dto.facultativeData.tauxCommissionCedante,
-                  commissionCedante: dto.facultativeData.tauxCommissionCedante
+                  commissionCedante: (dto.facultativeData.tauxCommissionCedante
+                    ?? dto.reassureurs[0]?.tauxCommissionCedante)
                     ? this.round3(
-                        Number(dto.facultativeData.prime100Pct) *
+                        Number(dto.facultativeData.prime100Pct ?? dto.reassureurs[0]?.prime100Pct ?? 0) *
                           (dto.facultativeData.tauxCession / 100) *
-                          (dto.facultativeData.tauxCommissionCedante / 100),
+                          (Number(dto.facultativeData.tauxCommissionCedante
+                            ?? dto.reassureurs[0]?.tauxCommissionCedante) / 100),
                       )
                     : null,
                   guaranteeLines: dto.facultativeData.guaranteeLines
@@ -298,6 +322,10 @@ export class AffairesService {
       return { affaire };
     });
 
+    if (dto.type === AffaireType.FACULTATIVE && dto.reassureurs.length > 0) {
+      await this.recalculateCommissions(affaire.id);
+      return this.findOne(affaire.id);
+    }
     return affaire;
   }
 
@@ -305,7 +333,18 @@ export class AffairesService {
     const affaire = await this.findOne(id);
 
     if (affaire.statut === AffaireStatut.PLACEMENT_REALISE) {
-      throw new BadRequestException('Une affaire placée ne peut plus être modifiée');
+      const topLevelChanges = Object.keys(dto).filter(
+        (key) => !['renouvellementDetails', 'facultativeData', 'traiteData'].includes(key),
+      );
+      const hasInvalidFacultativeChange = dto.facultativeData
+        ? Object.keys(dto.facultativeData).some((key) => key !== 'modeRenouvellement')
+        : false;
+      const hasInvalidTreatyChange = dto.traiteData
+        ? Object.keys(dto.traiteData).some((key) => key !== 'modeRenouvellement')
+        : false;
+      if (topLevelChanges.length || hasInvalidFacultativeChange || hasInvalidTreatyChange) {
+        throw new BadRequestException('Une affaire placée ne peut plus être modifiée, sauf son mode de renouvellement');
+      }
     }
 
     if (dto.type && dto.type !== affaire.type) {
@@ -346,6 +385,9 @@ export class AffairesService {
     }
     if (dto.reassureurs) {
       this.assertNoDuplicateReassureurs(dto.reassureurs);
+      if (affaire.type === AffaireType.FACULTATIVE) {
+        this.validateFacultativeReinsurerInputs(dto.reassureurs);
+      }
     }
     const updated = await this.prisma.$transaction(async (tx) => {
       if (dto.reassureurs) {
@@ -359,12 +401,16 @@ export class AffairesService {
           ...(dto.currency && { currency: dto.currency }),
           ...(dto.roe !== undefined && { roe: dto.roe }),
           ...(dto.chargeDossier !== undefined && { chargeDossier: dto.chargeDossier }),
+          ...(dto.nom !== undefined && { nom: dto.nom }),
+          ...(dto.renouvellementDetails !== undefined && { renouvellementDetails: dto.renouvellementDetails }),
           ...(dto.reassureurs && {
             reassureurs: {
               create: dto.reassureurs.map((r) => ({
                 reassureurId: r.reassureurId,
                 partPct: r.partPct,
-                isLeader: r.isLeader ?? false,
+                  prime100Pct: r.prime100Pct,
+                  tauxCommissionCedante: r.tauxCommissionCedante,
+                  isLeader: r.isLeader ?? false,
                 commissionMode: r.commissionMode ?? CommissionMode.CALCULABLE,
                 tauxCommissionArs: r.tauxCommissionArs,
                 commissionForfait: r.commissionForfait,
@@ -379,7 +425,6 @@ export class AffairesService {
                 ...(dto.facultativeData.dateEffet && { dateEffet: new Date(dto.facultativeData.dateEffet) }),
                 ...(dto.facultativeData.dateEcheance && { dateEcheance: new Date(dto.facultativeData.dateEcheance) }),
                 ...(dto.facultativeData.modeRenouvellement !== undefined && { modeRenouvellement: dto.facultativeData.modeRenouvellement }),
-                ...(dto.facultativeData.numeroPoliceCedante !== undefined && { numeroPoliceCedante: dto.facultativeData.numeroPoliceCedante }),
                 ...(dto.facultativeData.paysAssure !== undefined && { paysAssure: dto.facultativeData.paysAssure }),
                 ...(dto.facultativeData.branche !== undefined && { branche: dto.facultativeData.branche }),
                 ...(dto.facultativeData.produit !== undefined && { produit: dto.facultativeData.produit }),
@@ -393,7 +438,11 @@ export class AffairesService {
                     dto.facultativeData.tauxCession !== undefined ||
                     dto.facultativeData.tauxCommissionCedante !== undefined;
 
-                  if (!needsRecompute) return {};
+                  if (!needsRecompute) {
+                    return dto.facultativeData.tauxPrime !== undefined
+                      ? { tauxPrime: dto.facultativeData.tauxPrime }
+                      : {};
+                  }
 
                   const prime100 = dto.facultativeData.prime100Pct ?? Number(affaire.facultativeData?.prime100Pct ?? 0);
                   const tauxCession = dto.facultativeData.tauxCession ?? Number(affaire.facultativeData?.tauxCession ?? 0);
@@ -491,6 +540,73 @@ export class AffairesService {
     return this.findOne(id);
   }
 
+  async createNegotiation(affaireId: string, dto: CreateNegotiationDto, userId: string) {
+    const affaire = await this.prisma.affaire.findUnique({ where: { id: affaireId }, select: { id: true, isActive: true } });
+    if (!affaire || !affaire.isActive) throw new NotFoundException('Affaire introuvable');
+    const latest = await this.prisma.affaireNegotiation.findFirst({
+      where: { affaireId },
+      orderBy: { round: 'desc' },
+      select: { round: true },
+    });
+    const negotiation = await this.prisma.affaireNegotiation.create({
+      data: {
+        affaireId,
+        round: dto.round ?? (latest ? latest.round + 1 : 1),
+        date: new Date(dto.date),
+        counterparty: dto.counterparty.trim(),
+        subject: dto.subject,
+        currentValue: dto.currentValue?.trim() || null,
+        proposedValue: dto.proposedValue?.trim() || null,
+        status: dto.status ?? NegotiationStatus.EN_COURS,
+        deadline: dto.deadline ? new Date(dto.deadline) : null,
+        notes: dto.notes?.trim() || null,
+        createdByUserId: userId,
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: { userId, action: 'NEGOTIATION_CREATED', entityType: 'AffaireNegotiation', entityId: negotiation.id },
+    });
+    return negotiation;
+  }
+
+  async updateRenewalDetails(affaireId: string, details: string) {
+    const affaire = await this.prisma.affaire.findUnique({ where: { id: affaireId }, select: { id: true, isActive: true } });
+    if (!affaire || !affaire.isActive) throw new NotFoundException('Affaire introuvable');
+    return this.prisma.affaire.update({ where: { id: affaireId }, data: { renouvellementDetails: details?.trim() || null } });
+  }
+
+  async updateNegotiation(affaireId: string, negotiationId: string, dto: UpdateNegotiationDto, userId: string) {
+    const existing = await this.prisma.affaireNegotiation.findFirst({ where: { id: negotiationId, affaireId } });
+    if (!existing) throw new NotFoundException('Négociation introuvable');
+    const updated = await this.prisma.affaireNegotiation.update({
+      where: { id: negotiationId },
+      data: {
+        ...(dto.round !== undefined && { round: dto.round }),
+        ...(dto.date !== undefined && { date: new Date(dto.date) }),
+        ...(dto.counterparty !== undefined && { counterparty: dto.counterparty.trim() }),
+        ...(dto.subject !== undefined && { subject: dto.subject }),
+        ...(dto.currentValue !== undefined && { currentValue: dto.currentValue?.trim() || null }),
+        ...(dto.proposedValue !== undefined && { proposedValue: dto.proposedValue?.trim() || null }),
+        ...(dto.status !== undefined && { status: dto.status }),
+        ...(dto.deadline !== undefined && { deadline: dto.deadline ? new Date(dto.deadline) : null }),
+        ...(dto.notes !== undefined && { notes: dto.notes?.trim() || null }),
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: { userId, action: 'NEGOTIATION_UPDATED', entityType: 'AffaireNegotiation', entityId: negotiationId },
+    });
+    return updated;
+  }
+
+  async deleteNegotiation(affaireId: string, negotiationId: string, userId: string) {
+    const existing = await this.prisma.affaireNegotiation.findFirst({ where: { id: negotiationId, affaireId } });
+    if (!existing) throw new NotFoundException('Négociation introuvable');
+    await this.prisma.affaireNegotiation.delete({ where: { id: negotiationId } });
+    await this.prisma.auditLog.create({
+      data: { userId, action: 'NEGOTIATION_DELETED', entityType: 'AffaireNegotiation', entityId: negotiationId },
+    });
+  }
+
   async remove(id: string, userId: string) {
     const a = await this.findOne(id);
     if (a.statut === AffaireStatut.PLACEMENT_REALISE) {
@@ -519,6 +635,10 @@ export class AffairesService {
       reassureurs: affaire.reassureurs.map((r) => ({
         reassureurId: r.reassureurId,
         partPct: Number(r.partPct),
+        prime100Pct: r.prime100Pct == null ? undefined : Number(r.prime100Pct),
+        tauxCommissionCedante: r.tauxCommissionCedante == null
+          ? undefined
+          : Number(r.tauxCommissionCedante),
         commissionMode: r.commissionMode,
         tauxCommissionArs: Number(r.tauxCommissionArs ?? 0),
         commissionForfait: r.commissionForfait ? Number(r.commissionForfait) : undefined,
@@ -539,6 +659,14 @@ export class AffairesService {
         }),
       ),
     );
+
+    await this.prisma.facultativeAffaire.update({
+      where: { affaireId },
+      data: {
+        primeCedee: this.round3(results.reduce((sum, result) => sum + result.primeBrute, 0)),
+        commissionCedante: this.round3(results.reduce((sum, result) => sum + result.commissionCedante, 0)),
+      },
+    });
   }
   private async recalculateTreatyDistribution(affaireId: string): Promise<void> {
     const affaire = await this.prisma.affaire.findUniqueOrThrow({
@@ -589,8 +717,8 @@ export class AffairesService {
 
   private assertDateOrder(effet?: string, echeance?: string): void {
     if (!effet || !echeance) return;
-    if (new Date(effet) >= new Date(echeance)) {
-      throw new BadRequestException('La date d\'effet doit être antérieure à la date d\'échéance');
+    if (new Date(effet) > new Date(echeance)) {
+      throw new BadRequestException("La date d'effet doit être antérieure ou égale à la date d'échéance");
     }
   }
 
@@ -626,5 +754,38 @@ export class AffairesService {
 
   private round3(n: number): number {
     return Math.round(n * 1000) / 1000;
+  }
+
+  private validateFacultativeReinsurerInputs(
+    reassureurs: CreateAffaireDto['reassureurs'],
+  ): void {
+    for (const [index, reassureur] of reassureurs.entries()) {
+      if (!(Number(reassureur.prime100Pct) > 0)) {
+        throw new BadRequestException(
+          `La prime 100% est obligatoire pour le réassureur ${index + 1}`,
+        );
+      }
+      if (reassureur.tauxCommissionCedante === undefined || reassureur.tauxCommissionCedante === null) {
+        throw new BadRequestException(
+          `Le taux de commission cédante est obligatoire pour le réassureur ${index + 1}`,
+        );
+      }
+      if (
+        (reassureur.commissionMode === undefined || reassureur.commissionMode === CommissionMode.CALCULABLE)
+        && (reassureur.tauxCommissionArs === undefined || reassureur.tauxCommissionArs === null)
+      ) {
+        throw new BadRequestException(
+          `Le taux de commission courtage est obligatoire pour le réassureur ${index + 1}`,
+        );
+      }
+      if (
+        reassureur.commissionMode === CommissionMode.FORFAITAIRE
+        && (reassureur.commissionForfait === undefined || reassureur.commissionForfait === null)
+      ) {
+        throw new BadRequestException(
+          `La commission forfaitaire est obligatoire pour le réassureur ${index + 1}`,
+        );
+      }
+    }
   }
 }

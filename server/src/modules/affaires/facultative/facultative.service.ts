@@ -15,6 +15,7 @@ import {
   GuaranteeLineDto,
 } from './dto/create-facultative.dto';
 import { UpdateFacultativeDto } from './dto/update-facultative.dto';
+import { NonProportionalLineDto } from '../traites/dto/non-proportional-line.dto';
 
 @Injectable()
 export class FacultativeService {
@@ -74,12 +75,15 @@ export class FacultativeService {
       }),
       ...(search && {
         OR: [
-          { numeroPoliceCedante: { contains: search, mode: 'insensitive' } },
           { branche: { contains: search, mode: 'insensitive' } },
-          { garantie: { contains: search, mode: 'insensitive' } },
           {
             affaire: {
               numero: { contains: search, mode: 'insensitive' },
+            },
+          },
+          {
+            affaire: {
+              nom: { contains: search, mode: 'insensitive' },
             },
           },
           {
@@ -211,14 +215,12 @@ export class FacultativeService {
         affaireId: dto.affaireId,
         reassuranceType: dto.reassuranceType,
         assureId: dto.assureId,
-        numeroPoliceCedante: dto.numeroPoliceCedante,
         dateEffet: new Date(dto.dateEffet),
         dateEcheance: new Date(dto.dateEcheance),
         modeRenouvellement: dto.modeRenouvellement,
         paysAssure: dto.paysAssure,
         branche: dto.branche,
         produit: dto.produit,
-        garantie: dto.garantie,
         prime100Pct: dto.prime100Pct,
         tauxPrime: dto.tauxPrime,
         tauxCession: dto.tauxCession,
@@ -308,9 +310,6 @@ export class FacultativeService {
       where: { affaireId },
       data: {
         ...(dto.assureId !== undefined && { assureId: dto.assureId }),
-        ...(dto.numeroPoliceCedante !== undefined && {
-          numeroPoliceCedante: dto.numeroPoliceCedante,
-        }),
         ...(dto.dateEffet !== undefined && {
           dateEffet: new Date(dto.dateEffet),
         }),
@@ -323,7 +322,6 @@ export class FacultativeService {
         ...(dto.paysAssure !== undefined && { paysAssure: dto.paysAssure }),
         ...(dto.branche !== undefined && { branche: dto.branche }),
         ...(dto.produit !== undefined && { produit: dto.produit }),
-        ...(dto.garantie !== undefined && { garantie: dto.garantie }),
         ...(dto.prime100Pct !== undefined && {
           prime100Pct: dto.prime100Pct,
           primeCedee,
@@ -429,6 +427,43 @@ export class FacultativeService {
     return { message: 'Ligne supprimée avec succès' };
   }
 
+  async getNonProportionalLines(affaireId: string) {
+    const fac = await this.prisma.facultativeAffaire.findUnique({ where: { affaireId }, select: { id: true } });
+    if (!fac) throw new NotFoundException('Données facultatives introuvables');
+    return this.prisma.nonProportionalLine.findMany({ where: { facultativeId: fac.id }, orderBy: { ordre: 'asc' } });
+  }
+
+  async replaceNonProportionalLines(affaireId: string, lines: NonProportionalLineDto[]) {
+    const fac = await this.prisma.facultativeAffaire.findUnique({ where: { affaireId }, select: { id: true, affaire: { select: { statut: true } } } });
+    if (!fac) throw new NotFoundException('Données facultatives introuvables');
+    if (fac.affaire.statut === AffaireStatut.PLACEMENT_REALISE) {
+      throw new BadRequestException('Les lignes non proportionnelles ne peuvent plus être modifiées après placement');
+    }
+    const calculated = lines.map((line, index) => {
+      const result = this.commissionCalc.calculateNonProportionalLine(line);
+      return {
+        facultativeId: fac.id,
+        ordre: line.ordre ?? index + 1,
+        priorite: line.priorite,
+        pmd: line.pmd,
+        portee: line.portee,
+        epi: line.epi,
+        tauxPrime: line.tauxPrime,
+        tauxCommissionCedante: line.tauxCommissionCedante ?? 0,
+        tauxCommissionArs: line.tauxCommissionArs ?? 0,
+        primeAnnuelle: result.primeAnnuelle,
+        commissionCedante: result.commissionCedante,
+        commissionArs: result.commissionArs,
+        primeNette: result.primeNette,
+      };
+    });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.nonProportionalLine.deleteMany({ where: { facultativeId: fac.id } });
+      if (calculated.length) await tx.nonProportionalLine.createMany({ data: calculated });
+      return tx.nonProportionalLine.findMany({ where: { facultativeId: fac.id }, orderBy: { ordre: 'asc' } });
+    });
+  }
+
   // ── Commission recalculation ─────────────────────────────────────
 
   async recalculateCommissions(affaireId: string) {
@@ -452,6 +487,10 @@ export class FacultativeService {
       reassureurs: affaire.reassureurs.map((r) => ({
         reassureurId: r.reassureurId,
         partPct: Number(r.partPct),
+        prime100Pct: r.prime100Pct == null ? undefined : Number(r.prime100Pct),
+        tauxCommissionCedante: r.tauxCommissionCedante == null
+          ? undefined
+          : Number(r.tauxCommissionCedante),
         commissionMode: r.commissionMode,
         tauxCommissionArs: Number(r.tauxCommissionArs ?? 0),
         commissionForfait: r.commissionForfait
@@ -475,6 +514,14 @@ export class FacultativeService {
       ),
     );
 
+    await this.prisma.facultativeAffaire.update({
+      where: { affaireId },
+      data: {
+        primeCedee: this.round3(results.reduce((sum, result) => sum + result.primeBrute, 0)),
+        commissionCedante: this.round3(results.reduce((sum, result) => sum + result.commissionCedante, 0)),
+      },
+    });
+
     this.logger.log(
       `Commissions recalculated for facultative affaire ${affaireId} (${results.length} reinsurers)`,
     );
@@ -492,7 +539,10 @@ export class FacultativeService {
     return this.prisma.facultativeAffaire.findMany({
       where: {
         dateEcheance: { gte: now, lte: cutoff },
-        modeRenouvellement: { not: ModeRenouvellement.RESILIATION },
+        OR: [
+          { modeRenouvellement: { not: ModeRenouvellement.RESILIATION } },
+          { modeRenouvellement: null },
+        ],
         affaire: {
           isActive: true,
           statut: AffaireStatut.PLACEMENT_REALISE,
@@ -581,8 +631,8 @@ export class FacultativeService {
    * touching files outside this pass's reviewed scope. */
   private assertDateOrder(effet?: string, echeance?: string): void {
     if (!effet || !echeance) return;
-    if (new Date(effet) >= new Date(echeance)) {
-      throw new BadRequestException('La date d\'effet doit être antérieure à la date d\'échéance');
+    if (new Date(effet) > new Date(echeance)) {
+      throw new BadRequestException("La date d'effet doit être antérieure ou égale à la date d'échéance");
     }
   }
 }

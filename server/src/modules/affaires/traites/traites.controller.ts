@@ -13,6 +13,7 @@ import {
   HttpStatus,
   DefaultValuePipe,
   ParseIntPipe,
+  ParseArrayPipe,
 } from '@nestjs/common';
 import { Response } from 'express';
 import {
@@ -37,6 +38,7 @@ import { PermissionsGuard } from '../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Permission } from '../../../config/permissions.config';
+import { NonProportionalLineDto } from './dto/non-proportional-line.dto';
 
 @ApiTags('Traités')
 @ApiBearerAuth()
@@ -124,6 +126,21 @@ export class TraitesController {
   @RequirePermissions(Permission.AFFAIRES_UPDATE)
   replacePmdInstalments(@Param('affaireId') affaireId: string, @Body() instalments: PmdInstalmentDto[]) {
     return this.service.replacePmdInstalments(affaireId, instalments);
+  }
+
+  @Get(':affaireId/non-proportional-lines')
+  @RequirePermissions(Permission.AFFAIRES_READ)
+  getNonProportionalLines(@Param('affaireId') affaireId: string) {
+    return this.service.getNonProportionalLines(affaireId);
+  }
+
+  @Put(':affaireId/non-proportional-lines')
+  @RequirePermissions(Permission.AFFAIRES_UPDATE)
+  replaceNonProportionalLines(
+    @Param('affaireId') affaireId: string,
+    @Body(new ParseArrayPipe({ items: NonProportionalLineDto })) lines: NonProportionalLineDto[],
+  ) {
+    return this.service.replaceNonProportionalLines(affaireId, lines);
   }
 
   @Post(':affaireId/pmd-instalments/regenerate')

@@ -3,6 +3,7 @@ import {
   TraitesListResponse, TraiteDetail, TraiteFilters, TraitesStats, RenewalAlertItem,
   TreatyAccountRubriqueInput, PmdInstalmentInput, PmdInstalment,
   LiquidationInput, LiquidationResult, TreatyDistributionResult,
+  NonProportionalLine, NonProportionalLineInput,
 } from '../types/traite.types';
 
 export const traitesApi = {
@@ -32,6 +33,11 @@ export const traitesApi = {
 
   markInstalmentPaid: (affaireId: string, instalmentId: string) =>
     api.patch<PmdInstalment>(`/traites/${affaireId}/pmd-instalments/${instalmentId}/pay`),
+
+  getNonProportionalLines: (affaireId: string) =>
+    api.get<NonProportionalLine[]>(`/traites/${affaireId}/non-proportional-lines`),
+  replaceNonProportionalLines: (affaireId: string, lines: NonProportionalLineInput[]) =>
+    api.put<NonProportionalLine[]>(`/traites/${affaireId}/non-proportional-lines`, lines),
 
   calculateLiquidation: (affaireId: string, input: LiquidationInput) =>
     api.post<LiquidationResult>(`/traites/${affaireId}/calculate-liquidation`, input),

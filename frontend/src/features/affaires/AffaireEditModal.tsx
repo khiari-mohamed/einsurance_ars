@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, Save, AlertCircle, Plus, Trash2 } from 'lucide-react';
+import { X, Save, AlertCircle, Trash2 } from 'lucide-react';
 import CountrySelect from '../../components/ui/CountrySelect';
 import ReferenceSelect from '../../components/ui/ReferenceSelect';
 import CurrencySelect from '../../components/ui/CurrencySelect';
@@ -8,7 +8,7 @@ import DecimalInput from '../../components/ui/DecimalInput';
 import ReassureurRubriquesTable, { previewRows } from '../../components/affaires/ReassureurRubriquesTable';
 import { affairesApi } from '../../api/affaires.api';
 import { extractApiErrors } from '../../lib/api-errors';
-import { computeFacRubriques, effectiveRoe, round3 } from '../../lib/affaire-calc';
+import { computeFacRubriques, effectiveRoe } from '../../lib/affaire-calc';
 import {
   Affaire, AffaireType, UpdateAffaireDto, AffaireReassureurInput, CommissionMode,
   GuaranteeLineInput, ReassuranceType, ModeRenouvellement, FormeCouverture, Periodicite,
@@ -28,6 +28,8 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
   const [currency, setCurrency] = useState(affaire.currency);
   const [roe, setRoe] = useState<number | undefined>(affaire.roe != null ? Number(affaire.roe) : undefined);
   const [chargeDossier, setChargeDossier] = useState(affaire.chargeDossier ?? '');
+  const [nom, setNom] = useState(affaire.nom ?? '');
+  const [renouvellementDetails, setRenouvellementDetails] = useState(affaire.renouvellementDetails ?? '');
   const num = (value: unknown): number | undefined =>
     value === null || value === undefined || value === '' ? undefined : Number(value);
 
@@ -42,12 +44,13 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
         }
       : null,
   );
-  const [guaranteeLines, setGuaranteeLines] = useState<GuaranteeLineInput[]>(
-    affaire.facultativeData?.guaranteeLines?.map((g) => ({
+  const existingGuaranteeLines = affaire.facultativeData?.guaranteeLines?.map((g) => ({
       garantie: g.garantie,
       capitauxAssures100: Number(g.capitauxAssures100),
       ordre: g.ordre,
-    })) || []
+    })) ?? [];
+  const [guaranteeLines, setGuaranteeLines] = useState<GuaranteeLineInput[]>(
+    existingGuaranteeLines.length > 0 ? existingGuaranteeLines : [{ garantie: '', capitauxAssures100: 0 }],
   );
 
   const [traite, setTraite] = useState(
@@ -67,11 +70,26 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
     affaire.reassureurs.map((r) => ({
       reassureurId: r.reassureurId,
       partPct: Number(r.partPct),
+      prime100Pct: num(r.prime100Pct),
+      tauxCommissionCedante: num(r.tauxCommissionCedante),
       isLeader: r.isLeader,
       commissionMode: r.commissionMode,
       tauxCommissionArs: num(r.tauxCommissionArs),
       commissionForfait: num(r.commissionForfait),
     }))
+  );
+  const initialCourtageRates = affaire.reassureurs
+    .filter((r) => r.commissionMode === CommissionMode.CALCULABLE && r.tauxCommissionArs != null)
+    .map((r) => Number(r.tauxCommissionArs));
+  const initialCommonCourtageRate =
+    initialCourtageRates.length > 0 && initialCourtageRates.every((rate) => rate === initialCourtageRates[0])
+      ? initialCourtageRates[0]
+      : undefined;
+  const [tauxCourtageDefault, setTauxCourtageDefault] = useState<number | undefined>(initialCommonCourtageRate);
+  const [tauxCourtageSelection, setTauxCourtageSelection] = useState(
+    [4, 5, 7.5, 10].includes(initialCommonCourtageRate ?? -1)
+      ? String(initialCommonCourtageRate)
+      : initialCommonCourtageRate == null ? '' : 'autre',
   );
 
   const mutation = useMutation({
@@ -98,19 +116,14 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
           reassureurs.map((r, index) => ({
             key: `row-${index}`,
             partPct: r.partPct,
+            prime100Pct: r.prime100Pct,
+            tauxCommissionCedante: r.tauxCommissionCedante,
             commissionMode: r.commissionMode,
             tauxCommissionArs: r.tauxCommissionArs,
             commissionForfait: r.commissionForfait,
           })),
         )
       : null;
-  const commissionCedanteCalc = fac
-    ? round3(
-        Number(fac.prime100Pct || 0) *
-          (Number(fac.tauxCession || 0) / 100) *
-          (Number(fac.tauxCommissionCedante || 0) / 100),
-      )
-    : 0;
   const capitauxAssuresTotal = guaranteeLines.reduce(
     (total, line) => total + Number(line.capitauxAssures100 || 0),
     0,
@@ -136,19 +149,24 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
       if (r.commissionMode === CommissionMode.FORFAITAIRE && (r.commissionForfait === undefined || r.commissionForfait === null)) {
         errs.push('Montant forfaitaire requis en mode Forfaitaire');
       }
+      if (affaire.type === AffaireType.FACULTATIVE && !(Number(r.prime100Pct) > 0)) {
+        errs.push(`La prime 100% est obligatoire pour le réassureur ${seen.size}`);
+      }
+      if (affaire.type === AffaireType.FACULTATIVE && (r.tauxCommissionCedante === undefined || r.tauxCommissionCedante === null)) {
+        errs.push(`Le taux de commission cédante est obligatoire pour le réassureur ${seen.size}`);
+      }
     }
     const dateEffet = affaire.type === AffaireType.FACULTATIVE ? fac?.dateEffet : traite?.dateEffet;
     const dateEcheance = affaire.type === AffaireType.FACULTATIVE ? fac?.dateEcheance : traite?.dateEcheance;
     if (!dateEffet) errs.push("La date d'effet est obligatoire");
     if (!dateEcheance) errs.push("La date d'échéance est obligatoire");
     if (affaire.type === AffaireType.FACULTATIVE && fac) {
-      if (!(Number(fac.prime100Pct) > 0)) errs.push('La prime à 100% doit être supérieure à 0');
       if (!(Number(fac.tauxCession) > 0 && Number(fac.tauxCession) <= 100)) {
         errs.push('Le taux de cession doit être compris entre 0 et 100');
       }
     }
-    if (dateEffet && dateEcheance && new Date(dateEffet) >= new Date(dateEcheance)) {
-      errs.push('La date d\'effet doit être antérieure à la date d\'échéance');
+    if (dateEffet && dateEcheance && new Date(dateEffet) > new Date(dateEcheance)) {
+      errs.push("La date d'effet doit être antérieure ou égale à la date d'échéance");
     }
     setErrors(errs);
     return errs.length === 0;
@@ -163,13 +181,14 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
       currency,
       ...(currency !== 'TND' && roe !== undefined ? { roe } : {}),
       chargeDossier: chargeDossier.trim(),
+      nom: nom.trim(),
+      renouvellementDetails: renouvellementDetails.trim(),
       reassureurs,
       ...(affaire.type === AffaireType.FACULTATIVE && fac
         ? {
             facultativeData: {
               reassuranceType: fac.reassuranceType,
               assureId: fac.assureId,
-              numeroPoliceCedante: fac.numeroPoliceCedante,
               dateEffet: fac.dateEffet,
               dateEcheance: fac.dateEcheance,
               modeRenouvellement: fac.modeRenouvellement,
@@ -177,11 +196,11 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
               branche: fac.branche,
               produit: fac.produit,
               garantie: fac.garantie,
-              prime100Pct: fac.prime100Pct,
-              tauxPrime: fac.tauxPrime,
+              prime100Pct: fac.prime100Pct ?? reassureurs[0]?.prime100Pct ?? 0,
+              tauxPrime: fac.tauxPrime === undefined ? null : fac.tauxPrime,
               tauxCession: fac.tauxCession,
               tauxCommissionCedante: fac.tauxCommissionCedante,
-              guaranteeLines,
+              guaranteeLines: guaranteeLines.filter((line) => line.garantie.trim() || Number(line.capitauxAssures100) > 0),
             },
           }
         : {}),
@@ -198,7 +217,6 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
               zoneGeographique: traite.zoneGeographique,
               branche: traite.branche,
               produit: traite.produit,
-              garantie: traite.garantie,
               periodicite: traite.periodicite,
               primePrevisionnelle: traite.primePrevisionnelle,
               pmd: traite.pmd,
@@ -215,7 +233,7 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
   };
 
   const addReassureur = () =>
-    setReassureurs((prev) => [...prev, { reassureurId: '', partPct: 0, commissionMode: CommissionMode.CALCULABLE, tauxCommissionArs: 0 }]);
+    setReassureurs((prev) => [...prev, { reassureurId: '', partPct: 0, commissionMode: CommissionMode.CALCULABLE, tauxCommissionArs: tauxCourtageDefault ?? 0 }]);
   const updateReassureur = (idx: number, patch: Partial<AffaireReassureurInput>) =>
     setReassureurs((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   const removeReassureur = (idx: number) => setReassureurs((prev) => prev.filter((_, i) => i !== idx));
@@ -243,6 +261,16 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                 <option value="PAR_AFFAIRE">Par Affaire</option>
                 <option value="PAR_SITUATION">Par Situation</option>
               </select>
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Nom de l'affaire <span className="font-normal text-muted-foreground/70">(optionnel)</span></label>
+              <input
+                type="text"
+                value={nom}
+                onChange={(event) => setNom(event.target.value)}
+                placeholder="Ex: Carte Incendie 2026"
+                className="w-full px-3 py-2 border border-border bg-background rounded-lg text-[13px] focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
+              />
             </div>
             <div>
               <label className="block text-[12px] font-medium text-muted-foreground mb-1.5">Chargé de dossier</label>
@@ -292,19 +320,24 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">
-                    N° Police cédante <span className="font-normal text-gray-400">(référence cédante)</span>
-                  </label>
-                  <input type="text" value={fac.numeroPoliceCedante || ''} onChange={(e) => setFac({ ...fac, numeroPoliceCedante: e.target.value })} placeholder="Ex: POL-2026-00123" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <p className="mt-1 text-[11px] text-gray-400">Numéro de police propre à la cédante — distinct du numéro d'affaire ARS.</p>
-                </div>
-                <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Mode de renouvellement</label>
                   <select value={fac.modeRenouvellement || ''} onChange={(e) => setFac({ ...fac, modeRenouvellement: (e.target.value || undefined) as ModeRenouvellement })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">—</option>
                     {Object.entries(modeRenouvellementLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
+                {fac.modeRenouvellement === ModeRenouvellement.NEGOCIATION && (
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Détails de la négociation</label>
+                    <textarea
+                      value={renouvellementDetails}
+                      onChange={(event) => setRenouvellementDetails(event.target.value)}
+                      rows={3}
+                      placeholder="Décrivez les conditions, interlocuteurs ou points à négocier."
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date Effet</label>
                   <input type="date" value={fac.dateEffet.split('T')[0]} onChange={(e) => setFac({ ...fac, dateEffet: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -328,54 +361,81 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Produit</label>
                   <input type="text" value={fac.produit || ''} onChange={(e) => setFac({ ...fac, produit: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Garantie</label>
-                  <input type="text" value={fac.garantie || ''} onChange={(e) => setFac({ ...fac, garantie: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <div className="col-span-2">
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Garantie / Couverture</label>
+                  <input type="text" value={fac.garantie || ''} onChange={(e) => setFac({ ...fac, garantie: e.target.value })} placeholder="Ex: Tous risques chantier" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div className="col-span-2 rounded-lg border border-gray-200 p-3">
+                  <label className="block text-[12px] font-medium text-blue-800 mb-1.5">Capitaux assurés (total calculé)</label>
+                  <input type="text" value={capitauxAssuresTotal.toFixed(3)} readOnly className="w-full max-w-xs rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[13px] font-medium text-blue-900" />
+                  <div className="mt-3 border-t border-gray-100 pt-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h4 className="text-[12px] font-medium text-gray-700">Libellé et montant par ligne</h4>
+                      <button type="button" onClick={addGuaranteeLine} className="text-[12px] font-medium text-blue-600">+ Ajouter</button>
+                    </div>
+                    {guaranteeLines.map((g, idx) => (
+                      <div key={idx} className="mb-2 flex items-center gap-2">
+                        <input placeholder="Libellé de la ligne" value={g.garantie} onChange={(e) => updateGuaranteeLine(idx, { garantie: e.target.value })} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-[13px]" />
+                        <DecimalInput value={g.capitauxAssures100 || undefined} onChange={(value) => updateGuaranteeLine(idx, { capitauxAssures100: value ?? 0 })} placeholder="Capitaux assurés 100%" className="w-40 rounded-lg border border-gray-200 px-3 py-2 text-[13px]" />
+                        <button type="button" onClick={() => removeGuaranteeLine(idx)} className="rounded-lg p-2 text-red-600"><Trash2 size={14} /></button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime 100%</label>
-                  <DecimalInput value={fac.prime100Pct || undefined} onChange={(value) => setFac({ ...fac, prime100Pct: value ?? 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux de commission de courtage</label>
+                  <select
+                    value={tauxCourtageSelection}
+                    onChange={(event) => {
+                      const selection = event.target.value;
+                      setTauxCourtageSelection(selection);
+                      if (selection !== 'autre') {
+                        const value = selection ? Number(selection) : undefined;
+                        setTauxCourtageDefault(value);
+                        setReassureurs((prev) => prev.map((r) => (
+                          r.commissionMode === CommissionMode.CALCULABLE
+                            ? { ...r, tauxCommissionArs: value ?? 0 }
+                            : r
+                        )));
+                      } else {
+                        setTauxCourtageDefault(undefined);
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Sélectionner un taux</option>
+                    <option value="4">4 %</option>
+                    <option value="5">5 %</option>
+                    <option value="7.5">7,5 %</option>
+                    <option value="10">10 %</option>
+                    <option value="autre">Autre taux</option>
+                  </select>
+                  {tauxCourtageSelection === 'autre' && (
+                    <DecimalInput
+                      value={tauxCourtageDefault}
+                      onChange={(value) => {
+                        setTauxCourtageDefault(value);
+                        setReassureurs((prev) => prev.map((r) => (
+                          r.commissionMode === CommissionMode.CALCULABLE
+                            ? { ...r, tauxCommissionArs: value ?? 0 }
+                            : r
+                        )));
+                      }}
+                      placeholder="Autre taux (%)"
+                      className="mt-2 w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px]"
+                    />
+                  )}
+                  <label className="mt-2 block text-[12px] font-medium text-blue-800">Commission de courtage (calculée automatiquement)</label>
+                  <input type="text" readOnly value={(rubriques?.totals.commissionArs ?? 0).toFixed(3)} className="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[13px] font-medium text-blue-900" />
                 </div>
                 <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Prime (%)</label>
+                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Prime (%) <span className="font-normal text-gray-400">(optionnel)</span></label>
                   <DecimalInput value={fac.tauxPrime} onChange={(value) => setFac({ ...fac, tauxPrime: value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Cession (%)</label>
                   <DecimalInput value={fac.tauxCession || undefined} onChange={(value) => setFac({ ...fac, tauxCession: value ?? 0 })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Taux Commission Cédante (%)</label>
-                  <DecimalInput value={fac.tauxCommissionCedante} onChange={(value) => setFac({ ...fac, tauxCommissionCedante: value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime Cédée (calculée)</label>
-                  <input type="text" value={(Number(fac.prime100Pct || 0) * Number(fac.tauxCession || 0) / 100).toFixed(3)} disabled className="w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-lg text-[13px] text-gray-500" />
-                </div>
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Commission Cédante (calculée)</label>
-                  <input type="text" value={commissionCedanteCalc.toFixed(3)} disabled className="w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-lg text-[13px] text-gray-500" />
-                </div>
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Capitaux assurés (total des garanties)</label>
-                  <input type="text" value={capitauxAssuresTotal.toFixed(3)} disabled className="w-full px-3 py-2 border border-gray-200 bg-gray-100 rounded-lg text-[13px] text-gray-500" />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-[13px] font-semibold text-gray-900">Capitaux assurés par garantie</h4>
-                  <button type="button" onClick={addGuaranteeLine} className="flex items-center gap-1 text-[12px] text-blue-600 hover:text-blue-700 font-medium">
-                    <Plus size={13} /> Ajouter
-                  </button>
-                </div>
-                {guaranteeLines.map((g, idx) => (
-                  <div key={idx} className="flex items-center gap-2 mb-2">
-                    <input placeholder="Garantie" value={g.garantie} onChange={(e) => updateGuaranteeLine(idx, { garantie: e.target.value })} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
-                    <DecimalInput value={g.capitauxAssures100 || undefined} onChange={(value) => updateGuaranteeLine(idx, { capitauxAssures100: value ?? 0 })} placeholder="Capitaux 100%" className="w-40 px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
-                    <button type="button" onClick={() => removeGuaranteeLine(idx)} className="p-2 rounded-lg hover:bg-red-50 text-red-600"><Trash2 size={14} /></button>
-                  </div>
-                ))}
               </div>
             </div>
           )}
@@ -422,9 +482,21 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                     {Object.entries(periodiciteLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
+                {traite.modeRenouvellement === ModeRenouvellement.NEGOCIATION && (
+                  <div className="col-span-2">
+                    <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Détails de la négociation</label>
+                    <textarea
+                      value={renouvellementDetails}
+                      onChange={(event) => setRenouvellementDetails(event.target.value)}
+                      rows={3}
+                      placeholder="Décrivez les conditions, interlocuteurs ou points à négocier."
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Date avis résiliation</label>
-                  <input type="date" value={traite.dateAvisResiliation?.split('T')[0] || ''} onChange={(e) => setTraite({ ...traite, dateAvisResiliation: e.target.value || undefined })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input type="date" value={traite.dateAvisResiliation?.split('T')[0] || ''} onChange={(e) => setTraite({ ...traite, dateAvisResiliation: e.target.value || null })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Zone géographique</label>
@@ -437,10 +509,6 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Produit</label>
                   <input type="text" value={traite.produit || ''} onChange={(e) => setTraite({ ...traite, produit: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-                <div>
-                  <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Garantie</label>
-                  <input type="text" value={traite.garantie || ''} onChange={(e) => setTraite({ ...traite, garantie: e.target.value })} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[12px] font-medium text-gray-700 mb-1.5">Prime Prévisionnelle</label>
@@ -489,15 +557,27 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                     />
                   </div>
                   <DecimalInput value={r.partPct || undefined} onChange={(value) => updateReassureur(idx, { partPct: value ?? 0 })} placeholder={affaire.type === AffaireType.FACULTATIVE ? 'Part placée %' : 'Part %'} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  {affaire.type === AffaireType.FACULTATIVE && (
+                    <DecimalInput value={r.prime100Pct || undefined} onChange={(value) => updateReassureur(idx, { prime100Pct: value ?? 0 })} placeholder="Prime 100%" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  )}
                   <button type="button" onClick={() => removeReassureur(idx)} className="px-2 text-red-600 hover:bg-red-50 rounded">×</button>
                 </div>
+                {affaire.type === AffaireType.FACULTATIVE && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <DecimalInput value={r.tauxCommissionCedante} onChange={(value) => updateReassureur(idx, { tauxCommissionCedante: value ?? 0 })} placeholder="Taux cédante %" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-[13px]" />
+                    <input type="text" readOnly value={rubriques?.lines[idx]?.commissionCedante?.toFixed(3) ?? '—'} placeholder="Commission cédante calculée" className="w-full rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[13px] font-medium text-blue-900" />
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-3">
                   <select value={r.commissionMode} onChange={(e) => updateReassureur(idx, { commissionMode: e.target.value as CommissionMode })} className="px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value={CommissionMode.CALCULABLE}>Calculable</option>
                     <option value={CommissionMode.FORFAITAIRE}>Forfaitaire</option>
                   </select>
                   {r.commissionMode === CommissionMode.CALCULABLE ? (
-                    <DecimalInput value={r.tauxCommissionArs || undefined} onChange={(value) => updateReassureur(idx, { tauxCommissionArs: value ?? 0 })} placeholder="Taux courtage %" className="col-span-2 px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <>
+                      <DecimalInput value={r.tauxCommissionArs || undefined} onChange={(value) => updateReassureur(idx, { tauxCommissionArs: value ?? 0 })} placeholder="Taux courtage %" className="px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input type="text" disabled value={rubriques?.lines[idx]?.commissionArs?.toFixed(3) ?? '—'} placeholder="Commission calculée" title="Commission de courtage (calculée)" className="px-3 py-2 border border-gray-200 bg-gray-100 rounded-lg text-[13px] text-gray-500" />
+                    </>
                   ) : (
                     <DecimalInput value={r.commissionForfait || undefined} onChange={(value) => updateReassureur(idx, { commissionForfait: value ?? 0 })} placeholder="Montant forfaitaire" className="col-span-2 px-3 py-2 border border-gray-200 rounded-lg text-[13px] focus:outline-none focus:ring-2 focus:ring-blue-500" />
                   )}
@@ -507,7 +587,7 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
             <div className={`p-2 rounded-lg text-[12px] ${shareOk ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>
               Total: {totalShare.toFixed(4)}% {!shareOk && `(doit être ${expectedShareTotal}%)`}
             </div>
-            {affaire.type === AffaireType.FACULTATIVE && fac && rubriques && Number(fac.prime100Pct) > 0 && (
+            {affaire.type === AffaireType.FACULTATIVE && fac && rubriques && (
               <div className="mt-3">
                 <ReassureurRubriquesTable
                   rows={previewRows(
@@ -527,14 +607,14 @@ export default function AffaireEditModal({ affaire, onClose }: Props) {
                   totals={rubriques.totals}
                   compagnie={affaire.cedante.raisonSociale}
                   type={typeLabels[AffaireType.FACULTATIVE]}
-                  cover={fac.garantie || ''}
+                  cover=""
                   dateEffet={fac.dateEffet}
                   dateExpiration={fac.dateEcheance}
                   chargeDossier={chargeDossier}
                   currency={currency}
                   roe={effectiveRoe(currency, roe)}
-                  prime100Pct={Number(fac.prime100Pct || 0)}
-                  tauxCommissionCedante={Number(fac.tauxCommissionCedante || 0)}
+                  prime100Pct={Number(fac.prime100Pct ?? reassureurs[0]?.prime100Pct ?? 0)}
+                  tauxCommissionCedante={Number(fac.tauxCommissionCedante ?? reassureurs[0]?.tauxCommissionCedante ?? 0)}
                 />
               </div>
             )}

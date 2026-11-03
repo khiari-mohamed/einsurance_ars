@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Plus, Trash2, Calendar, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { traitesApi } from '../../api/traites.api';
@@ -33,6 +34,22 @@ export default function PMDInstalmentSchedule({
     { numero: 2, montant: pmdTotal * 0.5, pourcentage: 50, dateEcheance: '', statut: 'en_attente' },
   ]);
   const [saving, setSaving] = useState(false);
+  const { data: existing } = useQuery({
+    queryKey: ['traite-pmd-instalments', affaireId],
+    queryFn: () => traitesApi.getPmdInstalments(affaireId),
+  });
+  useEffect(() => {
+    if (existing?.data?.length) {
+      setInstalments(existing.data.map((item) => ({
+        numero: item.numeroTranche,
+        montant: Number(item.montant),
+        pourcentage: pmdTotal > 0 ? Number(item.montant) / pmdTotal * 100 : 0,
+        dateEcheance: item.dateEcheance.slice(0, 10),
+        statut: item.isPaid ? 'paye' : 'en_attente',
+        datePaiement: item.paidAt ?? undefined,
+      })));
+    }
+  }, [existing, pmdTotal]);
 
   const addInstalment = () => {
     const newInstalment: PMDInstalment = {
@@ -71,7 +88,7 @@ export default function PMDInstalmentSchedule({
 
   const handleSave = async () => {
     const total = getTotalPourcentage();
-    if (Math.abs(total - 100) > 0.01) {
+    if (Math.abs(total - 100) > 0.01 || Math.abs(getTotalMontant() - pmdTotal) > 0.01) {
       toast.error(`Le total doit être 100% (actuellement ${total.toFixed(2)}%)`);
       return;
     }
@@ -88,6 +105,7 @@ export default function PMDInstalmentSchedule({
           numeroTranche: inst.numero,
           dateEcheance: inst.dateEcheance,
           montant: inst.montant,
+          tauxDeduction: 0,
         })),
       );
       toast.success('Échéancier PMD enregistré avec succès');

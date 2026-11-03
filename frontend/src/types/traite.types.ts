@@ -40,7 +40,7 @@ export interface TraiteListItem {
   dateEffet: string;
   dateEcheance: string;
   modeRenouvellement?: ModeRenouvellement;
-  dateAvisResiliation?: string;
+  dateAvisResiliation?: string | null;
   zoneGeographique?: string;
   branche?: string;
   produit?: string;
@@ -118,6 +118,33 @@ export interface PmdInstalmentInput {
   dateEcheance: string;
   montant: number;
   tauxDeduction?: number;
+}
+
+export interface NonProportionalLine {
+  id: string;
+  ordre: number;
+  priorite: number;
+  pmd: number;
+  portee: number;
+  epi: number;
+  tauxPrime: number;
+  tauxCommissionCedante: number;
+  tauxCommissionArs: number;
+  commissionCedante: number;
+  commissionArs: number;
+  primeAnnuelle: number;
+  primeNette: number;
+}
+
+export interface NonProportionalLineInput {
+  priorite: number;
+  pmd: number;
+  portee: number;
+  epi: number;
+  tauxPrime: number;
+  tauxCommissionCedante?: number;
+  tauxCommissionArs?: number;
+  ordre?: number;
 }
 
 export interface LiquidationInput {

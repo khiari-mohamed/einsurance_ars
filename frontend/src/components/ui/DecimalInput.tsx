@@ -8,6 +8,7 @@ interface DecimalInputProps {
   placeholder?: string;
   disabled?: boolean;
   required?: boolean;
+  list?: string;
 }
 
 // digits, spaces and separators only (the parser validates the final shape)
@@ -16,7 +17,7 @@ const toText = (v: number | null | undefined) =>
   v === null || v === undefined ? '' : String(v).replace('.', ',');
 
 export default function DecimalInput({
-  value, onChange, className, placeholder, disabled, required,
+  value, onChange, className, placeholder, disabled, required, list,
 }: DecimalInputProps) {
   const [text, setText] = useState<string>(toText(value));
   const lastEmitted = useRef<number | undefined>(value ?? undefined);
@@ -39,6 +40,7 @@ export default function DecimalInput({
       placeholder={placeholder}
       disabled={disabled}
       required={required}
+      list={list}
       className={className}
       onChange={(e) => {
         const raw = e.target.value;

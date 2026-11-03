@@ -5,6 +5,8 @@ export const round3 = (n: number): number => Math.round(n * 1000) / 1000;
 export interface RubriqueLineInput {
   key: string;
   partPct: number;
+  prime100Pct?: number;
+  tauxCommissionCedante?: number;
   commissionMode?: CommissionMode;
   tauxCommissionArs?: number;
   commissionForfait?: number;
@@ -41,8 +43,10 @@ export function computeFacRubriques(
 
   const out = lines.map((l) => {
     const part = Number(l.partPct) || 0;
-    const pc = p100 * (part / 100);
-    const cc = pc * (tCed / 100);
+    const linePrime100 = Number(l.prime100Pct ?? p100) || 0;
+    const lineTauxCedante = Number(l.tauxCommissionCedante ?? tCed) || 0;
+    const pc = linePrime100 * (part / 100);
+    const cc = pc * (lineTauxCedante / 100);
     const ca =
       l.commissionMode === CommissionMode.FORFAITAIRE
         ? Number(l.commissionForfait) || 0

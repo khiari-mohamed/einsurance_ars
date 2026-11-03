@@ -26,6 +26,8 @@ import {
 } from './dto/create-traite.dto';
 import { UpdateTraiteDto } from './dto/update-traite.dto';
 import { PersistLiquidationDto } from './dto/persist-liquidation.dto';
+import { NonProportionalLineDto } from './dto/non-proportional-line.dto';
+import { CommissionCalculatorService } from '../commission-calculator.service';
 @Injectable()
 export class TraitesService {
   private readonly logger = new Logger(TraitesService.name);
@@ -33,6 +35,7 @@ export class TraitesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly calculator: TreatyCalculatorService,
+    private readonly commissionCalculator: CommissionCalculatorService,
     private readonly notification: NotificationService,
     private readonly pdf: PdfService,
   ) {}
@@ -80,6 +83,7 @@ export class TraitesService {
           },
           accountRubriques: { orderBy: { ordre: 'asc' } },
           pmdInstalments: { orderBy: { numeroTranche: 'asc' } },
+          nonProportionalLines: { orderBy: { ordre: 'asc' } },
           _count: { select: { situations: true } },
         },
         skip, take: limit,
@@ -103,6 +107,7 @@ export class TraitesService {
         },
         accountRubriques: { orderBy: { ordre: 'asc' } },
         pmdInstalments: { orderBy: { numeroTranche: 'asc' } },
+        nonProportionalLines: { orderBy: { ordre: 'asc' } },
         situations: { orderBy: { createdAt: 'desc' }, take: 5, include: { _count: { select: { lines: true } } } },
       },
     });
@@ -265,9 +270,56 @@ export class TraitesService {
     return this.prisma.pmdInstalment.findMany({ where: { traiteId: traite.id }, orderBy: { numeroTranche: 'asc' } });
   }
 
+  async getNonProportionalLines(affaireId: string) {
+    const traite = await this.prisma.traiteAffaire.findUnique({ where: { affaireId }, select: { id: true } });
+    if (!traite) throw new NotFoundException('Traité introuvable');
+    return this.prisma.nonProportionalLine.findMany({ where: { traiteId: traite.id }, orderBy: { ordre: 'asc' } });
+  }
+
+  async replaceNonProportionalLines(affaireId: string, lines: NonProportionalLineDto[]) {
+    const traite = await this.findOne(affaireId);
+    if (traite.affaire.statut === AffaireStatut.PLACEMENT_REALISE) {
+      throw new BadRequestException('Les lignes non proportionnelles ne peuvent plus être modifiées après placement');
+    }
+    const calculated = lines.map((line, index) => {
+      if (line.portee <= 0 || line.epi < 0 || line.pmd < 0) {
+        throw new BadRequestException(`Valeurs invalides pour la ligne ${index + 1}`);
+      }
+      const result = this.commissionCalculator.calculateNonProportionalLine(line);
+      return {
+        priorite: line.priorite,
+        pmd: line.pmd,
+        portee: line.portee,
+        epi: line.epi,
+        tauxPrime: line.tauxPrime,
+        tauxCommissionCedante: line.tauxCommissionCedante ?? 0,
+        tauxCommissionArs: line.tauxCommissionArs ?? 0,
+        primeAnnuelle: result.primeAnnuelle,
+        commissionCedante: result.commissionCedante,
+        commissionArs: result.commissionArs,
+        primeNette: result.primeNette,
+        ordre: line.ordre ?? index + 1,
+      };
+    });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.nonProportionalLine.deleteMany({ where: { traiteId: traite.id } });
+      if (calculated.length) {
+        await tx.nonProportionalLine.createMany({
+          data: calculated.map((line) => ({ traiteId: traite.id, ...line })),
+        });
+      }
+      return tx.nonProportionalLine.findMany({ where: { traiteId: traite.id }, orderBy: { ordre: 'asc' } });
+    });
+  }
+
   async replacePmdInstalments(affaireId: string, instalments: PmdInstalmentDto[]) {
     const traite = await this.prisma.traiteAffaire.findUnique({ where: { affaireId }, select: { id: true } });
     if (!traite) throw new NotFoundException('Traité introuvable');
+    const total = instalments.reduce((sum, item) => sum + item.montant, 0);
+    const pmd = await this.prisma.traiteAffaire.findUnique({ where: { affaireId }, select: { pmd: true } });
+    if (pmd?.pmd && Math.abs(total - Number(pmd.pmd)) > 0.001) {
+      throw new BadRequestException('Le total des tranches doit être égal au PMD');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.pmdInstalment.findMany({ where: { traiteId: traite.id }, select: { isPaid: true } });
@@ -469,7 +521,10 @@ export class TraitesService {
     const dueForRenewal = await this.prisma.traiteAffaire.findMany({
       where: {
         dateEcheance: { gte: now, lte: cutoff },
-        modeRenouvellement: { not: ModeRenouvellement.RESILIATION },
+        OR: [
+          { modeRenouvellement: { not: ModeRenouvellement.RESILIATION } },
+          { modeRenouvellement: null },
+        ],
         affaire: { isActive: true, statut: AffaireStatut.PLACEMENT_REALISE },
       },
       include: {
@@ -562,8 +617,8 @@ export class TraitesService {
 
   private assertDateOrder(effet?: string, echeance?: string): void {
     if (!effet || !echeance) return;
-    if (new Date(effet) >= new Date(echeance)) {
-      throw new BadRequestException('La date d\'effet doit être antérieure à la date d\'échéance');
+    if (new Date(effet) > new Date(echeance)) {
+      throw new BadRequestException("La date d'effet doit être antérieure ou égale à la date d'échéance");
     }
   }
 }

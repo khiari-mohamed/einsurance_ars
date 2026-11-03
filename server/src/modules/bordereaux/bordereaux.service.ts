@@ -341,6 +341,7 @@ export class BordereauxService {
           ...l,
           periodeDebut: l.periodeDebut ? new Date(l.periodeDebut) : undefined,
           periodeFin: l.periodeFin ? new Date(l.periodeFin) : undefined,
+          dateSinistre: l.dateSinistre ? new Date(l.dateSinistre) : undefined,
           ordre: l.ordre ?? i + 1,
         })) } : undefined,
       },
@@ -390,6 +391,7 @@ export class BordereauxService {
               ...l,
               periodeDebut: l.periodeDebut ? new Date(l.periodeDebut) : undefined,
               periodeFin: l.periodeFin ? new Date(l.periodeFin) : undefined,
+              dateSinistre: l.dateSinistre ? new Date(l.dateSinistre) : undefined,
               ordre: l.ordre ?? i + 1,
             })) },
           }),
@@ -427,7 +429,7 @@ export class BordereauxService {
       where: { id: dto.affaireId },
       include: {
         cedante: true,
-        facultativeData: { include: { guaranteeLines: true } },
+        facultativeData: { include: { guaranteeLines: true, assure: true } },
         traiteData: { include: { accountRubriques: true } },
         reassureurs: { include: { reassureur: true } },
       },
@@ -452,11 +454,7 @@ export class BordereauxService {
       }, userId);
       results.push(b);
 
-      try {
-        await this.accounting.generateForFacultativeAffaire(affaire.id);
-      } catch (err: any) {
-        this.logger.error(`Accounting entry generation failed for affaire ${affaire.id}: ${err.message}`);
-      }
+      await this.accounting.generateForFacultativeAffaire(affaire.id);
     }
 
     if (dto.type === BordereauType.CESSION_REASSUREUR) {
@@ -484,27 +482,54 @@ export class BordereauxService {
         where: {
           affaireId: dto.affaireId,
           statut: { in: ['VALIDE', 'DECLARE_REASSUREURS', 'EN_RECUPERATION', 'RECUPERE', 'CLOS'] },
-          ...(dto.datePeriodeDebut && { dateSurvenance: { gte: new Date(dto.datePeriodeDebut) } }),
-          ...(dto.datePeriodeFin && { dateSurvenance: { lte: new Date(dto.datePeriodeFin) } }),
+        },
+        include: {
+          affaire: { include: { cedante: true, facultativeData: { include: { assure: true } } } },
+          participations: true,
+          payments: true,
         },
       });
-
-      const b = await this.create({
-        type: BordereauType.SINISTRE_FACULTATIVE,
-        affaireId: dto.affaireId,
-        datePeriodeDebut: dto.datePeriodeDebut,
-        datePeriodeFin: dto.datePeriodeFin,
-        dateLimitePaiement: dto.dateLimitePaiement,
-        currency: affaire.currency,
-        lines: sinistres.map((s, i) => ({
-          libelle: `Sinistre ${s.numero} — ${new Date(s.dateSurvenance).toLocaleDateString('fr-TN')}`,
-          sinistresPayes: Number(s.partReassureurs ?? 0),
-          recConstitues: Number(s.reserves ?? 0),
-          sapConstitues: Number(s.sap ?? 0),
-          ordre: i + 1,
-        })),
-      }, userId);
-      results.push(b);
+      const reinsurerCodes = [...new Set(sinistres.flatMap((s) => s.participations.map((p) => p.reassureurCode)))];
+      for (const reassureurCode of reinsurerCodes) {
+        const lines = sinistres.flatMap((s) => {
+          const participation = s.participations.find((p) => p.reassureurCode === reassureurCode);
+          if (!participation) return [];
+          const payments = s.payments.filter((p) =>
+            (!dto.datePeriodeDebut || p.datePaiement >= new Date(dto.datePeriodeDebut)) &&
+            (!dto.datePeriodeFin || p.datePaiement <= new Date(dto.datePeriodeFin)),
+          );
+          const sourcePayments = payments.length
+            ? payments
+            : [{ montant100: Number(s.reglementExerciceN ?? 0), datePaiement: s.dateSurvenance }];
+          return sourcePayments.map((payment, i) => {
+            const montant100 = Number(payment.montant100);
+            const montantPart = Math.round(montant100 * Number(participation.partPct) / 100 * 1000) / 1000;
+            return {
+              libelle: `Sinistre ${s.numeroSinistreCedante ?? s.numero}`,
+              numeroSinistre: s.numeroSinistreCedante ?? s.numero,
+              assure: s.affaire.facultativeData?.assure?.raisonSociale,
+              branche: s.affaire.facultativeData?.branche,
+              dateSinistre: s.dateSurvenance.toISOString(),
+              montantPaye100: montant100,
+              partPct: Number(participation.partPct),
+              montantPart,
+              sinistresPayes: montantPart,
+              ordre: i + 1,
+            };
+          });
+        });
+        const b = await this.create({
+          type: BordereauType.SINISTRE_FACULTATIVE,
+          affaireId: dto.affaireId,
+          reassureurCode,
+          datePeriodeDebut: dto.datePeriodeDebut,
+          datePeriodeFin: dto.datePeriodeFin,
+          dateLimitePaiement: dto.dateLimitePaiement,
+          currency: affaire.currency,
+          lines,
+        }, userId);
+        results.push(b);
+      }
     }
 
     if (results.length === 0) {
@@ -519,14 +544,27 @@ export class BordereauxService {
   private buildCedanteLines(affaire: any): any[] {
     if (affaire.facultativeData) {
       const fac = affaire.facultativeData;
+      const linePrimeBrute = affaire.reassureurs.reduce((s: number, r: any) => s + Number(r.primeBrute ?? 0), 0);
+      const lineCommissionCedante = affaire.reassureurs.reduce((s: number, r: any) => s + Number(r.commissionCedante ?? 0), 0);
+      const lineCommissionCourtage = affaire.reassureurs.reduce((s: number, r: any) => s + Number(r.commissionArs ?? 0), 0);
+      const primeBrute = linePrimeBrute > 0 ? linePrimeBrute : Number(fac.primeCedee ?? 0);
+      const commissionCedante = lineCommissionCedante > 0
+        ? lineCommissionCedante
+        : Number(fac.commissionCedante ?? 0);
       return [{
         libelle: `${affaire.numero} — ${fac.garantie ?? 'Toutes garanties'}`,
         prime100: Number(fac.prime100Pct),
         tauxCession: Number(fac.tauxCession),
-        primeBrute: Number(fac.primeCedee ?? 0),
-        commissionCedante: Number(fac.commissionCedante ?? 0),
-        commissionCourtage: affaire.reassureurs.reduce((s: number, r: any) => s + Number(r.commissionArs ?? 0), 0),
-        primeNette: Number(fac.primeCedee ?? 0) - Number(fac.commissionCedante ?? 0) - affaire.reassureurs.reduce((s: number, r: any) => s + Number(r.commissionArs ?? 0), 0),
+        primeBrute,
+        commissionCedante,
+        commissionCourtage: lineCommissionCourtage,
+        primeNette: primeBrute - commissionCedante,
+        couverture: fac.garantie ?? 'AS COVER NOTE DETAILS',
+        periodeDebut: affaire.facultativeData.dateEffet,
+        periodeFin: affaire.facultativeData.dateEcheance,
+        capitaux100: affaire.facultativeData.guaranteeLines.length
+          ? affaire.facultativeData.guaranteeLines.reduce((sum: number, line: any) => sum + Number(line.capitauxAssures100), 0)
+          : undefined,
         ordre: 1,
       }];
     }
@@ -550,6 +588,10 @@ export class BordereauxService {
         primeBrute: Number(reassureurParticipation.primeBrute ?? 0),
         commissionCedante: Number(reassureurParticipation.commissionCedante ?? 0),
         commissionCourtage: Number(reassureurParticipation.commissionArs ?? 0),
+        couverture: affaire.facultativeData.garantie ?? 'AS COVER NOTE DETAILS',
+        periodeDebut: affaire.facultativeData.dateEffet,
+        periodeFin: affaire.facultativeData.dateEcheance,
+        prime100: Number(reassureurParticipation.prime100Pct ?? affaire.facultativeData.prime100Pct),
         primeNette: Number(reassureurParticipation.primeNetteReassureur ?? 0),
         ordre: 1,
       }];

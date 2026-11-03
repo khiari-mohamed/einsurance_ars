@@ -32,7 +32,12 @@ export class SinistreNotificationService {
     }
 
     // Check notification threshold for proportional treaties
-    if (sinistre.affaire.traiteData?.seuilNotification && sinistre.reserves) {
+    if (
+      sinistre.affaire.type === 'TRAITE' &&
+      sinistre.affaire.traiteData?.reassuranceType === 'PROPORTIONNEL' &&
+      sinistre.affaire.traiteData.seuilNotification &&
+      sinistre.reserves
+    ) {
       if (Number(sinistre.reserves) < Number(sinistre.affaire.traiteData.seuilNotification)) {
         throw new BadRequestException(
           `Montant des réserves (${sinistre.reserves}) inférieur au seuil de notification (${sinistre.affaire.traiteData.seuilNotification})`,
@@ -90,10 +95,12 @@ export class SinistreNotificationService {
       }
 
       // Mark as notified
-      await this.prisma.sinistreParticipation.updateMany({
-        where: { sinistreId, reassureurCode: r.reassureur.code },
-        data: { isNotified: true, notifiedAt: new Date() },
-      });
+      if (emails.length > 0) {
+        await this.prisma.sinistreParticipation.updateMany({
+          where: { sinistreId, reassureurCode: r.reassureur.code },
+          data: { isNotified: true, notifiedAt: new Date() },
+        });
+      }
     }
 
     this.notification.notifyRole(
@@ -134,6 +141,9 @@ export class SinistreNotificationService {
   async close(sinistreId: string, userId: string, note?: string): Promise<void> {
     const sinistre = await this.prisma.sinistre.findUniqueOrThrow({ where: { id: sinistreId } });
 
+    if (sinistre.statut !== SinistreStatut.EN_RECUPERATION && sinistre.statut !== SinistreStatut.RECUPERE) {
+      throw new BadRequestException('Un sinistre doit être en récupération avant clôture');
+    }
     await this.prisma.$transaction([
       this.prisma.sinistre.update({
         where: { id: sinistreId },

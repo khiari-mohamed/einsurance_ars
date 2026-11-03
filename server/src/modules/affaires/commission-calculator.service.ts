@@ -2,12 +2,14 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { CommissionMode } from '@prisma/client';
 
 export interface CommissionInput {
-  /** Prime à 100% — NOT rounded. Base for every per-reinsurer figure. */
+  /** Legacy affaire-level premium, used when a line has no own premium. */
   prime100Pct: number;
-  /** Cedante commission rate, % (0–100) */
-  tauxCommissionCedante: number;
+  /** Legacy affaire-level cedante rate, used when a line has no own rate. */
+  tauxCommissionCedante?: number;
   reassureurs: {
     reassureurId: string;
+    prime100Pct?: number;
+    tauxCommissionCedante?: number;
     /** Part placée — % of the 100% premium (facultative) */
     partPct: number;
     commissionMode: CommissionMode;
@@ -26,6 +28,23 @@ export interface CommissionResult {
   primeNetteReassureur: number;  // primeBrute − commissionCedante − commissionArs
 }
 
+export interface NonProportionalLineInput {
+  priorite: number;
+  pmd: number;
+  portee: number;
+  epi: number;
+  tauxPrime: number;
+  tauxCommissionCedante?: number;
+  tauxCommissionArs?: number;
+}
+
+export interface NonProportionalLineResult extends NonProportionalLineInput {
+  primeAnnuelle: number;
+  commissionCedante: number;
+  commissionArs: number;
+  primeNette: number;
+}
+
 @Injectable()
 export class CommissionCalculatorService {
   /**
@@ -39,8 +58,9 @@ export class CommissionCalculatorService {
    */
   calculate(input: CommissionInput): CommissionResult[] {
     return input.reassureurs.map((r) => {
-      const prime = input.prime100Pct * (r.partPct / 100);
-      const commissionCedante = prime * (input.tauxCommissionCedante / 100);
+      const prime100 = r.prime100Pct ?? input.prime100Pct;
+      const prime = prime100 * (r.partPct / 100);
+      const commissionCedante = prime * ((r.tauxCommissionCedante ?? input.tauxCommissionCedante ?? 0) / 100);
       const commissionArs =
         r.commissionMode === CommissionMode.FORFAITAIRE
           ? r.commissionForfait ?? 0
@@ -68,6 +88,19 @@ export class CommissionCalculatorService {
         `La somme des participations doit être égale à ${expectedTotal.toFixed(4)}% (actuel: ${total.toFixed(4)}%)`,
       );
     }
+  }
+
+  calculateNonProportionalLine(input: NonProportionalLineInput): NonProportionalLineResult {
+    const primeAnnuelle = input.epi * (input.tauxPrime / 100);
+    const commissionCedante = primeAnnuelle * ((input.tauxCommissionCedante ?? 0) / 100);
+    const commissionArs = primeAnnuelle * ((input.tauxCommissionArs ?? 0) / 100);
+    return {
+      ...input,
+      primeAnnuelle: this.round3(primeAnnuelle),
+      commissionCedante: this.round3(commissionCedante),
+      commissionArs: this.round3(commissionArs),
+      primeNette: this.round3(primeAnnuelle - commissionCedante - commissionArs),
+    };
   }
 
   private round3(n: number): number {

@@ -6,7 +6,7 @@
 // a guaranteed 404. updateStatus now uses PATCH (matches controller) and
 // sends `statut` (French field name the DTO actually expects), not `status`.
 import api from '../lib/api';
-import { CreateAffaireDto, UpdateAffaireDto, Affaire, AffaireStatut, AffairesListResponse } from '../types/affaire.types';
+import { CreateAffaireDto, UpdateAffaireDto, Affaire, AffaireStatut, AffairesListResponse, AffaireNegotiation } from '../types/affaire.types';
 
 interface AffaireFilters {
   cedanteId?: string;
@@ -39,6 +39,14 @@ export const affairesApi = {
 
   delete: (id: string) =>
     api.delete<void>(`/affaires/${id}`),
+  createNegotiation: (id: string, data: Omit<AffaireNegotiation, 'id'>) =>
+    api.post<AffaireNegotiation>(`/affaires/${id}/negotiations`, data),
+  updateNegotiation: (id: string, negotiationId: string, data: Partial<Omit<AffaireNegotiation, 'id'>>) =>
+    api.put<AffaireNegotiation>(`/affaires/${id}/negotiations/${negotiationId}`, data),
+  deleteNegotiation: (id: string, negotiationId: string) =>
+    api.delete<void>(`/affaires/${id}/negotiations/${negotiationId}`),
+  updateRenewalDetails: (id: string, details: string) =>
+    api.patch<Affaire>(`/affaires/${id}/renewal-details`, { details }),
 };
 
 export default affairesApi;

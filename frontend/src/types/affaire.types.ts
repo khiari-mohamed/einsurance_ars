@@ -83,6 +83,8 @@ export interface AffaireReassureur {
   reassureurId: string;
   reassureur: PartnerRef;
   partPct: number;
+  prime100Pct?: number;
+  tauxCommissionCedante?: number;
   isLeader: boolean;
   commissionMode: CommissionMode;
   tauxCommissionArs?: number;
@@ -107,7 +109,6 @@ export interface FacultativeAffaire {
   reassuranceType: ReassuranceType;
   assureId: string;
   assure: PartnerRef;
-  numeroPoliceCedante?: string;
   dateEffet: string;
   dateEcheance: string;
   modeRenouvellement?: ModeRenouvellement;
@@ -116,7 +117,7 @@ export interface FacultativeAffaire {
   produit?: string;
   garantie?: string;
   prime100Pct: number;
-  tauxPrime?: number;
+  tauxPrime?: number | null;
   tauxCession: number;
   primeCedee?: number;
   tauxCommissionCedante?: number;
@@ -150,7 +151,7 @@ export interface TraiteAffaire {
   dateEffet: string;
   dateEcheance: string;
   modeRenouvellement?: ModeRenouvellement;
-  dateAvisResiliation?: string;
+  dateAvisResiliation?: string | null;
   zoneGeographique?: string;
   branche?: string;
   produit?: string;
@@ -177,6 +178,9 @@ export interface Affaire {
   currency: string;
   roe?: number | string | null;   // Prisma Decimal arrives as a string
   chargeDossier?: string | null;
+  nom?: string | null;
+  renouvellementDetails?: string | null;
+  negotiations?: AffaireNegotiation[];
   reassureurs: AffaireReassureur[];
   facultativeData?: FacultativeAffaire;
   traiteData?: TraiteAffaire;
@@ -205,6 +209,8 @@ export interface AffairesListResponse {
 export interface AffaireReassureurInput {
   reassureurId: string;
   partPct: number;
+  prime100Pct?: number;
+  tauxCommissionCedante?: number;
   isLeader?: boolean;
   commissionMode?: CommissionMode;
   tauxCommissionArs?: number;
@@ -220,7 +226,6 @@ export interface GuaranteeLineInput {
 export interface FacultativeDataInput {
   reassuranceType: ReassuranceType;
   assureId: string;
-  numeroPoliceCedante?: string;
   dateEffet: string;
   dateEcheance: string;
   modeRenouvellement?: ModeRenouvellement;
@@ -228,8 +233,8 @@ export interface FacultativeDataInput {
   branche?: string;
   produit?: string;
   garantie?: string;
-  prime100Pct: number;
-  tauxPrime?: number;
+  prime100Pct?: number;
+  tauxPrime?: number | null;
   tauxCession: number;
   tauxCommissionCedante?: number;
   guaranteeLines?: GuaranteeLineInput[];
@@ -255,7 +260,7 @@ export interface TraiteDataInput {
   dateEffet: string;
   dateEcheance: string;
   modeRenouvellement?: ModeRenouvellement;
-  dateAvisResiliation?: string;
+  dateAvisResiliation?: string | null;
   zoneGeographique?: string;
   branche?: string;
   produit?: string;
@@ -277,12 +282,31 @@ export interface CreateAffaireDto {
   currency?: string;
   roe?: number;
   chargeDossier?: string;
+  nom?: string;
+  renouvellementDetails?: string;
   reassureurs: AffaireReassureurInput[];
   facultativeData?: FacultativeDataInput;
   traiteData?: TraiteDataInput;
 }
 
 export type UpdateAffaireDto = Partial<CreateAffaireDto>;
+
+export type NegotiationSubject =
+  | 'PRIME_TAUX' | 'RETENTION' | 'CAPACITE'
+  | 'COMMISSION_COURTAGE' | 'PARTICIPATION_BENEFICIAIRE' | 'AUTRE';
+export type NegotiationStatus = 'EN_COURS' | 'ACCEPTEE' | 'REFUSEE';
+export interface AffaireNegotiation {
+  id: string;
+  round: number;
+  date: string;
+  counterparty: string;
+  subject: NegotiationSubject;
+  currentValue?: string | null;
+  proposedValue?: string | null;
+  status: NegotiationStatus;
+  deadline?: string | null;
+  notes?: string | null;
+}
 
 // ============================================================
 // UI labels

@@ -4,6 +4,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class CreateSinistreDto {
   @ApiProperty() @IsString() affaireId: string;
   @IsOptional() @IsString() numerPolice?: string;
+  @IsOptional() @IsString() numeroSinistreCedante?: string;
   @IsOptional() @IsString() periodeCouverture?: string;
   @ApiProperty() @IsDateString() dateSurvenance: string;
   @IsOptional() @IsNumber() @Min(0) reglementExerciceN?: number;

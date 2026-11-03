@@ -19,6 +19,8 @@ import GuaranteeLinesManager from '../../components/affaires/GuaranteeLinesManag
 import PmdInstalmentsManager from '../../components/affaires/PmdInstalmentsManager';
 import TreatyAccountRubriquesManager from '../../components/affaires/TreatyAccountRubriquesManager';
 import TreatyParametersManager from '../../components/affaires/TreatyParametersManager';
+import RenewalNegotiationPanel from '../../components/affaires/RenewalNegotiationPanel';
+import NonProportionalLinesManager from '../../components/affaires/NonProportionalLinesManager';
 
 export default function AffaireDetail() {
   const { id } = useParams();
@@ -81,6 +83,8 @@ export default function AffaireDetail() {
           affaire.reassureurs.map((r, index) => ({
             key: r.id || `row-${index}`,
             partPct: Number(r.partPct),
+            prime100Pct: r.prime100Pct == null ? undefined : Number(r.prime100Pct),
+            tauxCommissionCedante: r.tauxCommissionCedante == null ? undefined : Number(r.tauxCommissionCedante),
             commissionMode: r.commissionMode,
             tauxCommissionArs: r.tauxCommissionArs == null ? undefined : Number(r.tauxCommissionArs),
             commissionForfait: r.commissionForfait == null ? undefined : Number(r.commissionForfait),
@@ -127,7 +131,10 @@ export default function AffaireDetail() {
 
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-foreground font-mono">{affaire.numero}</h1>
+            <div>
+              <h1 className="text-2xl font-semibold text-foreground font-mono">{affaire.numero}</h1>
+              {affaire.nom && <p className="text-sm text-muted-foreground mt-1">{affaire.nom}</p>}
+            </div>
             <p className="text-[13px] text-muted-foreground mt-1">
               {typeLabels[affaire.type]} · Créée le {formatDate(affaire.createdAt)}
             </p>
@@ -212,7 +219,7 @@ export default function AffaireDetail() {
           <div className="rounded-2xl border border-border bg-card shadow-sm">
             <div className="border-b border-border px-6 py-4">
               <div className="flex gap-6">
-                {['overview', 'financials', 'reinsurers', 'related'].map((tab) => (
+                {['overview', 'financials', 'reinsurers', 'renewal', 'related'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
@@ -223,6 +230,7 @@ export default function AffaireDetail() {
                     {tab === 'overview' && "Vue d'ensemble"}
                     {tab === 'financials' && 'Données Financières'}
                     {tab === 'reinsurers' && 'Réassureurs'}
+                    {tab === 'renewal' && 'Renouvellement / négociation'}
                     {tab === 'related' && 'Sinistres & Bordereaux'}
                   </button>
                 ))}
@@ -261,8 +269,8 @@ export default function AffaireDetail() {
                       {affaire.type === AffaireType.FACULTATIVE && affaire.facultativeData && (
                         <>
                           <div><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Type de réassurance</p><p className="text-[13px] text-foreground">{reassuranceTypeLabels[affaire.facultativeData.reassuranceType]}</p></div>
-                          {affaire.facultativeData.numeroPoliceCedante && <div><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">N° Police</p><p className="text-[13px] text-foreground">{affaire.facultativeData.numeroPoliceCedante}</p></div>}
                           {affaire.facultativeData.branche && <div><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Branche</p><p className="text-[13px] text-foreground">{affaire.facultativeData.branche}</p></div>}
+                          {affaire.facultativeData.garantie && <div><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Garantie / Couverture</p><p className="text-[13px] text-foreground">{affaire.facultativeData.garantie}</p></div>}
                           <div><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Période</p><p className="text-[13px] text-foreground">{formatDate(affaire.facultativeData.dateEffet)} → {formatDate(affaire.facultativeData.dateEcheance)}</p></div>
                           {affaire.facultativeData.modeRenouvellement && <div><p className="text-[11px] uppercase font-medium text-muted-foreground mb-1">Renouvellement</p><p className="text-[13px] text-foreground">{modeRenouvellementLabels[affaire.facultativeData.modeRenouvellement]}</p></div>}
                         </>
@@ -299,6 +307,7 @@ export default function AffaireDetail() {
                               <p className="text-[15px] font-semibold text-foreground">{effectiveRoe(affaire.currency, affaire.roe == null ? null : Number(affaire.roe)) ?? 'Non renseigné'}</p>
                             </div>
                           )}
+
                         </div>
                       </div>
 
@@ -327,6 +336,7 @@ export default function AffaireDetail() {
 
                       <div className="pt-2 border-t border-border">
                         <PmdInstalmentsManager affaireId={affaire.id} />
+                        <NonProportionalLinesManager affaireId={affaire.id} devise={affaire.currency} />
                       </div>
 
                       <div className="pt-2 border-t border-border">
@@ -336,6 +346,8 @@ export default function AffaireDetail() {
                   ) : null}
                 </div>
               )}
+
+              {activeTab === 'renewal' && <RenewalNegotiationPanel affaire={affaire} />}
 
               {activeTab === 'reinsurers' && (
                 <div className="space-y-3">
@@ -361,7 +373,7 @@ export default function AffaireDetail() {
                         totals={facRubriques.totals}
                         compagnie={affaire.cedante?.raisonSociale ?? ''}
                         type={typeLabels[affaire.type]}
-                        cover={affaire.facultativeData.garantie || ''}
+                        cover={affaire.facultativeData.garantie || '—'}
                         dateEffet={affaire.facultativeData.dateEffet}
                         dateExpiration={affaire.facultativeData.dateEcheance}
                         chargeDossier={affaire.chargeDossier}

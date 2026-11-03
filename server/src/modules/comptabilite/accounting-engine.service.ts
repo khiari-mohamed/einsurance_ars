@@ -45,20 +45,20 @@ export class AccountingEngineService {
     const period = await this.fiscalPeriod.getOrCreateCurrent();
     const numero = await this.sequence.next('JOURNAL_ENTRY');
 
-    const [cedanteAccount, arsCommAccount, cedanteCommAccount, reassureurAccount] = await Promise.all([
+    const [cedanteAccount, arsCommAccount, reassureurAccount] = await Promise.all([
       this.prisma.planComptable.findFirst({ where: { compte: { startsWith: '411' } } }),
       this.prisma.planComptable.findFirst({ where: { compte: { startsWith: '705' } } }),
-      this.prisma.planComptable.findFirst({ where: { compte: { startsWith: '613' } } }),
       this.prisma.planComptable.findFirst({ where: { compte: { startsWith: '401' } } }),
     ]);
 
     const totalArsComm = affaire.reassureurs.reduce((s, r) => s + Number(r.commissionArs ?? 0), 0);
-    const commissionCedante = Number(fac.commissionCedante ?? 0);
+    const totalPrimeCedee = affaire.reassureurs.reduce((s, r) => s + Number(r.primeBrute ?? 0), 0)
+      || Number(fac.primeCedee ?? 0);
+    const commissionCedante = affaire.reassureurs.reduce((s, r) => s + Number(r.commissionCedante ?? 0), 0);
 
     const missing: string[] = [];
     if (!cedanteAccount) missing.push('411xxxxx (cédantes)');
     if (totalArsComm > 0 && !arsCommAccount) missing.push('705xxxxx (commission courtage ARS)');
-    if (commissionCedante > 0 && !cedanteCommAccount) missing.push('613xxxxx (commission cédante)');
     if (affaire.reassureurs.length > 0 && !reassureurAccount) missing.push('401xxxxx (réassureurs)');
     if (missing.length > 0) {
       throw new BadRequestException(
@@ -75,7 +75,7 @@ export class AccountingEngineService {
       planComptableId: cedanteAccount!.id,
       auxiliaryId: auxCedante?.id,
       cedanteId: affaire.cedanteId,
-      debit: Number(fac.primeCedee ?? 0),
+      debit: Math.round((totalPrimeCedee - commissionCedante) * 1000) / 1000,
       credit: null,
       libelle: `Prime cédée — ${affaire.numero}`,
       ordre: lineOrder++,
@@ -87,16 +87,6 @@ export class AccountingEngineService {
         debit: null,
         credit: Math.round(totalArsComm * 1000) / 1000,
         libelle: `Commission courtage ARS — ${affaire.numero}`,
-        ordre: lineOrder++,
-      });
-    }
-
-    if (commissionCedante > 0) {
-      lines.push({
-        planComptableId: cedanteCommAccount!.id,
-        debit: null,
-        credit: commissionCedante,
-        libelle: `Commission cédante — ${affaire.numero}`,
         ordre: lineOrder++,
       });
     }

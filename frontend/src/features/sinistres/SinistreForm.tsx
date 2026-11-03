@@ -3,8 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { sinistresApi } from '../../api/sinistres.api';
-import affairesApi from '../../api/affaires.api';
-import { AffaireStatut } from '../../types/affaire.types';
 import type { CreateSinistreDto } from '../../types/sinistre.types';
 
 export default function SinistreForm() {
@@ -29,11 +27,25 @@ export default function SinistreForm() {
   // Only placed affaires can carry a claim — matches the real backend guard
   // in SinistresService.create().
   const { data: affaires } = useQuery({
-    queryKey: ['affaires-placees'],
-    queryFn: () => affairesApi.getAll({ statut: AffaireStatut.PLACEMENT_REALISE, limit: 200 }),
+    queryKey: ['sinistres-eligible-affaires'],
+    queryFn: () => sinistresApi.getEligibleAffaires(),
   });
 
-  const selectedAffaire = affaires?.data?.data.find((a) => a.id === formData.affaireId);
+  const selectedAffaire = affaires?.data?.find((a) => a.id === formData.affaireId);
+  const selectAffaire = (affaireId: string) => {
+    const affaire = affaires?.data?.find((a) => a.id === affaireId);
+    const period = affaire?.facultativeData
+      ? `${affaire.facultativeData.dateEffet.slice(0, 10)} - ${affaire.facultativeData.dateEcheance.slice(0, 10)}`
+      : affaire?.traiteData
+        ? `${affaire.traiteData.dateEffet.slice(0, 10)} - ${affaire.traiteData.dateEcheance.slice(0, 10)}`
+        : '';
+    setFormData({
+      ...formData,
+      affaireId,
+      numerPolice: affaire?.facultativeData?.numeroPoliceCedante ?? '',
+      periodeCouverture: period,
+    });
+  };
 
   const createMutation = useMutation({
     mutationFn: (data: CreateSinistreDto) => sinistresApi.create(data),
@@ -65,15 +77,22 @@ export default function SinistreForm() {
             <select
               required
               value={formData.affaireId}
-              onChange={(e) => setFormData({ ...formData, affaireId: e.target.value })}
+              onChange={(e) => selectAffaire(e.target.value)}
               className="w-full border border-border bg-background rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary focus:ring-offset-2"
             >
               <option value="">Sélectionner une affaire</option>
-              {affaires?.data?.data.map((a) => (
+              {affaires?.data?.map((a) => (
                 <option key={a.id} value={a.id}>{a.numero} — {a.cedante.raisonSociale}</option>
               ))}
             </select>
           </div>
+
+          {selectedAffaire && (
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm">
+              <strong>Affaire extraite :</strong> {selectedAffaire.numero} · {selectedAffaire.currency} · {selectedAffaire.cedante.raisonSociale}
+              {selectedAffaire.facultativeData?.garantie && <span> · Couverture : {selectedAffaire.facultativeData.garantie}</span>}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-foreground mb-2">N° Police Cédante</label>
